@@ -3,10 +3,31 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.train_bhaav_text_emotion import LABELS, load_bhaav_dataframe
+import pandas as pd
+
+from scripts.train_bhaav_text_emotion import LABELS, load_bhaav_dataframe, _split_dataframe
 
 
 class BhaavLoaderTests(unittest.TestCase):
+    def test_group_split_keeps_stories_disjoint(self):
+        rows = []
+        for group_index in range(10):
+            for label in LABELS:
+                rows.append({
+                    "text": f"नमूना वाक्य {group_index} {label}",
+                    "label": label,
+                    "group": f"story-{group_index}",
+                })
+        frame = pd.DataFrame(rows)
+        train, validation, test, group_split = _split_dataframe(frame)
+        self.assertTrue(group_split)
+        train_groups = set(train["group"])
+        validation_groups = set(validation["group"])
+        test_groups = set(test["group"])
+        self.assertFalse(train_groups & validation_groups)
+        self.assertFalse(train_groups & test_groups)
+        self.assertFalse(validation_groups & test_groups)
+
     def test_loads_and_normalises_bhaav_csv(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "bhaav.csv"
