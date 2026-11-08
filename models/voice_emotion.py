@@ -29,6 +29,9 @@ from transformers import (
 
 
 MODEL_NAME = "Dpngtm/wav2vec2-emotion-recognition"
+# Model card lists English as its training/inference language. Indian-language
+# predictions are experimental until a Hindi/Indic evaluation set is used.
+MODEL_LANGUAGE_SCOPE = "en"
 
 
 class VoiceEmotionRecognizer:
