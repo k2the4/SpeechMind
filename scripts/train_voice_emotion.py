@@ -1,5 +1,5 @@
 """
-Fine-tune SpeechMind's wav2vec2 voice-emotion model on RAVDESS speech audio.
+Fine-tune a speech-pretrained wav2vec2 backbone on RAVDESS speech audio.\nA fresh emotion head is trained to avoid reusing an emotion checkpoint already trained on RAVDESS.
 
 This script recognizes the official RAVDESS filename convention and creates
 speaker-independent train/validation/test splits. Audio and checkpoints stay
@@ -28,7 +28,7 @@ DEFAULT_DATA_DIR = os.environ.get(
     "SPEECHMIND_RAVDESS_DIR",
     r"C:\Users\kvasi\OneDrive\Desktop\Test Data\Audio_Speech_Actors_01-24_16k",
 )
-BASE_MODEL_NAME = "Dpngtm/wav2vec2-emotion-recognition"
+BASE_MODEL_NAME = "facebook/wav2vec2-base-960h"
 
 
 def parse_ravdess_filename(path):
@@ -271,7 +271,9 @@ def train_model(records, output_dir, model_dir, epochs, batch_size, learning_rat
         "labels": LABELS,
         "note": (
             "Held-out-speaker RAVDESS results. RAVDESS is acted English speech; "
-            "these metrics do not establish accuracy on spontaneous or Indian-language speech."
+            "these metrics do not establish accuracy on spontaneous or Indian-language speech.",
+            "training_backbone": BASE_MODEL_NAME,
+            "emotion_head": "newly initialized before RAVDESS fine-tuning",
         ),
     }
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -293,9 +295,9 @@ def main():
     parser.add_argument("--output-dir", default="training_outputs/ravdess_voice")
     parser.add_argument("--model-dir", default="checkpoints/voice_emotion_wav2vec2")
     parser.add_argument("--prepare-only", action="store_true")
-    parser.add_argument("--epochs", type=int, default=3)
+    parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--learning-rate", type=float, default=1e-5)
+    parser.add_argument("--learning-rate", type=float, default=2e-5)
     args = parser.parse_args()
 
     records = assign_speaker_splits(build_manifest(args.data_dir))
