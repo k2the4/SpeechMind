@@ -38,3 +38,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local datasets, training reports, and experiment outputs
+data/
+training_outputs/
+*_manifest.csv
