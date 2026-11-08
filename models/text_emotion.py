@@ -15,6 +15,7 @@ CHECKPOINT_DIR = "checkpoints/text_emotion_muril_bhaav"
 # BHAAV Hindi text baseline: five source labels, including suspense.
 # This is a story-text domain baseline, not a validated spoken-conversation model.
 LABELS = ["anger", "joy", "suspense", "sadness", "neutral"]
+MODEL_DOMAIN = "Hindi story text (BHAAV research baseline)"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -37,6 +38,16 @@ class TextEmotionClassifier:
                 CHECKPOINT_DIR
             ).to(DEVICE)
             self.model.eval()
+            configured_labels = [
+                self.model.config.id2label.get(index)
+                or self.model.config.id2label.get(str(index))
+                for index in range(len(LABELS))
+            ]
+            if configured_labels != LABELS:
+                raise ValueError(
+                    f"Checkpoint label order {configured_labels} does not match "
+                    f"SpeechMind label order {LABELS}."
+                )
             self.available = True
             print("[TextEmotion] Fine-tuned checkpoint loaded.")
         except Exception as error:
