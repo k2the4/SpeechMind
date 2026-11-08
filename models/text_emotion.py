@@ -11,8 +11,10 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 BASE_MODEL_NAME = "google/muril-base-cased"
-CHECKPOINT_DIR = "checkpoints/text_emotion_muril"
-LABELS = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]
+CHECKPOINT_DIR = "checkpoints/text_emotion_muril_bhaav"
+# BHAAV Hindi text baseline: five source labels, including suspense.
+# This is a story-text domain baseline, not a validated spoken-conversation model.
+LABELS = ["anger", "joy", "suspense", "sadness", "neutral"]
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
