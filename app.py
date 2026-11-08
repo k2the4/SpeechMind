@@ -149,7 +149,6 @@ if audio_source is not None:
                     "text_model_loaded": result.get("text_model_loaded"),
                     "voice_model_loaded": result.get("voice_model_loaded"),
                     "emotion_analysis_available": result.get("emotion_analysis_available"),
-                    "emotion_analysis_available": result.get("emotion_analysis_available"),
                     "text_emotion_model_domain": result.get("text_emotion_model_domain"),
                     "translator_loaded": result.get("translator_loaded"),
                     "translator_error": result.get("translator_error"),
