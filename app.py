@@ -97,6 +97,10 @@ if audio_source is not None:
                 st.json({
                     "stage_timings_sec": result.get("timings_sec", {}),
                     "asr_model": result.get("asr_model"),
+                    "language_detection_score": result.get("language_detection_score"),
+                    "voice_model_source": result.get("voice_model_source"),
+                    "voice_inference_device": result.get("voice_inference_device"),
+                    "voice_inference_windows": result.get("voice_inference_windows"),
                     "asr_score_uncalibrated": result.get("asr_confidence"),
                     "fusion_weights": result.get("fusion_weights"),
                     "text_emotion_available": result.get("text_emotion_available"),
