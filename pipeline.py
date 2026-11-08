@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from utils.audio_utils import preprocess
 from models.asr import SpeechRecognizer
-from models.text_emotion import TextEmotionClassifier
+from models.text_emotion import TextEmotionClassifier, MODEL_DOMAIN
 from models.voice_emotion import VoiceEmotionRecognizer, MODEL_LANGUAGE_SCOPE
 from fusion_layer import fuse
 
@@ -97,6 +97,7 @@ class SpeechMindPipeline:
             "meaning_en": english_meaning,
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
+            "text_emotion_model_domain": MODEL_DOMAIN if text_result.get("available", False) else None,
             "text_emotion_reason": text_result.get("reason"),
             "voice_emotion": fused["voice_emotion"],
             "voice_emotion_model_language_scope": MODEL_LANGUAGE_SCOPE,
