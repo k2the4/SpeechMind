@@ -141,7 +141,10 @@ class SpeechMindPipeline:
             "meaning_en": english_meaning,
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
-            "text_model_loaded": self.text_emotion is not None,
+            "text_model_loaded": bool(
+                self.text_emotion is not None and self.text_emotion.available
+            ),
+            "voice_model_loaded": self.voice_emotion is not None,
             "text_emotion_model_domain": MODEL_DOMAIN if text_result.get("available", False) else None,
             "text_emotion_reason": text_result.get("reason"),
             "voice_emotion": fused["voice_emotion"],
