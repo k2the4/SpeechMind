@@ -114,7 +114,7 @@ check("Voice Emotion (voice_emotion.py)", test_voice_emotion)
 # ============================================================
 
 def test_fusion_label_alignment():
-    from fusion_layer import VOICE_TO_UNIFIED
+    from fusion_layer import VOICE_TO_UNIFIED, TEXT_TO_UNIFIED, UNIFIED_EMOTIONS
 
     if VOICE_EMOTION_LABELS is None:
         warn("Fusion label alignment", "Skipped - voice emotion distribution unavailable")
@@ -126,16 +126,22 @@ def test_fusion_label_alignment():
         f"in fusion instead of being counted correctly): {unmapped}"
     )
 
-    if TEXT_EMOTION_LABELS:
-        mapped_voice_targets = set(VOICE_TO_UNIFIED.get(lbl) for lbl in VOICE_EMOTION_LABELS)
-        missing_from_text = mapped_voice_targets - TEXT_EMOTION_LABELS
-        assert not missing_from_text, (
-            f"Voice emotions map to unified labels the text-emotion model doesn't "
-            f"produce: {missing_from_text} - fusion scores for these will always be 0 "
-            f"from the text branch"
-        )
+    invalid_voice_targets = {
+        VOICE_TO_UNIFIED[label] for label in VOICE_EMOTION_LABELS
+        if label in VOICE_TO_UNIFIED and VOICE_TO_UNIFIED[label] not in UNIFIED_EMOTIONS
+    }
+    assert not invalid_voice_targets, f"Voice mapping has invalid unified targets: {invalid_voice_targets}"
 
-    print(f"    -> All voice labels {sorted(VOICE_EMOTION_LABELS)} map cleanly into fusion")
+    if TEXT_EMOTION_LABELS:
+        unmapped_text = [label for label in TEXT_EMOTION_LABELS if label not in TEXT_TO_UNIFIED]
+        assert not unmapped_text, f"Text labels missing explicit fusion mappings: {unmapped_text}"
+        invalid_text_targets = {
+            TEXT_TO_UNIFIED[label] for label in TEXT_EMOTION_LABELS
+            if TEXT_TO_UNIFIED[label] not in UNIFIED_EMOTIONS
+        }
+        assert not invalid_text_targets, f"Text mapping has invalid unified targets: {invalid_text_targets}"
+
+    print(f"    -> Voice and text labels map independently into the shared emotion space")
 
 
 check("Fusion label alignment (fusion_layer.py)", test_fusion_label_alignment)
