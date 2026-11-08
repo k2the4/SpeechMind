@@ -57,7 +57,7 @@ class TextEmotionClassifier:
             print(f"[TextEmotion] DISABLED: checkpoint could not be loaded ({error}).")
 
     @torch.no_grad()
-    def predict(self, text: str) -> dict:
+    def predict(self, text: str, language: str | None = None) -> dict:
         if not self.available or self.model is None or self.tokenizer is None:
             return {
                 "emotion": "unavailable",
@@ -65,6 +65,18 @@ class TextEmotionClassifier:
                 "distribution": {},
                 "available": False,
                 "reason": self.load_error or "No trained checkpoint is available.",
+            }
+
+        if language is not None and language != "hi":
+            return {
+                "emotion": "unavailable",
+                "confidence": 0.0,
+                "distribution": {},
+                "available": False,
+                "reason": (
+                    "The BHAAV-trained text model is intended for Hindi text only; "
+                    f"the detected language was '{language}'."
+                ),
             }
 
         if not text or not text.strip():
