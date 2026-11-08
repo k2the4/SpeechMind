@@ -1,10 +1,9 @@
 """
 SpeechMind end-to-end inference pipeline.
 
-Large optional components are loaded only when required:
-- IndicConformer: only after supported Indic language detection.
-- IndicTrans2: only for a supported non-English transcript.
-The pipeline reports timings for each stage so optimization can be measured.
+ASR routing is lazy: a selected language loads only its corresponding ASR
+model. Auto-detect retains the original language-identification flow.
+IndicTrans2 is loaded only for a supported non-English transcript.
 """
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -22,14 +21,14 @@ TRANSLATABLE_LANGUAGES = {
 
 class SpeechMindPipeline:
     def __init__(self, load_translator: bool = True):
-        print("[Pipeline] Initializing SpeechMind models...")
+        print("[Pipeline] Initializing SpeechMind...")
         self.asr = SpeechRecognizer()
         self.text_emotion = TextEmotionClassifier()
         self.voice_emotion = VoiceEmotionRecognizer()
         self.translator = None
         self.translator_enabled = load_translator
         self.translator_error = None
-        print("[Pipeline] Core models initialized. Optional models remain lazy-loaded.")
+        print("[Pipeline] Core classifier ready; ASR and translation weights are lazy-loaded.")
 
     def _translate(self, transcript: str, language: str) -> str:
         if not transcript or language == "en":
@@ -47,7 +46,7 @@ class SpeechMindPipeline:
             print(f"[Pipeline] Translation unavailable: {error}")
             return transcript
 
-    def run(self, audio_path: str) -> dict:
+    def run(self, audio_path: str, language_hint=None) -> dict:
         total_start = time.perf_counter()
         timings = {}
 
@@ -56,7 +55,7 @@ class SpeechMindPipeline:
         timings["preprocessing"] = round(time.perf_counter() - stage_start, 3)
 
         stage_start = time.perf_counter()
-        asr_result = self.asr.transcribe(audio)
+        asr_result = self.asr.transcribe(audio, language_hint=language_hint)
         timings["asr"] = round(time.perf_counter() - stage_start, 3)
 
         transcript = asr_result.get("transcript", "")
@@ -67,8 +66,6 @@ class SpeechMindPipeline:
             asr_confidence = 0.0
         asr_confidence = max(0.0, min(1.0, asr_confidence))
 
-        # These branches are independent after ASR. Keep their existing
-        # concurrent execution; measured timings are included in the result.
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=2) as executor:
             text_future = executor.submit(self.text_emotion.predict, transcript)
@@ -92,9 +89,11 @@ class SpeechMindPipeline:
 
         return {
             "language": language,
-            "transcript": transcript,
+            "language_route": asr_result.get("language_route", "auto"),
             "asr_model": asr_result.get("asr_model", "unknown"),
+            "transcript": transcript,
             "asr_confidence": round(asr_confidence, 3),
+            "asr_confidence_method": asr_result.get("confidence_method"),
             "meaning_en": english_meaning,
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
