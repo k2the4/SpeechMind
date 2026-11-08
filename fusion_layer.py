@@ -104,7 +104,25 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
     text_available = text_available and bool(text_distribution)
     voice_available = voice_available and bool(voice_distribution)
     if not text_available and not voice_available:
-        raise ValueError("Fusion cannot run: both emotion branches are unavailable or returned unmapped labels.")
+        return {
+            "text_emotion": "unavailable",
+            "voice_emotion": "unavailable",
+            "valence": "Unknown",
+            "arousal": "Unknown",
+            "confidence": 0.0,
+            "confidence_is_calibrated": False,
+            "emotion_analysis_available": False,
+            "overall_interpretation": (
+                "Emotion analysis is unavailable because no validated model is "
+                "currently enabled for this language."
+            ),
+            "low_confidence_warning": asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD,
+            "overall_emotion": "unavailable",
+            "fusion_weights": {"text": 0.0, "voice": 0.0},
+            "text_distribution": {},
+            "voice_distribution": {},
+            "fused_distribution": {},
+        }
 
     if text_available and voice_available:
         if asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD:
@@ -134,12 +152,13 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         "suspense": "Suspenseful or anticipatory emotional expression",
     }
     return {
-        "text_emotion": text_result.get("emotion", "unavailable"),
-        "voice_emotion": voice_result.get("emotion", "unavailable"),
+        "text_emotion": text_result.get("emotion", "unavailable") if text_available else "unavailable",
+        "voice_emotion": voice_result.get("emotion", "unavailable") if voice_available else "unavailable",
         "valence": VALENCE_MAP.get(overall_emotion, "Neutral"),
         "arousal": voice_result.get("arousal", "Unknown"),
         "confidence": round(fused_scores[overall_emotion], 3),
         "confidence_is_calibrated": False,
+        "emotion_analysis_available": True,
         "overall_interpretation": interpretation.get(overall_emotion, "Neutral emotional expression"),
         "low_confidence_warning": asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD,
         "overall_emotion": overall_emotion,
