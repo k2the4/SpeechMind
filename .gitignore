@@ -38,3 +38,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local research corpora and generated reports (never commit datasets)
+datasets/
+reports/
