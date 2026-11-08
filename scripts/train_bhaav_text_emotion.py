@@ -37,12 +37,29 @@ LABEL_ALIASES = {
     "sad": "sadness", "sadness": "sadness",
     "neutral": "neutral",
 }
+# Official BHAAV workbook uses integer Annotation codes. These correspond to
+# the published category frequencies in the BHAAV paper.
+BHAAV_ANNOTATION_TO_LABEL = {
+    0: "anger",
+    1: "joy",
+    2: "sadness",
+    3: "suspense",
+    4: "neutral",
+}
+BHAAV_EXPECTED_CLASS_COUNTS = {
+    "anger": 1464,
+    "joy": 2463,
+    "sadness": 3168,
+    "suspense": 1512,
+    "neutral": 11697,
+}
 TEXT_COLUMN_NAMES = {
-    "sentence", "text", "utterance", "sentence_text", "story_sentence",
-    "hindi_sentence", "content", "statement",
+    "sentence", "sentences", "text", "utterance", "sentence_text",
+    "story_sentence", "hindi_sentence", "content", "statement",
 }
 LABEL_COLUMN_NAMES = {
-    "emotion", "emotion_label", "label", "class", "category", "emotion_category",
+    "emotion", "emotion_label", "label", "annotation", "class",
+    "category", "emotion_category",
 }
 GROUP_COLUMN_NAMES = {
     "story_id", "story_name", "story_title", "document_id", "source_id",
@@ -57,6 +74,10 @@ def _normalise_column(name):
 def _normalise_label(value):
     if pd.isna(value):
         return None
+    if isinstance(value, (int, np.integer)):
+        return BHAAV_ANNOTATION_TO_LABEL.get(int(value))
+    if isinstance(value, (float, np.floating)) and float(value).is_integer():
+        return BHAAV_ANNOTATION_TO_LABEL.get(int(value))
     key = str(value).strip().lower()
     key = re.sub(r"[^a-z]+", "", key)
     return LABEL_ALIASES.get(key)
