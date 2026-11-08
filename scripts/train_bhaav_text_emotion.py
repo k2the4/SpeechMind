@@ -173,7 +173,13 @@ def load_bhaav_dataframe(source_path):
             "label": frame[label_col].map(_normalise_label),
         })
         if group_col is not None:
-            clean["group"] = frame[group_col].astype(str).str.strip()
+            raw_groups = frame[group_col]
+            clean["group"] = raw_groups.where(raw_groups.notna(), None)
+            clean["group"] = clean["group"].map(
+                lambda value: str(value).strip()
+                if value is not None and str(value).strip().lower() not in {"", "nan", "none"}
+                else None
+            )
         else:
             clean["group"] = None
 
@@ -237,6 +243,13 @@ def _split_dataframe(frame, seed=42):
                     frame.iloc[test_idx].reset_index(drop=True),
                     True,
                 )
+
+    if use_groups:
+        raise ValueError(
+            "A story/source ID column was found, but a complete five-class "
+            "speaker/story-disjoint split could not be formed. Refusing to fall "
+            "back to sentence-level random splitting because that could leak stories."
+        )
 
     train_val, test = train_test_split(
         frame, test_size=0.20, random_state=seed, stratify=frame["label"]
@@ -375,8 +388,18 @@ def train_bhaav_model(
     trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
     optimizer = torch.optim.AdamW(trainable, lr=2e-5, weight_decay=0.01)
     total_steps = max(1, len(train_loader) * epochs)
-    scheduler = torch.optim.lr_scheduler.LinearLR(
-        optimizer, start_factor=0.1, end_factor=1.0, total_iters=max(1, min(100, total_steps))
+    warmup_steps = max(1, int(total_steps * 0.10))
+
+    def learning_rate_scale(step):
+        if step < warmup_steps:
+            return float(step + 1) / float(warmup_steps)
+        return max(
+            0.0,
+            float(total_steps - step) / float(max(1, total_steps - warmup_steps)),
+        )
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer, lr_lambda=learning_rate_scale
     )
 
     best_macro_f1 = -1.0
@@ -397,8 +420,7 @@ def train_bhaav_model(
             loss.backward()
             torch.nn.utils.clip_grad_norm_(trainable, 1.0)
             optimizer.step()
-            if scheduler.last_epoch < scheduler.total_iters:
-                scheduler.step()
+            scheduler.step()
             running_loss += float(loss.item())
 
             if batch_index % 50 == 0:
