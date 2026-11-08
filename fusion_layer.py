@@ -6,7 +6,7 @@ neutral predictions. The returned top score is an uncalibrated model score,
 not a probability that the prediction is correct.
 """
 
-UNIFIED_EMOTIONS = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]
+UNIFIED_EMOTIONS = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral", "suspense"]
 DEFAULT_TEXT_WEIGHT = 0.60
 DEFAULT_VOICE_WEIGHT = 0.40
 ASR_CONFIDENCE_LOW_THRESHOLD = 0.60
@@ -25,6 +25,9 @@ TEXT_TO_UNIFIED = {
     "surprise": "surprise", "surprised": "surprise",
     "disgust": "disgust", "disgusted": "disgust",
     "neutral": "neutral", "calm": "neutral",
+    # BHAAV's suspense label is retained explicitly instead of being
+    # inaccurately collapsed into fear.
+    "suspense": "suspense",
 }
 VOICE_TO_UNIFIED = {
     "happy": "joy", "happiness": "joy", "excited": "joy", "joy": "joy",
@@ -39,6 +42,7 @@ VALENCE_MAP = {
     "joy": "Positive", "sadness": "Negative", "anger": "Negative",
     "fear": "Negative", "surprise": "Neutral", "disgust": "Negative",
     "neutral": "Neutral",
+    "suspense": "Neutral",
 }
 
 
@@ -127,6 +131,7 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         "surprise": "Surprised or unexpected emotional expression",
         "disgust": "Disapproving or disgust-like emotional expression",
         "neutral": "Neutral or emotionally subdued expression",
+        "suspense": "Suspenseful or anticipatory emotional expression",
     }
     return {
         "text_emotion": text_result.get("emotion", "unavailable"),
