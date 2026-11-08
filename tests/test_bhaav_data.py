@@ -44,6 +44,20 @@ class BhaavLoaderTests(unittest.TestCase):
             ["1:story-a", "1:story-a", "2:story-b", "2:story-b"],
         )
 
+    def test_overlapping_story_ranges_are_bundled(self):
+        mapping = pd.DataFrame({
+            "S.No.": [1, 2, 3],
+            "Story Name": ["story-a", "story-b", "story-c"],
+            "From Row": [2, 4, 8],
+            "To Row": [6, 9, 10],
+            "Size of stories": [4, 5, 2],
+        })
+        frame = pd.DataFrame({"Sentences": [f"sentence {i}" for i in range(8)]})
+        groups = _attach_story_groups(frame, mapping)
+        self.assertEqual(groups[0], groups[2])
+        self.assertEqual(groups[1], groups[2])
+        self.assertNotEqual(groups[0], groups[6])
+
     def test_group_split_keeps_stories_disjoint(self):
         rows = []
         for group_index in range(10):
