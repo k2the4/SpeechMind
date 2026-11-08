@@ -1,0 +1,35 @@
+# Core ML
+torch
+torchaudio
+transformers
+accelerate
+
+# Audio processing
+librosa
+soundfile
+
+# Voice emotion recognition
+speechbrain
+
+# Translation (IndicTrans2) - sentencepiece etc. still needed
+sentencepiece
+sacremoses
+mosestokenizer
+bitsandbytes
+scipy
+
+# NOTE: IndicTransToolkit is intentionally left out of this file.
+# It requires Microsoft C++ Build Tools to compile on Windows and was
+# breaking the whole install. Once your app is running end-to-end,
+# install Build Tools (see chat) and then run:
+#   pip install git+https://github.com/VarunGumma/IndicTransToolkit
+# to enable the English-translation feature.
+
+# App + evaluation
+streamlit
+scikit-learn
+pandas
+matplotlib
+
+# Training (only needed if you run training/fine_tune_*.py)
+datasets
