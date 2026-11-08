@@ -3,9 +3,7 @@ Guided, in-app BHAAV training. No command-line steps are required.
 """
 import hashlib
 import json
-import os
 from pathlib import Path
-import tempfile
 import urllib.request
 
 import streamlit as st
@@ -39,7 +37,7 @@ st.markdown(
 )
 st.link_button("BHAAV dataset and citation", "https://zenodo.org/records/3457467")
 
-if not st.session_state.get("bhaav_training_complete", False):
+if DATA_PATH.exists() or not st.session_state.get("bhaav_training_complete", False):
     if not DATA_PATH.exists():
         if st.button("Download BHAAV dataset", type="primary"):
             DATA_DIR.mkdir(parents=True, exist_ok=True)
