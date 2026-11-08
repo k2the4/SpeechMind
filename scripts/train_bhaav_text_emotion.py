@@ -83,6 +83,43 @@ def _normalise_label(value):
     return LABEL_ALIASES.get(key)
 
 
+def _infer_columns(frame):
+    columns = {_normalise_column(column): column for column in frame.columns}
+    label_col = next(
+        (columns[name] for name in LABEL_COLUMN_NAMES if name in columns),
+        None,
+    )
+    text_col = next(
+        (columns[name] for name in TEXT_COLUMN_NAMES if name in columns),
+        None,
+    )
+
+    if label_col is None:
+        for original in frame.columns:
+            mapped = frame[original].map(_normalise_label)
+            valid_ratio = mapped.notna().mean() if len(mapped) else 0.0
+            if valid_ratio >= 0.70 and mapped.nunique() >= 3:
+                label_col = original
+                break
+
+    if text_col is None:
+        candidates = []
+        for original in frame.columns:
+            if original == label_col:
+                continue
+            series = frame[original].dropna().astype(str)
+            if len(series) and (series.str.len() >= 4).mean() >= 0.50:
+                candidates.append((float(series.str.len().median()), original))
+        if candidates:
+            text_col = max(candidates)[1]
+
+    group_col = next(
+        (columns[name] for name in GROUP_COLUMN_NAMES if name in columns),
+        None,
+    )
+    return text_col, label_col, group_col
+
+
 def _read_table_bytes(name, data):
     suffix = Path(name).suffix.lower()
     if suffix in {".csv", ".tsv"}:
