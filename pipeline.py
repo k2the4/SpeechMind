@@ -23,14 +23,31 @@ class SpeechMindPipeline:
     def __init__(self, load_translator: bool = True):
         print("[Pipeline] Initializing SpeechMind...")
         self.asr = SpeechRecognizer()
-        self.text_emotion = TextEmotionClassifier()
-        # The current pretrained voice classifier is English-only. Defer its
-        # weights until an English recording actually needs that branch.
+        # Emotion classifiers are language-specific and are loaded only for
+        # languages they are intended to handle.
+        self.text_emotion = None
         self.voice_emotion = None
         self.translator = None
         self.translator_enabled = load_translator
         self.translator_error = None
         print("[Pipeline] Core classifier ready; ASR and translation weights are lazy-loaded.")
+
+    def _predict_text(self, transcript: str, language: str) -> dict:
+        if language != "hi":
+            return {
+                "emotion": "unavailable",
+                "confidence": 0.0,
+                "distribution": {},
+                "available": False,
+                "reason": (
+                    "The available BHAAV-trained text baseline is intended for Hindi only; "
+                    f"the detected language was '{language}'."
+                ),
+            }
+        if self.text_emotion is None:
+            print("[Pipeline] Loading Hindi MuRIL text-emotion model on demand...")
+            self.text_emotion = TextEmotionClassifier()
+        return self.text_emotion.predict(transcript, language)
 
     def _predict_voice(self, audio, language: str) -> dict:
         if language != MODEL_LANGUAGE_SCOPE:
@@ -91,13 +108,13 @@ class SpeechMindPipeline:
         stage_start = time.perf_counter()
         if language == "en":
             with ThreadPoolExecutor(max_workers=2) as executor:
-                text_future = executor.submit(self.text_emotion.predict, transcript, language)
+                text_future = executor.submit(self._predict_text, transcript, language)
                 voice_future = executor.submit(self._predict_voice, audio, language)
                 text_result = text_future.result()
                 voice_result = voice_future.result()
         else:
             # Do not run an English-trained SER model on Indian-language audio.
-            text_result = self.text_emotion.predict(transcript, language)
+            text_result = self._predict_text(transcript, language)
             voice_result = self._predict_voice(audio, language)
         timings["emotion_branches"] = round(time.perf_counter() - stage_start, 3)
 
@@ -124,6 +141,7 @@ class SpeechMindPipeline:
             "meaning_en": english_meaning,
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
+            "text_model_loaded": self.text_emotion is not None,
             "text_emotion_model_domain": MODEL_DOMAIN if text_result.get("available", False) else None,
             "text_emotion_reason": text_result.get("reason"),
             "voice_emotion": fused["voice_emotion"],
