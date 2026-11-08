@@ -336,27 +336,44 @@ def _load_story_mapping(mapping_table):
 
 
 def _attach_story_groups(frame, mapping_table):
-    """Attach story IDs from the official 1-based Excel row ranges."""
+    """Attach story IDs from official Excel row ranges.
+
+    The official mapping contains some overlapping ranges. Overlapping stories
+    are conservatively bundled into a single group, ensuring that related rows
+    can never leak across train/validation/test partitions.
+    """
     records = _load_story_mapping(mapping_table)
-    excel_rows = np.arange(len(frame), dtype=np.int64) + 2  # row 1 is the header
+    records.sort(key=lambda item: (item[0], item[1]))
+
+    merged = []
+    for start_row, end_row, group_name in records:
+        if not merged or start_row >= merged[-1][1]:
+            merged.append([start_row, end_row, [group_name]])
+        else:
+            merged[-1][1] = max(merged[-1][1], end_row)
+            merged[-1][2].append(group_name)
+
+    excel_rows = np.arange(len(frame), dtype=np.int64) + 2
     groups = np.full(len(frame), None, dtype=object)
     assigned = np.zeros(len(frame), dtype=np.int8)
 
-    for start_row, end_row, group_name in records:
+    for start_row, end_row, names in merged:
         mask = (excel_rows >= start_row) & (excel_rows < end_row)
         if np.any(mask & (assigned > 0)):
-            raise ValueError(f"Overlapping BHAAV story row range: {group_name}")
+            raise ValueError("Merged BHAAV story ranges still overlap unexpectedly.")
+        group_name = "bundle:" + " | ".join(names)
         groups[mask] = group_name
         assigned[mask] += 1
 
-    missing_count = int((assigned == 0).sum())
-    if missing_count:
+    missing_rows = excel_rows[assigned == 0]
+    if len(missing_rows):
+        preview = missing_rows[:10].tolist()
         raise ValueError(
-            f"BHAAV story map leaves {missing_count} of {len(frame)} sentence rows "
-            "without a story ID. Refusing a sentence-random split that could leak stories."
+            f"BHAAV story map leaves {len(missing_rows)} of {len(frame)} sentence rows "
+            f"without a story ID (first missing Excel rows: {preview})."
         )
     if np.any(assigned > 1):
-        raise ValueError("BHAAV story map assigns a sentence to more than one story.")
+        raise ValueError("BHAAV story mapping assigns a sentence to more than one merged group.")
     return groups
 
 
