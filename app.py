@@ -84,6 +84,12 @@ if audio_source is not None:
                     "Speech-recognition score is low. The final result relied more heavily "
                     "on the voice signal."
                 )
+            if result.get("voice_emotion_language_warning", False):
+                st.warning(
+                    "The current voice-emotion model is trained for English. "
+                    "Its prediction for this language is experimental and has not "
+                    "been validated on Indian-language speech."
+                )
             if not result.get("text_emotion_available", False):
                 st.warning(
                     "Text-emotion analysis is disabled because no fine-tuned MuRIL "
@@ -117,6 +123,7 @@ if audio_source is not None:
                     "stage_timings_sec": result.get("timings_sec", {}),
                     "language_route": result.get("language_route"),
                     "asr_model": result.get("asr_model"),
+                    "voice_emotion_model_language_scope": result.get("voice_emotion_model_language_scope"),
                     "asr_score_uncalibrated": result.get("asr_confidence"),
                     "asr_confidence_method": result.get("asr_confidence_method"),
                     "fusion_weights": result.get("fusion_weights"),
