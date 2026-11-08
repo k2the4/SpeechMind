@@ -34,57 +34,42 @@ jobs:
             --output "$RUNNER_TEMP/BHAAV.zip"
           python - <<'PY'
           import hashlib
-          import io
           import os
           from pathlib import Path
-          import zipfile
-          import pandas as pd
-          from scripts.train_bhaav_text_emotion import LABELS, _split_dataframe, load_bhaav_dataframe
+          from scripts.train_bhaav_text_emotion import (
+              BHAAV_EXPECTED_CLASS_COUNTS,
+              LABELS,
+              _split_dataframe,
+              load_bhaav_dataframe,
+          )
 
           archive = Path(os.environ["RUNNER_TEMP"]) / "BHAAV.zip"
           digest = hashlib.md5(archive.read_bytes()).hexdigest()
-          expected = "cdcaf1997a422f18ee12d713a17ffdea"
-          assert digest == expected, f"BHAAV MD5 mismatch: {digest}"
-
-          print("=== Main BHAAV workbook schemas ===")
-          with zipfile.ZipFile(archive) as zipped:
-              for item in zipped.infolist():
-                  name = Path(item.filename).name.lower()
-                  if item.is_dir() or not name.endswith(".xlsx"):
-                      continue
-                  if (
-                      "bhaav-dataset" not in name
-                      and "stories to sentence mapping" not in name
-                      and "readme" not in name
-                  ):
-                      continue
-                  if item.file_size > 8_000_000:
-                      continue
-                  try:
-                      book = pd.ExcelFile(io.BytesIO(zipped.read(item)))
-                      for sheet in book.sheet_names:
-                          preview = pd.read_excel(book, sheet_name=sheet, nrows=10)
-                          print(item.filename, "|", sheet, "|", list(preview.columns))
-                          print(preview.head(5).to_string(index=False))
-                          if "Bhaav-Dataset" in item.filename and "Annotation" in preview.columns:
-                              full_sheet = pd.read_excel(book, sheet_name=sheet, usecols=["Annotation"])
-                              print("ANNOTATION COUNTS", item.filename, full_sheet["Annotation"].value_counts(dropna=False).to_dict())
-                  except Exception as error:
-                      print("SKIP", item.filename, error)
+          expected_md5 = "cdcaf1997a422f18ee12d713a17ffdea"
+          assert digest == expected_md5, f"BHAAV MD5 mismatch: {digest}"
 
           frame, source = load_bhaav_dataframe(archive)
           counts = frame["label"].value_counts().to_dict()
           assert len(frame) >= 15000, f"Only {len(frame)} BHAAV rows loaded from {source}"
+          assert counts == BHAAV_EXPECTED_CLASS_COUNTS, f"Unexpected BHAAV class counts: {counts}"
           assert set(frame["label"]) == set(LABELS), f"Unexpected labels: {counts}"
 
           train, validation, test, group_split = _split_dataframe(frame)
+          assert group_split, "Official BHAAV split must be story-disjoint"
           for name, split in (("train", train), ("validation", validation), ("test", test)):
               assert set(split["label"]) == set(LABELS), f"{name} split missing labels"
 
-          print(f"Official BHAAV parsed: {len(frame)} unique sentences from {source}")
-          print(f"Class counts: {counts}")
+          train_groups = set(train["group"])
+          validation_groups = set(validation["group"])
+          test_groups = set(test["group"])
+          assert not train_groups & validation_groups
+          assert not train_groups & test_groups
+          assert not validation_groups & test_groups
+
+          print(f"Official BHAAV parsed: {len(frame)} sentences from {source}")
+          print(f"Published class counts verified: {counts}")
           print(
-              f"Split sizes: {len(train)} train / {len(validation)} validation / "
-              f"{len(test)} test; story-disjoint split: {group_split}"
+              f"Story-disjoint split: {len(train)} train / {len(validation)} validation / "
+              f"{len(test)} test across {frame['group'].nunique()} stories"
           )
           PY
