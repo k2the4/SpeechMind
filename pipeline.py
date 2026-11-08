@@ -68,7 +68,7 @@ class SpeechMindPipeline:
 
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=2) as executor:
-            text_future = executor.submit(self.text_emotion.predict, transcript)
+            text_future = executor.submit(self.text_emotion.predict, transcript, language)
             voice_future = executor.submit(self.voice_emotion.predict, audio)
             text_result = text_future.result()
             voice_result = voice_future.result()
