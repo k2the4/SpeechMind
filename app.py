@@ -8,6 +8,7 @@ import time
 
 import streamlit as st
 from pipeline import SpeechMindPipeline
+from models.asr import INDIC_LANGUAGES
 
 st.set_page_config(page_title="SpeechMind", page_icon="🎙️", layout="centered")
 st.title("SpeechMind")
@@ -18,10 +19,25 @@ st.warning(
 )
 
 
-@st.cache_resource(show_spinner="Loading core models (first run only)...")
+@st.cache_resource(show_spinner="Preparing SpeechMind (first run only)...")
 def get_pipeline():
     return SpeechMindPipeline()
 
+
+language_labels = {"Auto-detect": None, "English": "en"}
+language_labels.update({
+    name: code for code, name in INDIC_LANGUAGES.items()
+})
+selected_language = st.selectbox(
+    "Spoken language",
+    list(language_labels.keys()),
+    index=0,
+    help=(
+        "Auto-detect is the default. Selecting the language you are speaking "
+        "skips the Whisper language-detection pass and loads only the relevant "
+        "speech-recognition model."
+    ),
+)
 
 uploaded_file = st.file_uploader(
     "Upload a short audio clip (WAV/MP3/M4A), or record one below",
@@ -46,7 +62,10 @@ if audio_source is not None:
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
-                result = pipeline.run(tmp_path)
+                result = pipeline.run(
+                    tmp_path,
+                    language_hint=language_labels[selected_language],
+                )
                 result["model_init_time_sec"] = model_init_time
         except Exception as error:
             st.error(f"Analysis failed: {error}")
@@ -67,8 +86,8 @@ if audio_source is not None:
                 )
             if not result.get("text_emotion_available", False):
                 st.warning(
-                    "Text-emotion analysis is currently disabled because no fine-tuned "
-                    "MuRIL checkpoint is available. The result uses the voice branch only."
+                    "Text-emotion analysis is disabled because no fine-tuned MuRIL "
+                    "checkpoint is installed. The result uses the voice branch only."
                 )
 
             left, right = st.columns(2)
@@ -96,8 +115,10 @@ if audio_source is not None:
                 st.write(f"Model initialization on this click: {result['model_init_time_sec']} s")
                 st.json({
                     "stage_timings_sec": result.get("timings_sec", {}),
+                    "language_route": result.get("language_route"),
                     "asr_model": result.get("asr_model"),
                     "asr_score_uncalibrated": result.get("asr_confidence"),
+                    "asr_confidence_method": result.get("asr_confidence_method"),
                     "fusion_weights": result.get("fusion_weights"),
                     "text_emotion_available": result.get("text_emotion_available"),
                     "translator_loaded": result.get("translator_loaded"),
