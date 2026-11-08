@@ -33,12 +33,14 @@ class FusionTests(unittest.TestCase):
         self.assertGreater(result["fusion_weights"]["voice"], 0.40)
 
     def test_unknown_voice_label_is_not_silently_neutral(self):
-        with self.assertRaises(ValueError):
-            fuse(
-                text_result={"emotion": "unavailable", "available": False, "distribution": {}},
-                voice_result={"emotion": "made_up_label", "distribution": {"made_up_label": 1.0}},
-                asr_confidence=0.9,
-            )
+        result = fuse(
+            text_result={"emotion": "unavailable", "available": False, "distribution": {}},
+            voice_result={"emotion": "made_up_label", "distribution": {"made_up_label": 1.0}},
+            asr_confidence=0.9,
+        )
+        self.assertEqual(result["overall_emotion"], "unavailable")
+        self.assertEqual(result["voice_emotion"], "unavailable")
+        self.assertFalse(result["emotion_analysis_available"])
 
     def test_confidence_is_explicitly_uncalibrated(self):
         result = fuse(

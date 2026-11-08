@@ -11,8 +11,11 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 BASE_MODEL_NAME = "google/muril-base-cased"
-CHECKPOINT_DIR = "checkpoints/text_emotion_muril"
-LABELS = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]
+CHECKPOINT_DIR = "checkpoints/text_emotion_muril_bhaav"
+# BHAAV Hindi text baseline: five source labels, including suspense.
+# This is a story-text domain baseline, not a validated spoken-conversation model.
+LABELS = ["anger", "joy", "suspense", "sadness", "neutral"]
+MODEL_DOMAIN = "Hindi story text (BHAAV research baseline)"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -35,6 +38,16 @@ class TextEmotionClassifier:
                 CHECKPOINT_DIR
             ).to(DEVICE)
             self.model.eval()
+            configured_labels = [
+                self.model.config.id2label.get(index)
+                or self.model.config.id2label.get(str(index))
+                for index in range(len(LABELS))
+            ]
+            if configured_labels != LABELS:
+                raise ValueError(
+                    f"Checkpoint label order {configured_labels} does not match "
+                    f"SpeechMind label order {LABELS}."
+                )
             self.available = True
             print("[TextEmotion] Fine-tuned checkpoint loaded.")
         except Exception as error:
@@ -44,7 +57,7 @@ class TextEmotionClassifier:
             print(f"[TextEmotion] DISABLED: checkpoint could not be loaded ({error}).")
 
     @torch.no_grad()
-    def predict(self, text: str) -> dict:
+    def predict(self, text: str, language: str | None = None) -> dict:
         if not self.available or self.model is None or self.tokenizer is None:
             return {
                 "emotion": "unavailable",
@@ -52,6 +65,18 @@ class TextEmotionClassifier:
                 "distribution": {},
                 "available": False,
                 "reason": self.load_error or "No trained checkpoint is available.",
+            }
+
+        if language is not None and language != "hi":
+            return {
+                "emotion": "unavailable",
+                "confidence": 0.0,
+                "distribution": {},
+                "available": False,
+                "reason": (
+                    "The BHAAV-trained text model is intended for Hindi text only; "
+                    f"the detected language was '{language}'."
+                ),
             }
 
         if not text or not text.strip():

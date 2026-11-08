@@ -27,3 +27,6 @@ matplotlib
 datasets
 
 # SpeechBrain and bitsandbytes are not used by the current inference code.
+
+# Reading the official BHAAV XLSX dataset archive
+openpyxl

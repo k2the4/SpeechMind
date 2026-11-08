@@ -29,6 +29,9 @@ from transformers import (
 
 
 MODEL_NAME = "Dpngtm/wav2vec2-emotion-recognition"
+# Model card lists English as its training/inference language. Indian-language
+# predictions are experimental until a Hindi/Indic evaluation set is used.
+MODEL_LANGUAGE_SCOPE = "en"
 
 
 class VoiceEmotionRecognizer:
@@ -39,7 +42,9 @@ class VoiceEmotionRecognizer:
             "[VoiceEmotion] Loading wav2vec2 emotion model..."
         )
 
-        self.device = torch.device("cpu")
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
 
         self.processor = AutoProcessor.from_pretrained(
             MODEL_NAME
