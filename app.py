@@ -96,9 +96,10 @@ if audio_source is not None:
                     "It has not been validated for spontaneous conversation transcripts."
                 )
             if not result.get("text_emotion_available", False):
+                reason = result.get("text_emotion_reason") or "No compatible trained checkpoint is available."
                 st.warning(
-                    "Text-emotion analysis is disabled because no fine-tuned MuRIL "
-                    "checkpoint is installed. The result uses the voice branch only."
+                    f"Text-emotion analysis is unavailable: {reason} "
+                    "The final result excludes the text branch."
                 )
 
             left, right = st.columns(2)
