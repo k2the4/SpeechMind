@@ -86,9 +86,9 @@ if audio_source is not None:
                 )
             if result.get("voice_emotion_language_warning", False):
                 st.warning(
-                    "The current voice-emotion model is trained for English. "
-                    "Its prediction for this language is experimental and has not "
-                    "been validated on Indian-language speech."
+                    "Voice-emotion analysis is disabled for this language because "
+                    "the available checkpoint is English-only. It is not applied "
+                    "to Indian-language recordings."
                 )
             if result.get("text_emotion_available", False):
                 st.info(
@@ -102,20 +102,32 @@ if audio_source is not None:
                     "The final result excludes the text branch."
                 )
 
+            if not result.get("emotion_analysis_available", False):
+                st.warning(
+                    "No emotion prediction is available for this recording yet. "
+                    "Speech recognition and translation can still be used."
+                )
+
             left, right = st.columns(2)
             with left:
                 st.metric("Language", result["language"].upper())
                 st.metric("Text Emotion", result["text_emotion"].title())
                 st.metric("Valence", result["valence"])
             with right:
-                st.metric("Model score (uncalibrated)", f"{result['confidence'] * 100:.1f}%")
+                score_label = (
+                    f"{result['confidence'] * 100:.1f}%"
+                    if result.get("emotion_analysis_available", False)
+                    else "Unavailable"
+                )
+                st.metric("Model score (uncalibrated)", score_label)
                 st.metric("Voice Emotion", result["voice_emotion"].title())
                 st.metric("Arousal", result["arousal"])
 
-            st.caption(
-                "The model score is not a calibrated probability of correctness. "
-                "Treat predictions as experimental until validated on held-out data."
-            )
+            if result.get("emotion_analysis_available", False):
+                st.caption(
+                    "The model score is not a calibrated probability of correctness. "
+                    "Treat predictions as experimental until validated on held-out data."
+                )
             st.subheader("Transcript (original language)")
             st.write(result["transcript"] or "No transcript was produced.")
             st.subheader("Meaning (English)")
@@ -134,6 +146,7 @@ if audio_source is not None:
                     "asr_confidence_method": result.get("asr_confidence_method"),
                     "fusion_weights": result.get("fusion_weights"),
                     "text_emotion_available": result.get("text_emotion_available"),
+                    "emotion_analysis_available": result.get("emotion_analysis_available"),
                     "text_emotion_model_domain": result.get("text_emotion_model_domain"),
                     "translator_loaded": result.get("translator_loaded"),
                     "translator_error": result.get("translator_error"),
