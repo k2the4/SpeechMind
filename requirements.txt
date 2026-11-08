@@ -3,27 +3,19 @@ torch
 torchaudio
 transformers
 accelerate
+openai-whisper
 
 # Audio processing
 librosa
 soundfile
+scipy
 
-# Voice emotion recognition
-speechbrain
-
-# Translation (IndicTrans2) - sentencepiece etc. still needed
+# IndicTrans2 translation (optional; loaded only for supported non-English audio)
 sentencepiece
 sacremoses
 mosestokenizer
-bitsandbytes
-scipy
-
-# NOTE: IndicTransToolkit is intentionally left out of this file.
-# It requires Microsoft C++ Build Tools to compile on Windows and was
-# breaking the whole install. Once your app is running end-to-end,
-# install Build Tools (see chat) and then run:
-#   pip install git+https://github.com/VarunGumma/IndicTransToolkit
-# to enable the English-translation feature.
+# Install IndicTransToolkit separately when translation is required:
+# pip install git+https://github.com/VarunGumma/IndicTransToolkit
 
 # App + evaluation
 streamlit
@@ -31,5 +23,7 @@ scikit-learn
 pandas
 matplotlib
 
-# Training (only needed if you run training/fine_tune_*.py)
+# Dataset access / optional experiments
 datasets
+
+# SpeechBrain and bitsandbytes are not used by the current inference code.
