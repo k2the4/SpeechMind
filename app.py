@@ -90,6 +90,11 @@ if audio_source is not None:
                     "Its prediction for this language is experimental and has not "
                     "been validated on Indian-language speech."
                 )
+            if result.get("text_emotion_available", False):
+                st.info(
+                    "Text emotion uses a BHAAV-trained Hindi story-text baseline. "
+                    "It has not been validated for spontaneous conversation transcripts."
+                )
             if not result.get("text_emotion_available", False):
                 st.warning(
                     "Text-emotion analysis is disabled because no fine-tuned MuRIL "
@@ -128,6 +133,7 @@ if audio_source is not None:
                     "asr_confidence_method": result.get("asr_confidence_method"),
                     "fusion_weights": result.get("fusion_weights"),
                     "text_emotion_available": result.get("text_emotion_available"),
+                    "text_emotion_model_domain": result.get("text_emotion_model_domain"),
                     "translator_loaded": result.get("translator_loaded"),
                     "translator_error": result.get("translator_error"),
                 })
