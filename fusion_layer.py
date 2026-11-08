@@ -116,7 +116,7 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
                 "Emotion analysis is unavailable because no validated model is "
                 "currently enabled for this language."
             ),
-            "low_confidence_warning": asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD,
+            "low_confidence_warning": False,
             "overall_emotion": "unavailable",
             "fusion_weights": {"text": 0.0, "voice": 0.0},
             "text_distribution": {},
@@ -160,7 +160,10 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         "confidence_is_calibrated": False,
         "emotion_analysis_available": True,
         "overall_interpretation": interpretation.get(overall_emotion, "Neutral emotional expression"),
-        "low_confidence_warning": asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD,
+        "low_confidence_warning": (
+            text_available and voice_available
+            and asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD
+        ),
         "overall_emotion": overall_emotion,
         "fusion_weights": {"text": round(text_weight, 3), "voice": round(voice_weight, 3)},
         "text_distribution": text_distribution,
