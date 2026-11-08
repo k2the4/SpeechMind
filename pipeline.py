@@ -1,10 +1,9 @@
+
 """
 SpeechMind end-to-end inference pipeline.
 
-Large optional components are loaded only when required:
-- IndicConformer: only after supported Indic language detection.
-- IndicTrans2: only for a supported non-English transcript.
-The pipeline reports timings for each stage so optimization can be measured.
+IndicConformer and IndicTrans2 are loaded only when needed. Timings and model
+diagnostics are returned to make performance changes measurable.
 """
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -67,8 +66,6 @@ class SpeechMindPipeline:
             asr_confidence = 0.0
         asr_confidence = max(0.0, min(1.0, asr_confidence))
 
-        # These branches are independent after ASR. Keep their existing
-        # concurrent execution; measured timings are included in the result.
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=2) as executor:
             text_future = executor.submit(self.text_emotion.predict, transcript)
@@ -92,6 +89,7 @@ class SpeechMindPipeline:
 
         return {
             "language": language,
+            "language_detection_score": asr_result.get("language_detection_score"),
             "transcript": transcript,
             "asr_model": asr_result.get("asr_model", "unknown"),
             "asr_confidence": round(asr_confidence, 3),
@@ -100,6 +98,9 @@ class SpeechMindPipeline:
             "text_emotion_available": bool(text_result.get("available", True)),
             "text_emotion_reason": text_result.get("reason"),
             "voice_emotion": fused["voice_emotion"],
+            "voice_model_source": voice_result.get("model_source"),
+            "voice_inference_device": voice_result.get("inference_device"),
+            "voice_inference_windows": voice_result.get("inference_windows"),
             "valence": fused["valence"],
             "arousal": fused["arousal"],
             "overall_interpretation": fused["overall_interpretation"],
