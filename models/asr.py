@@ -1,9 +1,11 @@
-"""
-SpeechMind - Speech Recognition + Language Identification.
 
-Whisper is retained as the language-identification and non-Indic ASR model.
-IndicConformer is loaded only when a supported Indic language is detected.
-This avoids loading a 600M-parameter model for English recordings.
+"""
+SpeechMind ASR and language identification.
+
+Whisper performs a language-identification-only pass first. Supported Indic
+languages go directly to IndicConformer, avoiding a complete Whisper decode
+whose transcript would otherwise be discarded. English and unsupported
+languages use Whisper for transcription.
 """
 import torch
 import whisper
@@ -20,7 +22,6 @@ INDIC_LANGUAGES = {
     "sa": "Sanskrit", "sat": "Santali", "sd": "Sindhi", "ta": "Tamil",
     "te": "Telugu", "ur": "Urdu",
 }
-
 WHISPER_TO_INDIC = {
     "assamese": "as", "as": "as", "bengali": "bn", "bn": "bn",
     "bodo": "brx", "brx": "brx", "dogri": "doi", "doi": "doi",
@@ -45,12 +46,21 @@ class SpeechRecognizer:
         self.indic_model = None
         print(f"[ASR] Whisper loaded on {self.device}; IndicConformer will load on demand.")
 
+    def _detect_language(self, audio_numpy):
+        """Identify language from Whisper's first 30-second window without decoding text."""
+        padded = whisper.pad_or_trim(audio_numpy)
+        mel = whisper.log_mel_spectrogram(
+            padded, n_mels=self.whisper.dims.n_mels
+        ).to(self.device)
+        _, probabilities = self.whisper.detect_language(mel)
+        language = max(probabilities, key=probabilities.get)
+        return str(language).lower().strip(), float(probabilities[language])
+
     def _load_indic_model(self):
         if self.indic_model is None:
             print("[ASR] Loading IndicConformer-600M on demand...")
             self.indic_model = AutoModel.from_pretrained(
-                INDIC_CONFORMER_MODEL,
-                trust_remote_code=True,
+                INDIC_CONFORMER_MODEL, trust_remote_code=True
             )
             self.indic_model.eval()
             self.indic_model.to(self.device)
@@ -63,47 +73,49 @@ class SpeechRecognizer:
         else:
             audio_numpy = audio
         audio_numpy = audio_numpy.squeeze()
-        if audio_numpy.size == 0:
-            raise ValueError("ASR received empty audio.")
+        if audio_numpy.ndim != 1 or audio_numpy.size == 0:
+            raise ValueError("ASR expects non-empty mono audio.")
 
-        # Keep the existing single Whisper pass for language detection. For
-        # Indic speech, its draft transcript is discarded and IndicConformer
-        # supplies the final transcript.
-        print("[ASR] Detecting language with Whisper...")
-        whisper_result = self.whisper.transcribe(
-            audio_numpy, task="transcribe", fp16=False, verbose=False
-        )
-        detected_language = str(
-            whisper_result.get("language", "unknown")
-        ).lower().strip()
-        print(f"[ASR] Whisper detected: {detected_language}")
+        try:
+            detected_language, language_score = self._detect_language(audio_numpy)
+        except Exception as error:
+            print(f"[ASR] Language-only detection failed; falling back to Whisper decode: {error}")
+            whisper_result = self.whisper.transcribe(
+                audio_numpy, task="transcribe", fp16=False, verbose=False
+            )
+            detected_language = str(whisper_result.get("language", "unknown")).lower().strip()
+            return self._whisper_result(whisper_result, detected_language, None)
 
         indic_language = WHISPER_TO_INDIC.get(detected_language)
-        if detected_language in ("en", "english"):
-            transcript = whisper_result.get("text", "").strip()
-            return {
-                "transcript": transcript,
-                "language": "en",
-                "confidence": self._estimate_whisper_confidence(whisper_result),
-                "asr_model": "whisper-small",
-            }
-
         if indic_language in INDIC_LANGUAGES:
-            print(f"[ASR] Using IndicConformer for {INDIC_LANGUAGES[indic_language]}.")
-            transcript = self._indic_transcribe(audio, indic_language)
+            print(f"[ASR] Detected {INDIC_LANGUAGES[indic_language]}; using IndicConformer directly.")
+            transcript = self._indic_transcribe(audio_numpy, indic_language)
             return {
                 "transcript": transcript,
                 "language": indic_language,
                 "confidence": self._estimate_indic_confidence(transcript),
+                "language_detection_score": round(language_score, 3),
                 "asr_model": "indic-conformer-600m",
             }
 
-        return {
-            "transcript": whisper_result.get("text", "").strip(),
-            "language": detected_language,
-            "confidence": self._estimate_whisper_confidence(whisper_result),
+        whisper_result = self.whisper.transcribe(
+            audio_numpy, task="transcribe", fp16=False, verbose=False
+        )
+        return self._whisper_result(whisper_result, detected_language, language_score)
+
+    @staticmethod
+    def _whisper_result(whisper_result, detected_language, language_score):
+        transcript = whisper_result.get("text", "").strip()
+        language = "en" if detected_language in ("en", "english") else detected_language
+        result = {
+            "transcript": transcript,
+            "language": language,
+            "confidence": SpeechRecognizer._estimate_whisper_confidence(whisper_result),
             "asr_model": "whisper-small",
         }
+        if language_score is not None:
+            result["language_detection_score"] = round(float(language_score), 3)
+        return result
 
     def _indic_transcribe(self, audio, language_code):
         model = self._load_indic_model()
