@@ -64,7 +64,7 @@ def _normalise_label(value):
 
 def _read_table_bytes(name, data):
     suffix = Path(name).suffix.lower()
-    if suffix in {".csv", ".tsv", ".txt"}:
+    if suffix in {".csv", ".tsv"}:
         separator = "\t" if suffix == ".tsv" else None
         last_error = None
         for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
