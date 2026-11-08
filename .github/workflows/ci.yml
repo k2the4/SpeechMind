@@ -34,13 +34,36 @@ jobs:
             --output "$RUNNER_TEMP/BHAAV.zip"
           python - <<'PY'
           import hashlib
+          import io
+          import os
           from pathlib import Path
+          import zipfile
+          import pandas as pd
           from scripts.train_bhaav_text_emotion import LABELS, _split_dataframe, load_bhaav_dataframe
 
-          archive = Path(__import__("os").environ["RUNNER_TEMP"]) / "BHAAV.zip"
+          archive = Path(os.environ["RUNNER_TEMP"]) / "BHAAV.zip"
           digest = hashlib.md5(archive.read_bytes()).hexdigest()
           expected = "cdcaf1997a422f18ee12d713a17ffdea"
           assert digest == expected, f"BHAAV MD5 mismatch: {digest}"
+
+          print("=== Main BHAAV workbook schemas ===")
+          with zipfile.ZipFile(archive) as zipped:
+              for item in zipped.infolist():
+                  name = Path(item.filename).name.lower()
+                  if item.is_dir() or not name.endswith(".xlsx"):
+                      continue
+                  if "bhaav-dataset" not in name and "stories to sentence mapping" not in name:
+                      continue
+                  if item.file_size > 8_000_000:
+                      continue
+                  try:
+                      book = pd.ExcelFile(io.BytesIO(zipped.read(item)))
+                      for sheet in book.sheet_names:
+                          preview = pd.read_excel(book, sheet_name=sheet, nrows=3)
+                          print(item.filename, "|", sheet, "|", list(preview.columns))
+                          print(preview.head(2).to_string(index=False))
+                  except Exception as error:
+                      print("SKIP", item.filename, error)
 
           frame, source = load_bhaav_dataframe(archive)
           counts = frame["label"].value_counts().to_dict()
