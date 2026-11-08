@@ -24,11 +24,33 @@ class SpeechMindPipeline:
         print("[Pipeline] Initializing SpeechMind...")
         self.asr = SpeechRecognizer()
         self.text_emotion = TextEmotionClassifier()
-        self.voice_emotion = VoiceEmotionRecognizer()
+        # The current pretrained voice classifier is English-only. Defer its
+        # weights until an English recording actually needs that branch.
+        self.voice_emotion = None
         self.translator = None
         self.translator_enabled = load_translator
         self.translator_error = None
         print("[Pipeline] Core classifier ready; ASR and translation weights are lazy-loaded.")
+
+    def _predict_voice(self, audio, language: str) -> dict:
+        if language != MODEL_LANGUAGE_SCOPE:
+            return {
+                "emotion": "unavailable",
+                "confidence": 0.0,
+                "distribution": {},
+                "available": False,
+                "arousal": "Unknown",
+                "reason": (
+                    "The available voice-emotion checkpoint is trained for English. "
+                    f"It is not applied to '{language}' speech."
+                ),
+            }
+        if self.voice_emotion is None:
+            print("[Pipeline] Loading English voice-emotion model on demand...")
+            self.voice_emotion = VoiceEmotionRecognizer()
+        result = self.voice_emotion.predict(audio)
+        result["available"] = True
+        return result
 
     def _translate(self, transcript: str, language: str) -> str:
         if not transcript or language == "en":
@@ -67,11 +89,16 @@ class SpeechMindPipeline:
         asr_confidence = max(0.0, min(1.0, asr_confidence))
 
         stage_start = time.perf_counter()
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            text_future = executor.submit(self.text_emotion.predict, transcript, language)
-            voice_future = executor.submit(self.voice_emotion.predict, audio)
-            text_result = text_future.result()
-            voice_result = voice_future.result()
+        if language == "en":
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                text_future = executor.submit(self.text_emotion.predict, transcript, language)
+                voice_future = executor.submit(self._predict_voice, audio, language)
+                text_result = text_future.result()
+                voice_result = voice_future.result()
+        else:
+            # Do not run an English-trained SER model on Indian-language audio.
+            text_result = self.text_emotion.predict(transcript, language)
+            voice_result = self._predict_voice(audio, language)
         timings["emotion_branches"] = round(time.perf_counter() - stage_start, 3)
 
         stage_start = time.perf_counter()
