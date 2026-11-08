@@ -271,10 +271,10 @@ def train_model(records, output_dir, model_dir, epochs, batch_size, learning_rat
         "labels": LABELS,
         "note": (
             "Held-out-speaker RAVDESS results. RAVDESS is acted English speech; "
-            "these metrics do not establish accuracy on spontaneous or Indian-language speech.",
-            "training_backbone": BASE_MODEL_NAME,
-            "emotion_head": "newly initialized before RAVDESS fine-tuning",
+            "these metrics do not establish accuracy on spontaneous or Indian-language speech."
         ),
+        "training_backbone": BASE_MODEL_NAME,
+        "emotion_head": "newly initialized before RAVDESS fine-tuning",
     }
     model_dir.mkdir(parents=True, exist_ok=True)
     trainer.save_model(str(model_dir))
