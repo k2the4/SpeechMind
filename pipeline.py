@@ -134,6 +134,7 @@ class SpeechMindPipeline:
             "overall_interpretation": fused["overall_interpretation"],
             "confidence": fused["confidence"],
             "confidence_is_calibrated": False,
+            "emotion_analysis_available": fused["emotion_analysis_available"],
             "low_confidence_warning": fused["low_confidence_warning"],
             "overall_emotion": fused["overall_emotion"],
             "fusion_weights": fused["fusion_weights"],
