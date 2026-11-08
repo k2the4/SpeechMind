@@ -8,7 +8,7 @@ on the user's machine and are never uploaded to GitHub.
 Examples:
   python scripts/train_voice_emotion.py --prepare-only
   python scripts/train_voice_emotion.py --data-dir "D:/datasets/Audio_Speech_Actors_01-24_16k"
-  python scripts/train_voice_emotion.py --epochs 3 --batch-size 2
+  python scripts/train_voice_emotion.py --epochs 5 --batch-size 2
 """
 import argparse
 import csv
