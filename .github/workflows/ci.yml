@@ -52,16 +52,23 @@ jobs:
                   name = Path(item.filename).name.lower()
                   if item.is_dir() or not name.endswith(".xlsx"):
                       continue
-                  if "bhaav-dataset" not in name and "stories to sentence mapping" not in name:
+                  if (
+                      "bhaav-dataset" not in name
+                      and "stories to sentence mapping" not in name
+                      and "readme" not in name
+                  ):
                       continue
                   if item.file_size > 8_000_000:
                       continue
                   try:
                       book = pd.ExcelFile(io.BytesIO(zipped.read(item)))
                       for sheet in book.sheet_names:
-                          preview = pd.read_excel(book, sheet_name=sheet, nrows=3)
+                          preview = pd.read_excel(book, sheet_name=sheet, nrows=10)
                           print(item.filename, "|", sheet, "|", list(preview.columns))
-                          print(preview.head(2).to_string(index=False))
+                          print(preview.head(5).to_string(index=False))
+                          if "Bhaav-Dataset" in item.filename and "Annotation" in preview.columns:
+                              full_sheet = pd.read_excel(book, sheet_name=sheet, usecols=["Annotation"])
+                              print("ANNOTATION COUNTS", item.filename, full_sheet["Annotation"].value_counts(dropna=False).to_dict())
                   except Exception as error:
                       print("SKIP", item.filename, error)
 
