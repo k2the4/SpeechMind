@@ -1,59 +1,93 @@
 @echo off
-setlocal
+setlocal EnableExtensions
+title SpeechMind - Voice Emotion Training
 cd /d "%~dp0"
+
+set "LOG_FILE=%~dp0training_launcher.log"
+set "EXIT_CODE=0"
+
+> "%LOG_FILE%" echo SpeechMind voice-emotion training launcher
+>> "%LOG_FILE%" echo Started: %DATE% %TIME%
+>> "%LOG_FILE%" echo Project folder: %CD%
 
 echo ==========================================
 echo SpeechMind - Voice emotion fine-tuning
 echo ==========================================
-echo Dataset summary verified:
-echo 1,440 RAVDESS speech clips - 24 actors
-echo Train: 840 | Validation: 300 | Test: 300
+echo.
+echo This launcher checks your local Python environment,
+echo then asks before starting CPU training.
+echo A log will be saved as training_launcher.log.
 echo.
 
 set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
 if not exist "%PYTHON_EXE%" (
-    echo Project virtual environment was not found at:
-    echo %PYTHON_EXE%
-    echo.
-    echo Create/restore the project's .venv before training.
-    pause
-    exit /b 1
+    echo ERROR: Project virtual environment not found.
+    echo Expected: %PYTHON_EXE%
+    >> "%LOG_FILE%" echo ERROR: Virtual environment not found.
+    set "EXIT_CODE=2"
+    goto FINISH
 )
 
-"%PYTHON_EXE%" -c "import torch; print('PyTorch:', torch.__version__); print('CUDA available:', torch.cuda.is_available())"
+echo Checking Python and PyTorch...
+>> "%LOG_FILE%" echo Checking Python and PyTorch...
+"%PYTHON_EXE%" --version >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
-    echo.
-    echo PyTorch could not be imported from the project virtual environment.
-    pause
-    exit /b 1
+    echo ERROR: Python could not start. See training_launcher.log.
+    >> "%LOG_FILE%" echo ERROR: Python could not start.
+    set "EXIT_CODE=3"
+    goto FINISH
 )
 
-"%PYTHON_EXE%" -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)"
+"%PYTHON_EXE%" -c "import torch; print('PyTorch:', torch.__version__); print('CUDA available:', torch.cuda.is_available())" >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+    echo ERROR: PyTorch is not working in this environment.
+    echo See training_launcher.log.
+    set "EXIT_CODE=4"
+    goto FINISH
+)
+
+"%PYTHON_EXE%" -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
     echo.
-    echo WARNING: CUDA is not available. Training will run on CPU and may take many hours.
-    echo Do not start this on battery power. Keep the computer plugged in.
+    echo WARNING: CUDA is not available. Training may take many hours on CPU.
+    echo Keep the computer plugged in. Do not start if you cannot leave it running.
     echo.
     choice /C YN /N /M "Continue with CPU training? [Y/N] "
-    if errorlevel 2 exit /b 0
+    if errorlevel 2 (
+        echo Training cancelled by user.
+        >> "%LOG_FILE%" echo Training cancelled by user.
+        set "EXIT_CODE=0"
+        goto FINISH
+    )
 )
 
 echo.
-echo Starting 5 epochs of speaker-independent training...
-echo The test split remains held out until final evaluation.
-echo The checkpoint will be saved to checkpoints\voice_emotion_wav2vec2
-echo The evaluation report will be saved to training_outputs\ravdess_voice\test_metrics.json
+echo Starting voice-emotion training...
+echo This may take a long time. Do not close this window.
 echo.
+>> "%LOG_FILE%" echo Starting training at %DATE% %TIME%
 
-"%PYTHON_EXE%" "%~dp0scripts\train_voice_emotion.py" --epochs 5 --batch-size 2
-set "TRAIN_EXIT=%ERRORLEVEL%"
+"%PYTHON_EXE%" "%~dp0scripts\train_voice_emotion.py" --epochs 5 --batch-size 2 >> "%LOG_FILE%" 2>&1
+set "EXIT_CODE=%ERRORLEVEL%"
 
-echo.
-if "%TRAIN_EXIT%"=="0" (
+if "%EXIT_CODE%"=="0" (
+    echo.
     echo Training and held-out test evaluation completed.
+    echo Report: training_outputs\ravdess_voice\test_metrics.json
+    >> "%LOG_FILE%" echo Training completed successfully.
 ) else (
-    echo Training did not complete. Exit code: %TRAIN_EXIT%
+    echo.
+    echo Training failed with exit code %EXIT_CODE%.
+    echo Open training_launcher.log to see the full error.
+    >> "%LOG_FILE%" echo Training failed with exit code %EXIT_CODE%.
 )
+
+:FINISH
+echo.
+echo ==========================================
+echo Launcher finished. Exit code: %EXIT_CODE%
+echo Log file: %LOG_FILE%
+echo ==========================================
 echo.
 pause
-exit /b %TRAIN_EXIT%
+exit /b %EXIT_CODE%
