@@ -11,6 +11,8 @@ import io
 import json
 import random
 import re
+import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -72,7 +74,19 @@ def _read_table_bytes(name, data):
                 last_error = error
         raise ValueError(f"Could not read {name}: {last_error}")
     if suffix in {".xlsx", ".xls"}:
-        sheets = pd.read_excel(io.BytesIO(data), sheet_name=None)
+        try:
+            sheets = pd.read_excel(io.BytesIO(data), sheet_name=None)
+        except ImportError as error:
+            # Install the one optional workbook reader through the active
+            # Streamlit/Python environment; no terminal step is required.
+            message = str(error).lower()
+            if "openpyxl" not in message:
+                raise
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "openpyxl"]
+            )
+            import openpyxl  # noqa: F401
+            sheets = pd.read_excel(io.BytesIO(data), sheet_name=None)
         return list(sheets.values())
     if suffix == ".json":
         try:
