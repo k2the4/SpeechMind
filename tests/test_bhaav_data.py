@@ -85,7 +85,12 @@ class BhaavLoaderTests(unittest.TestCase):
                 writer.writerows(rows)
 
             frame, source_name = load_bhaav_dataframe(path)
-            self.assertEqual(len(frame), 10)
+            # The repeated sentence has different story context, so preserve both
+            # annotations rather than collapsing it across source stories.
+            self.assertEqual(len(frame), 11)
+            repeated = frame[frame["text"].eq("यह वाक्य गुस्से को दिखाता है।")]
+            self.assertEqual(len(repeated), 2)
+            self.assertEqual(repeated["group"].nunique(), 2)
             self.assertEqual(set(frame["label"]), set(LABELS))
             self.assertEqual(source_name, str(path))
             self.assertIn("sadness", set(frame["label"]))
