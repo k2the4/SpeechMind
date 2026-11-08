@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from utils.audio_utils import preprocess
 from models.asr import SpeechRecognizer
 from models.text_emotion import TextEmotionClassifier
-from models.voice_emotion import VoiceEmotionRecognizer
+from models.voice_emotion import VoiceEmotionRecognizer, MODEL_LANGUAGE_SCOPE
 from fusion_layer import fuse
 
 TRANSLATABLE_LANGUAGES = {
@@ -99,6 +99,8 @@ class SpeechMindPipeline:
             "text_emotion_available": bool(text_result.get("available", True)),
             "text_emotion_reason": text_result.get("reason"),
             "voice_emotion": fused["voice_emotion"],
+            "voice_emotion_model_language_scope": MODEL_LANGUAGE_SCOPE,
+            "voice_emotion_language_warning": language != MODEL_LANGUAGE_SCOPE,
             "valence": fused["valence"],
             "arousal": fused["arousal"],
             "overall_interpretation": fused["overall_interpretation"],
