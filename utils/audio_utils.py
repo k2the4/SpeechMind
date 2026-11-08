@@ -1,32 +1,34 @@
 """
-SpeechMind - Audio preprocessing utilities.
-
-Shared by the ASR branch and the voice-emotion branch so both
-always see the same resampled, trimmed, normalized audio.
+Shared audio preprocessing for ASR and voice emotion recognition.
+All model inputs are mono float32 waveforms sampled at 16 kHz.
 """
 import numpy as np
+
+# Configure FFmpeg before importing/using decoders such as librosa.
+from utils.ffmpeg_setup import FFMPEG_BIN  # noqa: F401
 import librosa
 
 TARGET_SAMPLE_RATE = 16000
 
 
 def load_audio(path: str, sr: int = TARGET_SAMPLE_RATE) -> np.ndarray:
-    """Load an audio file, resample to 16kHz mono, trim leading/trailing silence."""
     audio, _ = librosa.load(path, sr=sr, mono=True)
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.size == 0:
+        raise ValueError(f"No audio samples could be decoded from: {path}")
     audio, _ = librosa.effects.trim(audio, top_db=25)
-    return audio
+    return audio.astype(np.float32, copy=False)
 
 
 def normalize_audio(audio: np.ndarray) -> np.ndarray:
-    """Peak-normalize to [-1, 1] so loudness is consistent across recordings/mics."""
-    peak = np.max(np.abs(audio)) if len(audio) else 0
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.size == 0:
+        raise ValueError("Audio is empty after preprocessing.")
+    peak = float(np.max(np.abs(audio)))
     if peak > 0:
         audio = audio / peak
-    return audio
+    return audio.astype(np.float32, copy=False)
 
 
 def preprocess(path: str) -> np.ndarray:
-    """Full preprocessing pipeline used by pipeline.py before ASR/voice-emotion."""
-    audio = load_audio(path)
-    audio = normalize_audio(audio)
-    return audio
+    return normalize_audio(load_audio(path))

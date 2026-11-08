@@ -69,6 +69,10 @@ def test_text_emotion():
     global TEXT_EMOTION_LABELS
     from models.text_emotion import TextEmotionClassifier
     clf = TextEmotionClassifier()
+    if not clf.available:
+        TEXT_EMOTION_LABELS = None
+        print("    -> Text emotion skipped: no fine-tuned checkpoint is installed.")
+        return
     result = clf.predict("यह एक परीक्षण वाक्य है")
     assert "emotion" in result and "confidence" in result and "distribution" in result, (
         f"TextEmotion output missing expected keys: {result.keys()}"
@@ -122,7 +126,7 @@ def test_fusion_label_alignment():
         f"in fusion instead of being counted correctly): {unmapped}"
     )
 
-    if TEXT_EMOTION_LABELS is not None:
+    if TEXT_EMOTION_LABELS:
         mapped_voice_targets = set(VOICE_TO_UNIFIED.get(lbl) for lbl in VOICE_EMOTION_LABELS)
         missing_from_text = mapped_voice_targets - TEXT_EMOTION_LABELS
         assert not missing_from_text, (
