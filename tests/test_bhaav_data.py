@@ -48,9 +48,9 @@ class BhaavLoaderTests(unittest.TestCase):
         mapping = pd.DataFrame({
             "S.No.": [1, 2, 3],
             "Story Name": ["story-a", "story-b", "story-c"],
-            "From Row": [2, 4, 8],
-            "To Row": [6, 9, 10],
-            "Size of stories": [4, 5, 2],
+            "From Row": [2, 4, 7],
+            "To Row": [6, 7, 10],
+            "Size of stories": [4, 3, 3],
         })
         frame = pd.DataFrame({"Sentences": [f"sentence {i}" for i in range(8)]})
         groups = _attach_story_groups(frame, mapping)
