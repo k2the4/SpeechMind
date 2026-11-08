@@ -124,14 +124,20 @@ def _read_table_bytes(name, data):
 
 
 def _candidate_tables(source_path):
+    """Generic table discovery for CSV/JSON fallbacks; skip supplementary text files."""
     path = Path(source_path)
     if path.is_dir():
         for file_path in path.rglob("*"):
-            if file_path.is_file():
-                yield from (
-                    (str(file_path), table)
-                    for table in _read_table_bytes(file_path.name, file_path.read_bytes())
-                )
+            if not file_path.is_file():
+                continue
+            if file_path.suffix.lower() not in {".csv", ".tsv", ".json", ".jsonl"}:
+                continue
+            try:
+                tables = _read_table_bytes(file_path.name, file_path.read_bytes())
+            except Exception:
+                continue
+            for table in tables:
+                yield str(file_path), table
         return
 
     if path.suffix.lower() == ".zip":
@@ -139,12 +145,13 @@ def _candidate_tables(source_path):
             for item in archive.infolist():
                 if item.is_dir() or item.file_size > 100_000_000:
                     continue
-                if Path(item.filename).suffix.lower() not in {
-                    ".csv", ".tsv", ".txt", ".xlsx", ".xls", ".json", ".jsonl"
-                }:
+                if Path(item.filename).suffix.lower() not in {".csv", ".tsv", ".json", ".jsonl"}:
                     continue
-                data = archive.read(item)
-                for table in _read_table_bytes(item.filename, data):
+                try:
+                    tables = _read_table_bytes(item.filename, archive.read(item))
+                except Exception:
+                    continue
+                for table in tables:
                     yield item.filename, table
         return
 
@@ -152,103 +159,344 @@ def _candidate_tables(source_path):
 
 
 def from_single_file(path):
-    return _read_table_bytes(path.name, path.read_bytes())[0]
+    tables = _read_table_bytes(path.name, path.read_bytes())
+    if not tables:
+        raise ValueError(f"No supported table found in {path}")
+    return tables[0]
 
 
-def _infer_columns(frame):
-    columns = {_normalise_column(column): column for column in frame.columns}
-    label_col = next(
-        (columns[name] for name in LABEL_COLUMN_NAMES if name in columns),
+def _read_workbook_table(path_or_bytes, name):
+    if isinstance(path_or_bytes, bytes):
+        tables = _read_table_bytes(name, path_or_bytes)
+    else:
+        tables = _read_table_bytes(name, Path(path_or_bytes).read_bytes())
+    for table in tables:
+        if table is not None and not table.empty:
+            text_col, label_col, _ = _infer_columns(table)
+            if text_col is not None and label_col is not None:
+                return table
+    raise ValueError(f"No BHAAV sentence/annotation sheet found in {name}")
+
+
+def _find_official_zip_entries(archive):
+    dataset_entries = [
+        item for item in archive.infolist()
+        if not item.is_dir()
+        and Path(item.filename).name.lower() == "bhaav-dataset.xlsx"
+    ]
+    if not dataset_entries:
+        return None, None
+
+    def dataset_priority(item):
+        name = item.filename.replace("\\", "/").lower()
+        preferred = [
+            "datasets/bhaav/bhaav-dataset.xlsx",
+            "datasets/bhaav-submission/bhaav-dataset.xlsx",
+            "datasets/bhaav-dataset.xlsx",
+        ]
+        try:
+            return preferred.index(name)
+        except ValueError:
+            return len(preferred) + (0 if "bhaav-dataset.xlsx" in name else 1)
+
+    dataset_entry = sorted(dataset_entries, key=dataset_priority)[0]
+    parent = str(Path(dataset_entry.filename.replace("\\", "/")).parent).replace("\\", "/")
+    expected_mapping = f"{parent}/Stories to Sentence Mapping.xlsx".lower()
+    mapping_entry = next(
+        (
+            item for item in archive.infolist()
+            if not item.is_dir()
+            and item.filename.replace("\\", "/").lower() == expected_mapping
+        ),
         None,
     )
-    text_col = next(
-        (columns[name] for name in TEXT_COLUMN_NAMES if name in columns),
-        None,
-    )
-
-    if label_col is None:
-        for normalised, original in columns.items():
-            mapped = frame[original].map(_normalise_label)
-            valid_ratio = mapped.notna().mean() if len(mapped) else 0
-            if valid_ratio >= 0.70 and mapped.nunique() >= 3:
-                label_col = original
-                break
-
-    if text_col is None:
-        candidates = []
-        for original in frame.columns:
-            if original == label_col:
-                continue
-            series = frame[original].dropna().astype(str)
-            if len(series) and (series.str.len() >= 4).mean() >= 0.50:
-                candidates.append((float(series.str.len().median()), original))
-        if candidates:
-            text_col = max(candidates)[1]
-
-    group_col = next(
-        (columns[name] for name in GROUP_COLUMN_NAMES if name in columns),
-        None,
-    )
-    return text_col, label_col, group_col
+    if mapping_entry is None:
+        mapping_entries = [
+            item for item in archive.infolist()
+            if not item.is_dir()
+            and Path(item.filename).name.lower() == "stories to sentence mapping.xlsx"
+        ]
+        if mapping_entries:
+            # Prefer the mapping in the same top-level BHAAV folder.
+            mapping_entry = sorted(
+                mapping_entries,
+                key=lambda item: (
+                    "datasets/bhaav/" not in item.filename.replace("\\", "/").lower(),
+                    len(item.filename),
+                ),
+            )[0]
+    return dataset_entry, mapping_entry
 
 
-def load_bhaav_dataframe(source_path):
-    candidates = []
-    errors = []
-    for source_name, frame in _candidate_tables(source_path):
-        if frame is None or frame.empty or len(frame.columns) < 2:
-            continue
-        text_col, label_col, group_col = _infer_columns(frame)
-        if text_col is None or label_col is None:
-            errors.append(f"{source_name}: could not identify text/label columns ({list(frame.columns)})")
-            continue
-
-        clean = pd.DataFrame({
-            "text": frame[text_col].astype(str).str.strip(),
-            "label": frame[label_col].map(_normalise_label),
-        })
-        if group_col is not None:
-            raw_groups = frame[group_col]
-            clean["group"] = raw_groups.where(raw_groups.notna(), None)
-            clean["group"] = clean["group"].map(
-                lambda value: str(value).strip()
-                if value is not None and str(value).strip().lower() not in {"", "nan", "none"}
-                else None
-            )
-        else:
-            clean["group"] = None
-
-        clean = clean[
-            clean["text"].notna()
-            & clean["text"].ne("")
-            & clean["label"].notna()
-            & clean["text"].str.lower().ne("nan")
-        ].copy()
-        if len(clean):
-            candidates.append((len(clean), source_name, clean))
-
+def _find_official_directory_files(root):
+    candidates = list(root.rglob("Bhaav-Dataset.xlsx"))
     if not candidates:
-        detail = "\n".join(errors[:8])
+        return None, None
+
+    def priority(path):
+        name = path.as_posix().lower()
+        preferred = [
+            "/datasets/bhaav/bhaav-dataset.xlsx",
+            "/datasets/bhaav-submission/bhaav-dataset.xlsx",
+            "/datasets/bhaav-dataset.xlsx",
+        ]
+        for index, suffix in enumerate(preferred):
+            if name.endswith(suffix):
+                return index
+        return len(preferred) + len(name)
+
+    dataset_path = sorted(candidates, key=priority)[0]
+    mapping_path = dataset_path.parent / "Stories to Sentence Mapping.xlsx"
+    if not mapping_path.exists():
+        other_mappings = list(root.rglob("Stories to Sentence Mapping.xlsx"))
+        mapping_path = other_mappings[0] if other_mappings else None
+    return dataset_path, mapping_path
+
+
+def _load_story_mapping(mapping_table):
+    normalized = {_normalise_column(column): column for column in mapping_table.columns}
+    from_col = normalized.get("from_row")
+    to_col = normalized.get("to_row")
+    name_col = normalized.get("story_name")
+    serial_col = normalized.get("s_no") or normalized.get("s_no_")
+    size_col = normalized.get("size_of_stories")
+    if from_col is None or to_col is None or name_col is None:
         raise ValueError(
-            "No supported BHAAV table with recognizable Hindi text and emotion columns was found. "
-            "Expected CSV/XLSX/TSV/JSON with sentence/text and emotion/label columns. "
-            + detail
+            "BHAAV story mapping must contain From Row, To Row and Story Name columns."
         )
 
-    _, source_name, clean = max(candidates, key=lambda item: item[0])
-    clean["text_key"] = clean["text"].str.replace(r"\s+", " ", regex=True).str.strip().str.lower()
-    # Remove exact duplicates. Conflicting duplicate annotations are excluded.
-    conflicts = clean.groupby("text_key")["label"].nunique()
-    conflicting_keys = set(conflicts[conflicts > 1].index)
-    clean = clean[~clean["text_key"].isin(conflicting_keys)]
-    clean = clean.drop_duplicates("text_key").reset_index(drop=True)
-    clean = clean.drop(columns=["text_key"])
+    mapping = mapping_table.copy()
+    mapping = mapping.dropna(subset=[from_col, to_col, name_col])
+    mapping = mapping.sort_values(from_col).reset_index(drop=True)
+    records = []
+    for ordinal, row in mapping.iterrows():
+        start_row = int(row[from_col])
+        end_row = int(row[to_col])
+        story_name = str(row[name_col]).strip()
+        if not story_name or end_row <= start_row:
+            continue
+        expected_size = None
+        if size_col is not None and pd.notna(row[size_col]):
+            expected_size = int(row[size_col])
+        range_size = end_row - start_row
+        if expected_size is not None and expected_size not in {
+            range_size, range_size + 1
+        }:
+            raise ValueError(
+                f"Story row range for '{story_name}' conflicts with its published size: "
+                f"{start_row}:{end_row} vs {expected_size} sentences."
+            )
+        serial = (
+            str(int(row[serial_col]))
+            if serial_col is not None and pd.notna(row[serial_col])
+            else str(ordinal + 1)
+        )
+        records.append((start_row, end_row, f"{serial}:{story_name}"))
+
+    if not records:
+        raise ValueError("BHAAV story mapping contains no valid story row ranges.")
+    return records
+
+
+def _attach_story_groups(frame, mapping_table):
+    """Attach story IDs from the official 1-based Excel row ranges."""
+    records = _load_story_mapping(mapping_table)
+    excel_rows = np.arange(len(frame), dtype=np.int64) + 2  # row 1 is the header
+    groups = np.full(len(frame), None, dtype=object)
+    assigned = np.zeros(len(frame), dtype=np.int8)
+
+    for start_row, end_row, group_name in records:
+        mask = (excel_rows >= start_row) & (excel_rows < end_row)
+        if np.any(mask & (assigned > 0)):
+            raise ValueError(f"Overlapping BHAAV story row range: {group_name}")
+        groups[mask] = group_name
+        assigned[mask] += 1
+
+    missing_count = int((assigned == 0).sum())
+    if missing_count:
+        raise ValueError(
+            f"BHAAV story map leaves {missing_count} of {len(frame)} sentence rows "
+            "without a story ID. Refusing a sentence-random split that could leak stories."
+        )
+    if np.any(assigned > 1):
+        raise ValueError("BHAAV story map assigns a sentence to more than one story.")
+    return groups
+
+
+def _prepare_bhaav_frame(frame, source_name, mapping_table=None):
+    if frame is None or frame.empty:
+        raise ValueError(f"The selected BHAAV dataset sheet is empty: {source_name}")
+    text_col, label_col, group_col = _infer_columns(frame)
+    if text_col is None or label_col is None:
+        raise ValueError(
+            f"Could not identify text/label columns in {source_name}: {list(frame.columns)}"
+        )
+
+    raw_labels = frame[label_col]
+    mapped_labels = raw_labels.map(_normalise_label)
+    if raw_labels.map(
+        lambda value: isinstance(value, (int, np.integer, float, np.floating))
+        and pd.notna(value)
+    ).mean() > 0.95 and Path(source_name).name.lower() == "bhaav-dataset.xlsx":
+        raw_counts = mapped_labels.value_counts(dropna=False).to_dict()
+        expected = BHAAV_EXPECTED_CLASS_COUNTS
+        if raw_counts != expected:
+            raise ValueError(
+                "BHAAV numeric Annotation codes did not reproduce the published "
+                f"class frequencies. Found {raw_counts}; expected {expected}. "
+                "The label mapping must be verified before training."
+            )
+
+    clean = pd.DataFrame({
+        "text": frame[text_col].astype(str).str.strip(),
+        "label": mapped_labels,
+    })
+
+    if group_col is not None:
+        raw_groups = frame[group_col]
+        clean["group"] = raw_groups.where(raw_groups.notna(), None).map(
+            lambda value: str(value).strip()
+            if value is not None and str(value).strip().lower() not in {"", "nan", "none"}
+            else None
+        )
+    elif mapping_table is not None:
+        clean["group"] = _attach_story_groups(frame, mapping_table)
+    else:
+        clean["group"] = None
+
+    clean = clean[
+        clean["text"].notna()
+        & clean["text"].ne("")
+        & clean["label"].notna()
+        & clean["text"].str.lower().ne("nan")
+    ].copy()
+
+    # BHAAV labels emotion in story context. Identical text in two different
+    # stories may legitimately have different labels, so do not delete
+    # cross-story or cross-label examples as "conflicts".
+    clean["text_key"] = clean["text"].str.replace(
+        r"\\s+", " ", regex=True
+    ).str.strip().str.lower()
+    if clean["group"].notna().all():
+        clean = clean.drop_duplicates(["text_key", "label", "group"])
+    else:
+        clean = clean.drop_duplicates(["text_key", "label"])
+    clean = clean.drop(columns=["text_key"]).reset_index(drop=True)
 
     missing = set(LABELS) - set(clean["label"].unique())
     if missing:
         raise ValueError(f"BHAAV table is missing expected classes: {sorted(missing)}")
-    return clean, source_name
+    if mapping_table is not None and clean["group"].isna().any():
+        raise ValueError("Story mapping was attached, but some BHAAV examples have no story ID.")
+    return clean
 
+
+def load_bhaav_dataframe(source_path):
+    path = Path(source_path)
+
+    # Official Zenodo archive: read only the actual 20,304-row corpus and its
+    # paired story map. Ignore diagrams, README workbooks and per-story files.
+    if path.suffix.lower() == ".zip":
+        with zipfile.ZipFile(path) as archive:
+            dataset_entry, mapping_entry = _find_official_zip_entries(archive)
+            if dataset_entry is not None:
+                source_name = dataset_entry.filename
+                dataset_tables = _read_table_bytes(
+                    source_name, archive.read(dataset_entry)
+                )
+                dataset_table = next(
+                    (
+                        table for table in dataset_tables
+                        if table is not None
+                        and _infer_columns(table)[0] is not None
+                        and _infer_columns(table)[1] is not None
+                    ),
+                    None,
+                )
+                if dataset_table is None:
+                    raise ValueError(f"No labeled BHAAV worksheet found in {source_name}")
+                mapping_table = None
+                if mapping_entry is not None:
+                    mapping_tables = _read_table_bytes(
+                        mapping_entry.filename, archive.read(mapping_entry)
+                    )
+                    mapping_table = next(
+                        (
+                            table for table in mapping_tables
+                            if table is not None
+                            and {"from_row", "to_row", "story_name"}.issubset(
+                                {_normalise_column(column) for column in table.columns}
+                            )
+                        ),
+                        None,
+                    )
+                clean = _prepare_bhaav_frame(
+                    dataset_table, source_name, mapping_table=mapping_table
+                )
+                return clean, source_name
+
+    # Extracted official archive folder: select the named master workbook,
+    # and pair it with the story map in the same folder.
+    if path.is_dir():
+        dataset_path, mapping_path = _find_official_directory_files(path)
+        if dataset_path is not None:
+            dataset_tables = _read_table_bytes(
+                dataset_path.name, dataset_path.read_bytes()
+            )
+            dataset_table = next(
+                (
+                    table for table in dataset_tables
+                    if table is not None
+                    and _infer_columns(table)[0] is not None
+                    and _infer_columns(table)[1] is not None
+                ),
+                None,
+            )
+            if dataset_table is None:
+                raise ValueError(f"No labeled BHAAV worksheet found in {dataset_path}")
+            mapping_table = None
+            if mapping_path is not None and Path(mapping_path).exists():
+                mapping_tables = _read_table_bytes(
+                    Path(mapping_path).name, Path(mapping_path).read_bytes()
+                )
+                mapping_table = next(
+                    (
+                        table for table in mapping_tables
+                        if table is not None
+                        and {"from_row", "to_row", "story_name"}.issubset(
+                            {_normalise_column(column) for column in table.columns}
+                        )
+                    ),
+                    None,
+                )
+            clean = _prepare_bhaav_frame(
+                dataset_table, str(dataset_path), mapping_table=mapping_table
+            )
+            return clean, str(dataset_path)
+
+    # Generic CSV/JSON path for controlled experiments and unit tests.
+    candidates = []
+    errors = []
+    for source_name, frame in _candidate_tables(path):
+        if frame is None or frame.empty or len(frame.columns) < 2:
+            continue
+        try:
+            clean = _prepare_bhaav_frame(frame, source_name)
+        except Exception as error:
+            errors.append(f"{source_name}: {error}")
+            continue
+        candidates.append((len(clean), source_name, clean))
+
+    if not candidates:
+        detail = "\\n".join(errors[:8])
+        raise ValueError(
+            "No supported BHAAV table was found. Expected CSV/TSV/JSON with "
+            "sentence/text and emotion/label columns, or the official BHAAV ZIP. "
+            + detail
+        )
+
+    _, source_name, clean = max(candidates, key=lambda item: item[0])
+    return clean, source_name
 
 def _split_dataframe(frame, seed=42):
     groups = frame["group"]
