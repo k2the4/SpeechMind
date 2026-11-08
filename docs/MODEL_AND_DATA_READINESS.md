@@ -3,9 +3,9 @@
 ## Current inference baseline
 
 - ASR: Whisper-small for automatic language detection/English; IndicConformer-600M for supported Indic languages.
-- Voice emotion: `Dpngtm/wav2vec2-emotion-recognition`, a seven-class English model.
-- Text emotion: intentionally disabled until a fine-tuned MuRIL checkpoint is present.
-- Fusion: the available branch is used; scores are explicitly uncalibrated.
+- Voice emotion: `Dpngtm/wav2vec2-emotion-recognition`, a seven-class English model. SpeechMind now loads and applies it only to English input.
+- Text emotion: intentionally disabled until a fine-tuned five-class MuRIL checkpoint is present. The in-app BHAAV training page can prepare this Hindi-only text baseline.
+- Fusion: only language-compatible, available branches are included. When neither branch is valid for the detected language, the result is explicitly unavailable rather than a fabricated neutral prediction. Scores remain uncalibrated.
 
 ## Important dataset leakage warning
 
@@ -27,7 +27,13 @@ These are Indian-language emotional-speech corpora (Hindi and Telugu respectivel
 
 ### BHAAV
 
-BHAAV contains 20,304 Hindi sentences labeled with five categories: anger, joy, suspense, sad and neutral. The official repository says the corpus is for research use and requires citation; commercial use requires contacting the maintainers. It is a text corpus derived from stories, not a corpus of spontaneous speech transcripts. It can be used for an initial Hindi text-emotion baseline, but that domain mismatch must be reported and it should not be represented as final validation for transcribed conversation.
+BHAAV contains 20,304 Hindi sentences labeled with five categories: anger, joy, suspense, sad and neutral. The official repository says the corpus is for research use and requires citation; commercial use requires contacting the maintainers. It is a text corpus derived from stories, not a corpus of spontaneous speech transcripts. It can be used for an initial Hindi text-emotion baseline. The new in-app training page downloads the public Zenodo archive, verifies its MD5 checksum, detects the text/label columns, removes exact duplicate/conflicting sentences, and trains a five-class MuRIL classifier. When GPU is available it fine-tunes the final two encoder blocks; on CPU it runs a frozen-encoder classification-head baseline to reduce compute. A held-out report includes accuracy, macro-F1, per-class precision/recall/F1, and a confusion matrix. The story-text domain mismatch must be reported; it is not final validation for transcribed conversation or Hinglish.
+
+## Local project tools
+
+- **Dataset Inventory** (`pages/1_Dataset_Inventory.py`) scans the known local `Test Data` locations read-only, identifies RAVDESS speech WAV files from their filenames, and reports class/actor counts. It does not upload or modify audio.
+- **Hindi Text Emotion Training** (`pages/2_Text_Emotion_Training.py`) downloads and checksum-verifies BHAAV from Zenodo, then trains and evaluates the MuRIL baseline locally. The generated dataset and checkpoint directories are ignored by Git.
+- The current voice model is deliberately not loaded for non-English audio, improving startup time and preventing its English classifier labels from entering Indian-language fusion.
 
 ## Training and evaluation protocol
 
@@ -42,6 +48,7 @@ BHAAV contains 20,304 Hindi sentences labeled with five categories: anger, joy, 
 ## Sources
 
 - Voice model card: https://huggingface.co/Dpngtm/wav2vec2-emotion-recognition
+- BHAAV Zenodo archive (MD5 verified by the training page): https://zenodo.org/records/3457467
 - BhavVani dataset card and access conditions: https://huggingface.co/datasets/ag2003/bhavvani
 - BhavVani Interspeech 2024 paper: https://www.isca-archive.org/interspeech_2024/goel24_interspeech.pdf
 - IITKGP dataset information: https://cse.iitkgp.ac.in/~ksrao/res.html
