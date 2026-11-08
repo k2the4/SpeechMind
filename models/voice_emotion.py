@@ -42,7 +42,9 @@ class VoiceEmotionRecognizer:
             "[VoiceEmotion] Loading wav2vec2 emotion model..."
         )
 
-        self.device = torch.device("cpu")
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
 
         self.processor = AutoProcessor.from_pretrained(
             MODEL_NAME
