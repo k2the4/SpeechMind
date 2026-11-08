@@ -5,10 +5,45 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts.train_bhaav_text_emotion import LABELS, load_bhaav_dataframe, _split_dataframe
+from scripts.train_bhaav_text_emotion import (
+    BHAAV_ANNOTATION_TO_LABEL,
+    LABELS,
+    _attach_story_groups,
+    _split_dataframe,
+    _normalise_label,
+    load_bhaav_dataframe,
+)
 
 
 class BhaavLoaderTests(unittest.TestCase):
+    def test_official_numeric_annotation_codes_match_bhaav_classes(self):
+        self.assertEqual(
+            BHAAV_ANNOTATION_TO_LABEL,
+            {
+                0: "anger",
+                1: "joy",
+                2: "sadness",
+                3: "suspense",
+                4: "neutral",
+            },
+        )
+        self.assertEqual(_normalise_label(0), "anger")
+        self.assertEqual(_normalise_label(4), "neutral")
+
+    def test_official_story_row_ranges_attach_groups(self):
+        mapping = pd.DataFrame({
+            "S.No.": [1, 2],
+            "Story Name": ["story-a", "story-b"],
+            "From Row": [2, 4],
+            "To Row": [4, 6],
+            "Size of stories": [2, 2],
+        })
+        groups = _attach_story_groups(pd.DataFrame({"Sentences": ["a", "b", "c", "d"]}), mapping)
+        self.assertEqual(
+            list(groups),
+            ["1:story-a", "1:story-a", "2:story-b", "2:story-b"],
+        )
+
     def test_group_split_keeps_stories_disjoint(self):
         rows = []
         for group_index in range(10):
