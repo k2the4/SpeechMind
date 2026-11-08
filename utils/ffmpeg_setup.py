@@ -1,11 +1,12 @@
 """
-Optional FFmpeg DLL discovery.
+Optional FFmpeg discovery for audio decoding on Windows.
 
-The application should work with FFmpeg on PATH. FFMPEG_BIN can also point
-to an FFmpeg bin directory. This avoids a machine-specific absolute path.
+FFMPEG_BIN may point to a bin directory or an ffmpeg executable. We also
+recognize common WinGet package layouts without depending on a username.
 """
 import os
 import shutil
+from pathlib import Path
 
 _DLL_DIRECTORY_HANDLES = []
 
@@ -13,30 +14,37 @@ _DLL_DIRECTORY_HANDLES = []
 def _candidate_ffmpeg_dirs():
     configured = os.environ.get("FFMPEG_BIN")
     if configured:
-        path = os.path.abspath(os.path.expandvars(os.path.expanduser(configured)))
-        if os.path.isfile(path):
-            path = os.path.dirname(path)
-        yield path
+        path = Path(os.path.expandvars(os.path.expanduser(configured))).resolve()
+        yield path.parent if path.is_file() else path
 
     executable = shutil.which("ffmpeg")
     if executable:
-        yield os.path.dirname(os.path.abspath(executable))
+        yield Path(executable).resolve().parent
+
+    winget_packages = Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "Packages"
+    if winget_packages.is_dir():
+        for package in winget_packages.glob("*FFmpeg*/*/bin"):
+            yield package
 
 
-def configure_ffmpeg_dlls():
-    add_dll_directory = getattr(os, "add_dll_directory", None)
-    if add_dll_directory is None:
-        return None
-
+def configure_ffmpeg():
     for directory in _candidate_ffmpeg_dirs():
-        if os.path.isdir(directory):
+        if not directory.is_dir():
+            continue
+        directory = str(directory)
+        current_path = os.environ.get("PATH", "")
+        path_entries = current_path.split(os.pathsep) if current_path else []
+        if directory not in path_entries:
+            os.environ["PATH"] = directory + os.pathsep + current_path
+
+        add_dll_directory = getattr(os, "add_dll_directory", None)
+        if add_dll_directory is not None:
             try:
-                handle = add_dll_directory(directory)
-                _DLL_DIRECTORY_HANDLES.append(handle)
-                return directory
+                _DLL_DIRECTORY_HANDLES.append(add_dll_directory(directory))
             except OSError:
-                continue
+                pass
+        return directory
     return None
 
 
-FFMPEG_BIN = configure_ffmpeg_dlls()
+FFMPEG_BIN = configure_ffmpeg()
