@@ -41,7 +41,7 @@ class BhaavLoaderTests(unittest.TestCase):
         groups = _attach_story_groups(pd.DataFrame({"Sentences": ["a", "b", "c", "d"]}), mapping)
         self.assertEqual(
             list(groups),
-            ["1:story-a", "1:story-a", "2:story-b", "2:story-b"],
+            ["bundle:1:story-a", "bundle:1:story-a", "bundle:2:story-b", "bundle:2:story-b"],
         )
 
     def test_overlapping_story_ranges_are_bundled(self):
