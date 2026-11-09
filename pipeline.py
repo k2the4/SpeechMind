@@ -68,7 +68,9 @@ class SpeechMindPipeline:
 
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=2) as executor:
-            text_future = executor.submit(self.text_emotion.predict, transcript)
+            text_future = executor.submit(
+                self.text_emotion.predict, transcript, language
+            )
             voice_future = executor.submit(self.voice_emotion.predict, audio)
             text_result = text_future.result()
             voice_result = voice_future.result()
@@ -105,6 +107,7 @@ class SpeechMindPipeline:
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
             "text_emotion_reason": text_result.get("reason"),
+            "text_emotion_model_source": text_result.get("model_source"),
             "voice_emotion": fused["voice_emotion"],
             "voice_model_source": voice_result.get("model_source"),
             "voice_inference_device": voice_result.get("inference_device"),
