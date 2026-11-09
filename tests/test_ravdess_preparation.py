@@ -1,20 +1,22 @@
 import unittest
-from pathlib import Path
+import numpy as np
 
 from scripts.train_voice_emotion import (
+    BASE_MODEL_NAME,
+    LABELS,
     assign_speaker_splits,
     parse_ravdess_filename,
+    pool_hidden_states,
     summarize,
-    BASE_MODEL_NAME,
 )
 
 
 class RavdessPreparationTests(unittest.TestCase):
-    def test_training_backbone_is_wavlm_not_a_ravdess_emotion_checkpoint(self):
+    def test_training_backbone_is_wavlm(self):
         self.assertEqual(BASE_MODEL_NAME, "microsoft/wavlm-base-plus")
 
     def test_parses_ravdess_speech_and_maps_labels(self):
-        row = parse_ravdess_filename(Path("03-01-05-01-02-01-12.wav"))
+        row = parse_ravdess_filename("03-01-05-01-02-01-12.wav")
         self.assertEqual(row["label"], "anger")
         self.assertEqual(row["speaker_id"], "actor_12")
 
@@ -25,13 +27,15 @@ class RavdessPreparationTests(unittest.TestCase):
     def test_actor_groups_do_not_leak_between_splits(self):
         rows = [
             {"path": f"{actor}-{emotion}", "speaker_id": f"actor_{actor:02d}",
-             "label": "joy", "source_emotion_code": "03"}
+             "label": LABELS[emotion % len(LABELS)], "source_emotion_code": "03"}
             for actor in range(1, 25) for emotion in range(2)
         ]
         first = assign_speaker_splits(rows, seed=7)
         second = assign_speaker_splits(rows, seed=7)
-        self.assertEqual([row["split"] for row in first],
-                         [row["split"] for row in second])
+        self.assertEqual(
+            [row["split"] for row in first],
+            [row["split"] for row in second],
+        )
         groups = {
             split: {row["speaker_id"] for row in first if row["split"] == split}
             for split in ("train", "validation", "test")
@@ -48,6 +52,13 @@ class RavdessPreparationTests(unittest.TestCase):
         summary = summarize(rows)
         self.assertEqual(summary["train"]["files"], 1)
         self.assertEqual(summary["test"]["labels"], {"anger": 1})
+
+    def test_mean_std_pooling_shape_and_values(self):
+        hidden = np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+        pooled = pool_hidden_states(hidden)
+        self.assertEqual(pooled.shape, (4,))
+        np.testing.assert_allclose(pooled[:2], [2.0, 3.0])
+        np.testing.assert_allclose(pooled[2:], [1.0, 1.0])
 
 
 if __name__ == "__main__":
