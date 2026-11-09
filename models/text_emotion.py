@@ -53,6 +53,7 @@ class TextEmotionClassifier:
         self.labels = None
         self.model_source = None
         self.multilingual_checkpoint = False
+        self.supported_languages = {"en"}
         self.load_error = None
         self.english_fallback_attempted = False
 
@@ -90,6 +91,12 @@ class TextEmotionClassifier:
             self.model = model
             self.labels = labels
             self.model_source = str(CHECKPOINT_DIR)
+            raw_languages = metadata.get("languages", ["en"])
+            if not isinstance(raw_languages, list) or not raw_languages:
+                raw_languages = ["en"]
+            self.supported_languages = {
+                str(item).lower().strip() for item in raw_languages if str(item).strip()
+            } or {"en"}
             self.multilingual_checkpoint = True
             self.available = True
             print(f"[TextEmotion] Fine-tuned MuRIL loaded with labels: {labels}")
@@ -121,6 +128,7 @@ class TextEmotionClassifier:
             self.labels = labels
             self.model_source = ENGLISH_FALLBACK_MODEL
             self.multilingual_checkpoint = False
+            self.supported_languages = {"en"}
             self.available = True
             print(f"[TextEmotion] English fallback loaded with labels: {labels}")
         except Exception as error:
@@ -161,16 +169,17 @@ class TextEmotionClassifier:
                 "model_source": None,
             }
 
-        if not self.multilingual_checkpoint and language_code not in ("en", "english"):
+        if language_code not in self.supported_languages and not (
+            language_code == "english" and "en" in self.supported_languages
+        ):
             return {
                 "emotion": "unavailable",
                 "confidence": 0.0,
                 "distribution": {},
                 "available": False,
                 "reason": (
-                    "The loaded English emotion model cannot classify "
-                    f"'{language_code}' transcripts. A fine-tuned multilingual MuRIL "
-                    "checkpoint is required for this language."
+                    f"The loaded text-emotion checkpoint was not trained for {language_code}. "
+                    "Supported language codes: " + ", ".join(sorted(self.supported_languages))
                 ),
                 "model_source": self.model_source,
             }
