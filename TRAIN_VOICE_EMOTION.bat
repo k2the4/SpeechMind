@@ -26,18 +26,19 @@ if not exist "%~dp0data\ravdess" (
  set "EXIT_CODE=3"
  goto FINISH
 )
-if exist "%~dp0data\crema_d\AudioWAV" (
- echo CREMA-D detected. Both corpora will be used.
-) else (
- echo WARNING: CREMA-D not found. Current run would use RAVDESS only.
- choice /C YN /N /M "Continue with richer features on RAVDESS only? [Y/N] "
- if errorlevel 2 goto CANCELLED
+if not exist "%~dp0data\crema_d\AudioWAV" (
+ echo ERROR: CREMA-D is required for this expanded experiment.
+ echo Complete the CREMA-D access registration, install Git LFS,
+ echo and run DOWNLOAD_CREMA_D.bat first.
+ set "EXIT_CODE=4"
+ goto FINISH
 )
+echo CREMA-D detected. Both corpora will be used.
 echo.
 echo Starting feature extraction and classifier evaluation.
 echo Do not close this window. Detailed progress is written to the log.
 >> "%LOG_FILE%" echo Starting training at %DATE% %TIME%
-"%PYTHON_EXE%" -u "%~dp0scripts\train_voice_emotion.py" >> "%LOG_FILE%" 2>&1
+"%PYTHON_EXE%" -u "%~dp0scripts\train_voice_emotion.py" --require-crema-d >> "%LOG_FILE%" 2>&1
 set "EXIT_CODE=%ERRORLEVEL%"
 if "%EXIT_CODE%"=="0" (
  echo Training and held-out evaluation completed.
