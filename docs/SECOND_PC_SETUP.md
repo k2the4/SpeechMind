@@ -64,13 +64,14 @@ Do not rename the WAV files. The training script recursively scans the folder. T
 
 ## Start training
 
-After the dataset is present, double-click `TRAIN_VOICE_EMOTION.bat`.
+After the dataset is present, double-click `TRAIN_VOICE_EMOTION.bat`. On CPU-only machines, this launcher uses frozen WavLM mean/std embeddings plus a validation-selected class-balanced SVM instead of full neural-network backpropagation. The WavLM representations are cached locally so classifier experiments can be repeated without re-extracting features. This is feature-based training, not full WavLM fine-tuning.
 
-The training script downloads `microsoft/wavlm-base-plus` automatically from Hugging Face on its first run, fine-tunes it, selects the best checkpoint using validation macro-F1, and evaluates on the held-out test speakers.
+The training script downloads `microsoft/wavlm-base-plus` automatically from Hugging Face on its first run, extracts frozen representations, selects a classifier using validation macro-F1, and evaluates on held-out test speakers.
 
 Outputs:
-- Checkpoint: `checkpoints/voice_emotion_wavlm/`
-- Metrics: `training_outputs/wavlm_ravdess/test_metrics.json`
+- Checkpoint: `checkpoints/voice_emotion_wavlm_cpu/`
+- Cached representations: `training_outputs/wavlm_cpu/wavlm_features_cache.npz`
+- Metrics: `training_outputs/wavlm_cpu/test_metrics.json`
 - Training log: `training_launcher.log`
 
 ## Hardware notes
