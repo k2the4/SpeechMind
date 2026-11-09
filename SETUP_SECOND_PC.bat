@@ -13,11 +13,15 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0SETUP_SECO
 set "SETUP_EXIT=%ERRORLEVEL%"
 
 echo.
-if "%SETUP_EXIT%"=="0" (
-    echo Setup completed successfully.
-) else (
-    echo Setup failed with exit code %SETUP_EXIT%.
-)
+if not "%SETUP_EXIT%"=="0" goto FAILED
+
+echo Setup completed successfully.
+goto END
+
+:FAILED
+echo Setup failed with exit code %SETUP_EXIT%.
+
+:END
 echo.
 echo Log: %~dp0second_pc_setup.log
 echo Press any key to close this window.
