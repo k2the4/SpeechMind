@@ -209,9 +209,26 @@ def train_classifier(features,labels,speakers,datasets,splits,output_dir,model_d
     per_dataset={}
     for dataset in sorted(set(datasets[te].tolist())):
         mask=datasets[te]==dataset
-        per_dataset[dataset]={"files":int(mask.sum()),"accuracy":float(accuracy_score(yte[mask],pred[mask])),
-            "macro_f1":float(f1_score(yte[mask],pred[mask],labels=LABELS,average="macro",zero_division=0)),
-            "classification_report":classification_report(yte[mask],pred[mask],labels=LABELS,target_names=LABELS,output_dict=True,zero_division=0)}
+        # Macro-F1 must average only over emotions actually represented in
+        # this corpus' held-out test set. CREMA-D has no surprise category;
+        # including it as a zero-support class would artificially depress its
+        # reported per-corpus macro-F1.
+        observed_labels = [
+            label for label in LABELS if np.any(yte[mask] == label)
+        ]
+        per_dataset[dataset]={
+            "files":int(mask.sum()),
+            "labels_evaluated":observed_labels,
+            "accuracy":float(accuracy_score(yte[mask],pred[mask])),
+            "macro_f1":float(f1_score(
+                yte[mask],pred[mask],labels=observed_labels,
+                average="macro",zero_division=0
+            )),
+            "classification_report":classification_report(
+                yte[mask],pred[mask],labels=observed_labels,
+                target_names=observed_labels,output_dict=True,zero_division=0
+            )
+        }
     model_dir=Path(model_dir); output=Path(output_dir); model_dir.mkdir(parents=True,exist_ok=True); output.mkdir(parents=True,exist_ok=True)
     joblib.dump(best["model"],model_dir/"voice_emotion_head.joblib",compress=3)
     metadata={"model_type":"wavlm_multicorpus_feature_svc","backbone":BASE_MODEL_NAME,"labels":LABELS,
