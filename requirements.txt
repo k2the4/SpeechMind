@@ -1,6 +1,8 @@
-# Core ML
-torch
-torchaudio
+# SpeechMind Python dependencies.
+# SETUP_SECOND_PC.bat installs the matching PyTorch + TorchAudio build
+# (CUDA when an NVIDIA driver is present; CPU otherwise) before this file.
+
+# Transformers and speech models
 transformers
 accelerate
 openai-whisper
@@ -9,21 +11,18 @@ openai-whisper
 librosa
 soundfile
 scipy
+numpy
 
 # IndicTrans2 translation (optional; loaded only for supported non-English audio)
 sentencepiece
 sacremoses
 mosestokenizer
-# Install IndicTransToolkit separately when translation is required:
-# pip install git+https://github.com/VarunGumma/IndicTransToolkit
+# Install IndicTransToolkit separately only if translation is required:
+# pip install indictranstoolkit
 
-# App + evaluation
+# Application and evaluation
 streamlit
 scikit-learn
 pandas
 matplotlib
-
-# Dataset access / optional experiments
 datasets
-
-# SpeechBrain and bitsandbytes are not used by the current inference code.
