@@ -30,7 +30,11 @@ class VoiceEmotionRecognizer:
         if metadata_path.is_file() and config_path.is_file():
             try:
                 metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-                if set(metadata.get("labels", [])) == EXPECTED_LABELS:
+                if (
+                    set(metadata.get("labels", [])) == EXPECTED_LABELS
+                    and metadata.get("backbone") == "microsoft/wavlm-base-plus"
+                    and metadata.get("sample_rate") == SAMPLE_RATE
+                ):
                     self.model_source = str(FINETUNED_MODEL_DIR)
                     self.model_metadata = metadata
                 else:
