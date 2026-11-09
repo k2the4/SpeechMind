@@ -25,7 +25,7 @@ The dot means clone into the currently opened, empty folder.
 
 ## One-click environment setup
 
-Double-click `SETUP_SECOND_PC.bat` from the project root.
+Double-click `SETUP_SECOND_PC.bat` from the project root. The BAT file launches `SETUP_SECOND_PC.ps1` using PowerShell; the PowerShell script performs all installation and verification steps.
 
 The script:
 1. Installs Python 3.11 with WinGet if it is missing.
