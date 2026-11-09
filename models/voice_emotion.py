@@ -78,7 +78,21 @@ class VoiceEmotionRecognizer:
 
     @torch.inference_mode()
     def _wavlm_probabilities(self,chunk):
-        embedding=extract_wavlm_embedding(self.embedding_model,self.feature_extractor,chunk,self.device).reshape(1,-1)
+        if self.pooling_version == "mean_std":
+            encoded = self.feature_extractor(
+                chunk, sampling_rate=SAMPLE_RATE, return_tensors="pt"
+            )
+            inputs = encoded["input_values"].to(self.device)
+            with torch.inference_mode():
+                hidden = self.embedding_model(input_values=inputs).last_hidden_state[0]
+            states = hidden.float().cpu().numpy()
+            embedding = np.concatenate(
+                [states.mean(axis=0), states.std(axis=0)]
+            ).astype(np.float32, copy=False).reshape(1, -1)
+        else:
+            embedding=extract_wavlm_embedding(
+                self.embedding_model,self.feature_extractor,chunk,self.device
+            ).reshape(1,-1)
         probabilities=self.svm_pipeline.predict_proba(embedding)[0]
         classes=self.svm_pipeline.named_steps["classifier"].classes_
         return {str(label):float(prob) for label,prob in zip(classes,probabilities)}
