@@ -1,4 +1,3 @@
-
 """
 SpeechMind end-to-end inference pipeline.
 
@@ -46,7 +45,7 @@ class SpeechMindPipeline:
             print(f"[Pipeline] Translation unavailable: {error}")
             return transcript
 
-    def run(self, audio_path: str) -> dict:
+    def run(self, audio_path: str, language_hint: str = None) -> dict:
         total_start = time.perf_counter()
         timings = {}
 
@@ -55,13 +54,14 @@ class SpeechMindPipeline:
         timings["preprocessing"] = round(time.perf_counter() - stage_start, 3)
 
         stage_start = time.perf_counter()
-        asr_result = self.asr.transcribe(audio)
+        asr_result = self.asr.transcribe(audio, language_hint=language_hint)
         timings["asr"] = round(time.perf_counter() - stage_start, 3)
 
         transcript = asr_result.get("transcript", "")
         language = asr_result.get("language", "unknown")
+        quality_value = asr_result.get("quality_score", asr_result.get("confidence"))
         try:
-            asr_confidence = float(asr_result.get("confidence", 0.0))
+            asr_confidence = float(quality_value) if quality_value is not None else 0.0
         except (TypeError, ValueError):
             asr_confidence = 0.0
         asr_confidence = max(0.0, min(1.0, asr_confidence))
@@ -90,9 +90,17 @@ class SpeechMindPipeline:
         return {
             "language": language,
             "language_detection_score": asr_result.get("language_detection_score"),
+            "language_source": asr_result.get("language_source"),
             "transcript": transcript,
             "asr_model": asr_result.get("asr_model", "unknown"),
             "asr_confidence": round(asr_confidence, 3),
+            "asr_quality_score": (
+                round(asr_confidence, 3) if quality_value is not None else None
+            ),
+            "asr_quality_method": asr_result.get("quality_method"),
+            "asr_avg_logprob": asr_result.get("avg_logprob"),
+            "asr_avg_no_speech_prob": asr_result.get("avg_no_speech_prob"),
+            "asr_avg_compression_ratio": asr_result.get("avg_compression_ratio"),
             "meaning_en": english_meaning,
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
