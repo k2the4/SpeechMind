@@ -1,91 +1,76 @@
 @echo off
 setlocal EnableExtensions
-title SpeechMind - WavLM Voice Emotion Training
+title SpeechMind - CPU WavLM Feature Training
 cd /d "%~dp0"
 
 set "LOG_FILE=%~dp0training_launcher.log"
+set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
 set "EXIT_CODE=0"
 
-> "%LOG_FILE%" echo SpeechMind WavLM training launcher
+> "%LOG_FILE%" echo SpeechMind CPU WavLM feature-training launcher
 >> "%LOG_FILE%" echo Started: %DATE% %TIME%
 >> "%LOG_FILE%" echo Project folder: %CD%
 
-echo ==========================================
-echo SpeechMind - WavLM voice emotion training
-echo ==========================================
+echo ==========================================================
+echo SPEECHMIND - CPU-FRIENDLY WAVLM TRAINING
+echo ==========================================================
+echo This PC has a Ryzen 5 3500, 16 GB RAM and a GT 730.
+echo The GT 730 is not used for modern WavLM CUDA training.
+echo This workflow extracts frozen WavLM embeddings on CPU,
+echo caches them, then trains a small class-balanced SVM.
+echo This is NOT full WavLM fine-tuning.
 echo.
-echo This experiment uses WavLM with full fine-tuning.
-echo It may take several hours on a CPU.
-echo The previous checkpoint will NOT be overwritten.
-echo A log will be saved as training_launcher.log.
+echo First run downloads microsoft/wavlm-base-plus.
+echo Feature extraction can take a while, but it is cached
+echo so later classifier experiments are much faster.
 echo.
 
-set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
 if not exist "%PYTHON_EXE%" (
-    echo ERROR: Project virtual environment not found.
-    echo Expected: %PYTHON_EXE%
-    >> "%LOG_FILE%" echo ERROR: Virtual environment not found.
+    echo ERROR: .venv Python not found. Run SETUP_SECOND_PC.bat first.
     set "EXIT_CODE=2"
     goto FINISH
 )
 
-echo Checking Python and PyTorch...
-"%PYTHON_EXE%" --version >> "%LOG_FILE%" 2>&1
-if errorlevel 1 (
-    echo ERROR: Python could not start. See training_launcher.log.
+if not exist "%~dp0data\ravdess" (
+    echo ERROR: Dataset folder data\ravdess is missing.
+    echo Copy Actor_01 through Actor_24 into that folder first.
     set "EXIT_CODE=3"
     goto FINISH
 )
-"%PYTHON_EXE%" -c "import torch; print('PyTorch:', torch.__version__); print('CUDA available:', torch.cuda.is_available())" >> "%LOG_FILE%" 2>&1
+
+echo Checking dataset and PyTorch...
+"%PYTHON_EXE%" -c "import torch,sklearn,transformers,soundfile,librosa; print('PyTorch:',torch.__version__); print('CUDA:',torch.cuda.is_available()); print('CPU threads:',torch.get_num_threads())" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
-    echo ERROR: PyTorch is not working in this environment.
+    echo ERROR: A required package import failed. See training_launcher.log.
     set "EXIT_CODE=4"
     goto FINISH
 )
 
-"%PYTHON_EXE%" -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" >> "%LOG_FILE%" 2>&1
-if errorlevel 1 (
-    echo.
-    echo WARNING: CUDA is not available. Full WavLM training may take many hours.
-    echo Keep the computer plugged in and ensure enough free disk space.
-    echo.
-    choice /C YN /N /M "Continue with CPU training? [Y/N] "
-    if errorlevel 2 (
-        echo Training cancelled by user.
-        >> "%LOG_FILE%" echo Training cancelled by user.
-        goto FINISH
-    )
-)
-
 echo.
-echo Starting 12-epoch maximum WavLM fine-tuning.
-echo Early stopping uses validation macro-F1.
-echo The test split is held out for final evaluation.
+echo Starting CPU feature extraction and classifier selection...
+echo Do not close this window. Progress is written to the log.
 echo.
-
->> "%LOG_FILE%" echo Starting WavLM training at %DATE% %TIME%
-"%PYTHON_EXE%" "%~dp0scripts\train_voice_emotion.py" --epochs 12 --batch-size 2 --backbone-learning-rate 1e-5 --head-learning-rate 5e-5 >> "%LOG_FILE%" 2>&1
+>> "%LOG_FILE%" echo Starting CPU WavLM feature training at %DATE% %TIME%
+"%PYTHON_EXE%" -u "%~dp0scripts\train_voice_emotion.py" >> "%LOG_FILE%" 2>&1
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if "%EXIT_CODE%"=="0" (
     echo.
-    echo Training and held-out test evaluation completed.
-    echo Report: training_outputs\wavlm_ravdess\test_metrics.json
-    echo New checkpoint: checkpoints\voice_emotion_wavlm
+    echo CPU WavLM feature training and held-out evaluation completed.
+    echo Report: training_outputs\wavlm_cpu\test_metrics.json
+    echo Checkpoint: checkpoints\voice_emotion_wavlm_cpu
     >> "%LOG_FILE%" echo Training completed successfully.
 ) else (
     echo.
     echo Training failed with exit code %EXIT_CODE%.
-    echo Open training_launcher.log to see the full error.
+    echo Read training_launcher.log for the complete error.
     >> "%LOG_FILE%" echo Training failed with exit code %EXIT_CODE%.
 )
 
 :FINISH
 echo.
-echo ==========================================
-echo Launcher finished. Exit code: %EXIT_CODE%
-echo Log file: %LOG_FILE%
-echo ==========================================
-echo.
-pause
+echo Exit code: %EXIT_CODE%
+echo Log: %LOG_FILE%
+echo Press any key to close.
+pause >nul
 exit /b %EXIT_CODE%
