@@ -55,7 +55,7 @@ class VoiceEmotionRecognizer:
                     and metadata.get("backbone") == "microsoft/wavlm-base-plus"
                     and metadata.get("sample_rate") == SAMPLE_RATE
                     and set(metadata.get("labels", [])) == EXPECTED_LABELS
-                    and metadata.get("pooling") == "mean_std"
+                    and metadata.get("pooling") == "mean_std"\n                    and metadata.get("feature_dimension") == 1536\n                    and metadata.get("selected_kernel") in {"linear", "rbf"}
                 )
                 if is_valid:
                     import joblib
