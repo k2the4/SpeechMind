@@ -91,8 +91,8 @@ if audio_source is not None:
                 )
             if not result.get("text_emotion_available", False):
                 st.warning(
-                    "Text-emotion analysis is unavailable because no compatible fine-tuned "
-                    "MuRIL checkpoint is installed. The result uses the voice branch only."
+                    "Text-emotion analysis is unavailable for this language. "
+                    + str(result.get("text_emotion_reason") or "")
                 )
 
             left, right = st.columns(2)
@@ -137,13 +137,14 @@ if audio_source is not None:
                     "asr_avg_logprob": result.get("asr_avg_logprob"),
                     "asr_avg_no_speech_prob": result.get("asr_avg_no_speech_prob"),
                     "asr_avg_compression_ratio": result.get("asr_avg_compression_ratio"),
+                    "text_emotion_model_source": result.get("text_emotion_model_source"),
+                    "text_emotion_available": result.get("text_emotion_available"),
+                    "text_emotion_reason": result.get("text_emotion_reason"),
                     "voice_model_source": result.get("voice_model_source"),
                     "voice_inference_device": result.get("voice_inference_device"),
                     "voice_inference_windows": result.get("voice_inference_windows"),
                     "voice_validation_macro_f1": result.get("voice_validation_macro_f1"),
                     "fusion_weights": result.get("fusion_weights"),
-                    "text_emotion_available": result.get("text_emotion_available"),
-                    "text_emotion_reason": result.get("text_emotion_reason"),
                     "translator_loaded": result.get("translator_loaded"),
                     "translator_error": result.get("translator_error"),
                 })
