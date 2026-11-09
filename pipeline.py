@@ -99,7 +99,7 @@ class SpeechMindPipeline:
             "asr_model": asr_result.get("asr_model", "unknown"),
             "asr_confidence": round(asr_confidence, 3) if asr_confidence is not None else None,
             "asr_quality_score": (
-                round(asr_confidence, 3) if quality_value is not None else None
+                round(asr_confidence, 3) if asr_confidence is not None else None
             ),
             "asr_quality_method": asr_result.get("quality_method"),
             "asr_avg_logprob": asr_result.get("avg_logprob"),
