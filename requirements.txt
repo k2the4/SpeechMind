@@ -3,7 +3,7 @@
 # (CUDA when an NVIDIA driver is present; CPU otherwise) before this file.
 
 # Transformers and speech models
-transformers
+transformers==4.46.3
 accelerate
 openai-whisper
 
