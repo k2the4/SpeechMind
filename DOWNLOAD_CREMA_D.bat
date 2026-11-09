@@ -30,13 +30,18 @@ if exist "%TARGET%\*.wav" (
     goto FINISH
 )
 
+set "GIT_EXE=git"
 where git.exe >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: Git is not on PATH. Reopen VS Code or repair Git PATH first.
-    goto FAILED
+    if exist "C:\Program Files\Git\cmd\git.exe" (
+        set "GIT_EXE=C:\Program Files\Git\cmd\git.exe"
+    ) else (
+        echo ERROR: Git executable could not be found.
+        goto FAILED
+    )
 )
 
-git lfs version >nul 2>&1
+"%GIT_EXE%" lfs version >nul 2>&1
 if errorlevel 1 (
     echo Git LFS is not installed. Attempting installation with WinGet...
     where winget.exe >nul 2>&1
@@ -60,7 +65,7 @@ if errorlevel 1 (
     )
 )
 
-git lfs install
+%GIT_EXE% lfs install
 if errorlevel 1 goto FAILED
 
 if exist "%TEMP_REPO%" rmdir /s /q "%TEMP_REPO%"
@@ -68,23 +73,23 @@ if exist "%TEMP_REPO%" rmdir /s /q "%TEMP_REPO%"
 echo.
 echo Cloning repository metadata with LFS downloads disabled...
 set "GIT_LFS_SKIP_SMUDGE=1"
-git clone --filter=blob:none --no-checkout https://github.com/CheyneyComputerScience/CREMA-D.git "%TEMP_REPO%" > "%LOG%" 2>&1
+%GIT_EXE% clone --filter=blob:none --no-checkout https://github.com/CheyneyComputerScience/CREMA-D.git "%TEMP_REPO%" > "%LOG%" 2>&1
 if errorlevel 1 (
     echo Clone failed. Check crema_d_download.log.
     goto FAILED
 )
 
 pushd "%TEMP_REPO%"
-git sparse-checkout init --cone >> "%LOG%" 2>&1
+%GIT_EXE% sparse-checkout init --cone >> "%LOG%" 2>&1
 if errorlevel 1 goto CLONE_FAILED
-git sparse-checkout set AudioWAV >> "%LOG%" 2>&1
+%GIT_EXE% sparse-checkout set AudioWAV >> "%LOG%" 2>&1
 if errorlevel 1 goto CLONE_FAILED
-git checkout master >> "%LOG%" 2>&1
+%GIT_EXE% checkout master >> "%LOG%" 2>&1
 if errorlevel 1 goto CLONE_FAILED
 
 echo.
 echo Downloading only AudioWAV through Git LFS...
-git lfs pull --include="AudioWAV/**" --exclude="" >> "%LOG%" 2>&1
+%GIT_EXE% lfs pull --include="AudioWAV/**" --exclude="" >> "%LOG%" 2>&1
 if errorlevel 1 goto CLONE_FAILED
 
 if not exist "AudioWAV" goto CLONE_FAILED
