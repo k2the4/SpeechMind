@@ -5,9 +5,16 @@ speakers disjoint per corpus, uses corpus-balanced/class-balanced SVM training,
 selects on validation macro-F1, and reports held-out test metrics per corpus.
 Frozen WavLM feature training; not WavLM fine-tuning.
 """
-import argparse, csv, hashlib, json, os, random, time
+import argparse, csv, hashlib, json, os, random, sys, time
 from collections import Counter, defaultdict
 from pathlib import Path
+
+# When executed as `python scripts/train_voice_emotion.py`, Python puts the
+# scripts directory (not the repository root) at sys.path[0]. Add the project
+# root so imports such as `models.voice_features` and `utils.audio_utils` work.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 from models.voice_features import POOLING_VERSION, EXPECTED_FEATURE_DIMENSION, extract_wavlm_embedding
