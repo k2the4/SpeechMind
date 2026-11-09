@@ -254,7 +254,6 @@ def train_classifier(features, labels, speakers, splits, output_dir, model_dir):
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
     from sklearn.svm import SVC
-    from transformers import AutoFeatureExtractor
 
     train_mask = splits == "train"
     validation_mask = splits == "validation"
@@ -311,7 +310,6 @@ def train_classifier(features, labels, speakers, splits, output_dir, model_dir):
     )
     best_model = best["model"]
     test_predictions = best_model.predict(X_test)
-    test_probability = best_model.predict_proba(X_test)
     class_order = list(best_model.named_steps["classifier"].classes_)
     cm = confusion_matrix(y_test, test_predictions, labels=LABELS)
     report = classification_report(
