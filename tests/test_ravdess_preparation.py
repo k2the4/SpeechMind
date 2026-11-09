@@ -5,10 +5,14 @@ from scripts.train_voice_emotion import (
     assign_speaker_splits,
     parse_ravdess_filename,
     summarize,
+    BASE_MODEL_NAME,
 )
 
 
 class RavdessPreparationTests(unittest.TestCase):
+    def test_training_backbone_is_wavlm_not_a_ravdess_emotion_checkpoint(self):
+        self.assertEqual(BASE_MODEL_NAME, "microsoft/wavlm-base-plus")
+
     def test_parses_ravdess_speech_and_maps_labels(self):
         row = parse_ravdess_filename(Path("03-01-05-01-02-01-12.wav"))
         self.assertEqual(row["label"], "anger")

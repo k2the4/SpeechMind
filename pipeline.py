@@ -101,6 +101,7 @@ class SpeechMindPipeline:
             "voice_model_source": voice_result.get("model_source"),
             "voice_inference_device": voice_result.get("inference_device"),
             "voice_inference_windows": voice_result.get("inference_windows"),
+            "voice_validation_macro_f1": voice_result.get("validation_macro_f1"),
             "valence": fused["valence"],
             "arousal": fused["arousal"],
             "overall_interpretation": fused["overall_interpretation"],
