@@ -24,7 +24,7 @@ RAVDESS_TO_LABEL = {
 }
 DEFAULT_DATA_DIR = os.environ.get(
     "SPEECHMIND_RAVDESS_DIR",
-    r"C:\Users\kvasi\OneDrive\Desktop\Test Data\Audio_Speech_Actors_01-24_16k",
+    str(Path(__file__).resolve().parents[1] / "data" / "ravdess"),
 )
 BASE_MODEL_NAME = "microsoft/wavlm-base-plus"
 
