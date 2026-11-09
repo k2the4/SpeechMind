@@ -38,9 +38,26 @@ if errorlevel 1 (
 
 git lfs version >nul 2>&1
 if errorlevel 1 (
-    echo Git LFS is not installed.
-    echo Install Git LFS from https://git-lfs.com/ and rerun this file.
-    goto FAILED
+    echo Git LFS is not installed. Attempting installation with WinGet...
+    where winget.exe >nul 2>&1
+    if errorlevel 1 (
+        echo ERROR: Git LFS is missing and WinGet is unavailable.
+        echo Install Git LFS from https://git-lfs.com/ then rerun this file.
+        goto FAILED
+    )
+    winget install --id GitHub.GitLFS -e --silent --accept-package-agreements --accept-source-agreements
+    if errorlevel 1 (
+        echo ERROR: Git LFS installation failed. Install from https://git-lfs.com/
+        goto FAILED
+    )
+    echo Git LFS was installed. Refreshing PATH...
+    set "PATH=%PATH%;C:\Program Files\Git LFS;%LOCALAPPDATA%\Programs\Git LFS"
+    git lfs version >nul 2>&1
+    if errorlevel 1 (
+        echo Git LFS is installed, but this terminal has not picked up its PATH.
+        echo Close VS Code, reopen it, and run DOWNLOAD_CREMA_D.bat again.
+        goto FAILED
+    )
 )
 
 git lfs install
