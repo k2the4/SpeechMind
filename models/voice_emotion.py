@@ -57,7 +57,7 @@ class VoiceEmotionRecognizer:
                     and set(metadata.get("labels", [])) == EXPECTED_LABELS
                     and metadata.get("pooling") == "mean_std"
                     and metadata.get("feature_dimension") == 1536
-                    and metadata.get("selected_kernel") in {"linear", "rbf"}\n                    and metadata.get("feature_dimension") == 1536\n                    and metadata.get("selected_kernel") in {"linear", "rbf"}
+                    and metadata.get("selected_kernel") in {"linear", "rbf"}
                 )
                 if is_valid:
                     import joblib
