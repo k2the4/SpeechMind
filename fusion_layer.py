@@ -9,6 +9,7 @@ not a probability that the prediction is correct.
 UNIFIED_EMOTIONS = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]
 DEFAULT_TEXT_WEIGHT = 0.60
 DEFAULT_VOICE_WEIGHT = 0.40
+UNKNOWN_ASR_TEXT_WEIGHT = 0.30
 ASR_CONFIDENCE_LOW_THRESHOLD = 0.60
 
 TEXT_TO_UNIFIED = {
@@ -74,7 +75,6 @@ def _map_distribution(distribution, mapping):
     unified = {emotion: 0.0 for emotion in UNIFIED_EMOTIONS}
     for label, probability in distribution.items():
         target = mapping.get(label.lower())
-        # Unknown labels are ignored, never silently reclassified as neutral.
         if target is not None:
             unified[target] += probability
     total = sum(unified.values())
@@ -86,11 +86,20 @@ def _top_emotion(distribution):
 
 
 def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
-    try:
-        asr_confidence = float(asr_confidence)
-    except (TypeError, ValueError):
-        asr_confidence = 0.0
-    asr_confidence = max(0.0, min(1.0, asr_confidence))
+    """Fuse the text/voice distributions using ASR token-quality as a weight hint.
+
+    asr_confidence is retained as a compatibility name. For Whisper it is an
+    uncalibrated token-quality heuristic, not transcript correctness. If the
+    decoder exposes no quality score, text receives a conservative 0.30 weight.
+    """
+    quality_available = asr_confidence is not None
+    if quality_available:
+        try:
+            asr_confidence = float(asr_confidence)
+        except (TypeError, ValueError):
+            quality_available = False
+    if quality_available:
+        asr_confidence = max(0.0, min(1.0, asr_confidence))
 
     text_available = bool(text_result.get("available", True))
     voice_available = bool(voice_result.get("available", True))
@@ -103,7 +112,10 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         raise ValueError("Fusion cannot run: both emotion branches are unavailable or returned unmapped labels.")
 
     if text_available and voice_available:
-        if asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD:
+        if not quality_available:
+            text_weight = UNKNOWN_ASR_TEXT_WEIGHT
+            voice_weight = 1.0 - text_weight
+        elif asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD:
             text_weight = DEFAULT_TEXT_WEIGHT * asr_confidence
             voice_weight = 1.0 - text_weight
         else:
@@ -136,7 +148,9 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         "confidence": round(fused_scores[overall_emotion], 3),
         "confidence_is_calibrated": False,
         "overall_interpretation": interpretation.get(overall_emotion, "Neutral emotional expression"),
-        "low_confidence_warning": asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD,
+        "low_confidence_warning": (
+            not quality_available or asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD
+        ),
         "overall_emotion": overall_emotion,
         "fusion_weights": {"text": round(text_weight, 3), "voice": round(voice_weight, 3)},
         "text_distribution": text_distribution,

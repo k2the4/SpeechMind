@@ -1,4 +1,3 @@
-
 """
 SpeechMind end-to-end inference pipeline.
 
@@ -46,7 +45,7 @@ class SpeechMindPipeline:
             print(f"[Pipeline] Translation unavailable: {error}")
             return transcript
 
-    def run(self, audio_path: str) -> dict:
+    def run(self, audio_path: str, language_hint: str = None) -> dict:
         total_start = time.perf_counter()
         timings = {}
 
@@ -55,20 +54,25 @@ class SpeechMindPipeline:
         timings["preprocessing"] = round(time.perf_counter() - stage_start, 3)
 
         stage_start = time.perf_counter()
-        asr_result = self.asr.transcribe(audio)
+        asr_result = self.asr.transcribe(audio, language_hint=language_hint)
         timings["asr"] = round(time.perf_counter() - stage_start, 3)
 
         transcript = asr_result.get("transcript", "")
         language = asr_result.get("language", "unknown")
+        quality_value = asr_result.get("quality_score", asr_result.get("confidence"))
         try:
-            asr_confidence = float(asr_result.get("confidence", 0.0))
+            asr_confidence = (
+                max(0.0, min(1.0, float(quality_value)))
+                if quality_value is not None else None
+            )
         except (TypeError, ValueError):
-            asr_confidence = 0.0
-        asr_confidence = max(0.0, min(1.0, asr_confidence))
+            asr_confidence = None
 
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=2) as executor:
-            text_future = executor.submit(self.text_emotion.predict, transcript)
+            text_future = executor.submit(
+                self.text_emotion.predict, transcript, language
+            )
             voice_future = executor.submit(self.voice_emotion.predict, audio)
             text_result = text_future.result()
             voice_result = voice_future.result()
@@ -90,13 +94,23 @@ class SpeechMindPipeline:
         return {
             "language": language,
             "language_detection_score": asr_result.get("language_detection_score"),
+            "language_source": asr_result.get("language_source"),
             "transcript": transcript,
             "asr_model": asr_result.get("asr_model", "unknown"),
-            "asr_confidence": round(asr_confidence, 3),
+            "asr_confidence": round(asr_confidence, 3) if asr_confidence is not None else None,
+            "asr_quality_score": (
+                round(asr_confidence, 3) if asr_confidence is not None else None
+            ),
+            "asr_quality_method": asr_result.get("quality_method"),
+            "asr_avg_logprob": asr_result.get("avg_logprob"),
+            "asr_avg_no_speech_prob": asr_result.get("avg_no_speech_prob"),
+            "asr_avg_compression_ratio": asr_result.get("avg_compression_ratio"),
             "meaning_en": english_meaning,
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
             "text_emotion_reason": text_result.get("reason"),
+            "text_emotion_model_source": text_result.get("model_source"),
+            "text_emotion_languages": sorted(self.text_emotion.supported_languages),
             "voice_emotion": fused["voice_emotion"],
             "voice_model_source": voice_result.get("model_source"),
             "voice_inference_device": voice_result.get("inference_device"),

@@ -32,6 +32,15 @@ class FusionTests(unittest.TestCase):
         self.assertLess(result["fusion_weights"]["text"], 0.60)
         self.assertGreater(result["fusion_weights"]["voice"], 0.40)
 
+    def test_missing_asr_quality_uses_conservative_text_weight(self):
+        result = fuse(
+            text_result={"emotion": "anger", "distribution": {"anger": 1.0}},
+            voice_result={"emotion": "joy", "distribution": {"joy": 1.0}},
+            asr_confidence=None,
+        )
+        self.assertEqual(result["fusion_weights"], {"text": 0.3, "voice": 0.7})
+        self.assertTrue(result["low_confidence_warning"])
+
     def test_unknown_voice_label_is_not_silently_neutral(self):
         with self.assertRaises(ValueError):
             fuse(
