@@ -51,7 +51,7 @@ echo Starting CPU feature extraction and classifier selection...
 echo Do not close this window. Progress is written to the log.
 echo.
 >> "%LOG_FILE%" echo Starting CPU WavLM feature training at %DATE% %TIME%
-"%PYTHON_EXE%" "%~dp0scripts\train_voice_emotion.py" --epochs 1 >> "%LOG_FILE%" 2>&1
+"%PYTHON_EXE%" -u "%~dp0scripts\train_voice_emotion.py" >> "%LOG_FILE%" 2>&1
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if "%EXIT_CODE%"=="0" (
