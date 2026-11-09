@@ -101,6 +101,7 @@ if audio_source is not None:
                     "voice_model_source": result.get("voice_model_source"),
                     "voice_inference_device": result.get("voice_inference_device"),
                     "voice_inference_windows": result.get("voice_inference_windows"),
+                    "voice_validation_macro_f1": result.get("voice_validation_macro_f1"),
                     "asr_score_uncalibrated": result.get("asr_confidence"),
                     "fusion_weights": result.get("fusion_weights"),
                     "text_emotion_available": result.get("text_emotion_available"),
