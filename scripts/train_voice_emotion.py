@@ -177,17 +177,24 @@ def train_classifier(features,labels,speakers,datasets,splits,output_dir,model_d
         raise ValueError("Speaker leakage detected.")
     Xtr,ytr,Xv,yv,Xte,yte=features[tr],labels[tr],features[va],labels[va],features[te],labels[te]
     weights=_corpus_weights(datasets[tr]); weights/=weights.mean()
+    # Four targeted settings keep CPU fitting practical; the prior best
+    # linear C=0.1 remains in the candidate set.
+    candidate_specs = [
+        ("linear", 0.03),
+        ("linear", 0.1),
+        ("linear", 0.3),
+        ("rbf", 1.0),
+    ]
     candidates=[]
-    for kernel in ("linear","rbf"):
-        for c in (.03,.1,.3,1.,3.,10.):
-            model=Pipeline([("scale",StandardScaler()),("classifier",SVC(
-                kernel=kernel,C=c,gamma="scale",class_weight="balanced",probability=True,random_state=42))])
-            model.fit(Xtr,ytr,classifier__sample_weight=weights)
-            pred=model.predict(Xv)
-            score=float(f1_score(yv,pred,labels=LABELS,average="macro",zero_division=0))
-            acc=float(accuracy_score(yv,pred))
-            candidates.append({"model":model,"kernel":kernel,"C":c,"validation_macro_f1":score,"validation_accuracy":acc})
-            print(f"[Classifier] {kernel} C={c:g} validation macro-F1={score:.4f}, accuracy={acc:.4f}")
+    for kernel, c in candidate_specs:
+        model=Pipeline([("scale",StandardScaler()),("classifier",SVC(
+            kernel=kernel,C=c,gamma="scale",class_weight="balanced",probability=True,random_state=42))])
+        model.fit(Xtr,ytr,classifier__sample_weight=weights)
+        pred=model.predict(Xv)
+        score=float(f1_score(yv,pred,labels=LABELS,average="macro",zero_division=0))
+        acc=float(accuracy_score(yv,pred))
+        candidates.append({"model":model,"kernel":kernel,"C":c,"validation_macro_f1":score,"validation_accuracy":acc})
+        print(f"[Classifier] {kernel} C={c:g} validation macro-F1={score:.4f}, accuracy={acc:.4f}")
     best=max(candidates,key=lambda x:(x["validation_macro_f1"],x["validation_accuracy"],-x["C"]))
     pred=best["model"].predict(Xte)
     cm=confusion_matrix(yte,pred,labels=LABELS)
