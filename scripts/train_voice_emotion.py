@@ -1,18 +1,22 @@
 """
-Fine-tune WavLM for seven-class SpeechMind voice-emotion recognition.
+CPU-practical WavLM voice-emotion experiment for SpeechMind.
 
-RAVDESS clips are mapped to seven classes (calm and neutral are combined).
-Train/validation/test partitions are grouped by actor to prevent speaker
-leakage. Validation macro-F1 selects the checkpoint; the test set is used
-exactly once for the final report.
+On this 6-core / 16 GB CPU-only PC, we do NOT backpropagate through all WavLM
+parameters. We extract frozen WavLM mean+standard-deviation embeddings once,
+cache them locally, and train/class-balance a small SVM classifier. Several
+linear/RBF settings are selected using validation macro-F1. The held-out
+speaker test set is evaluated only after model selection.
 
-Audio and weights stay on the local computer.
+This is WavLM feature-based training, not full WavLM fine-tuning. It is the
+practical path for this computer. It does not guarantee better scores.
 """
 import argparse
 import csv
+import hashlib
 import json
 import os
 import random
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -27,6 +31,8 @@ DEFAULT_DATA_DIR = os.environ.get(
     str(Path(__file__).resolve().parents[1] / "data" / "ravdess"),
 )
 BASE_MODEL_NAME = "microsoft/wavlm-base-plus"
+SAMPLE_RATE = 16000
+POOLING = "mean_std"
 
 
 def parse_ravdess_filename(path):
@@ -51,7 +57,7 @@ def build_manifest(data_dir):
     root = Path(data_dir).expanduser()
     if not root.is_dir():
         raise FileNotFoundError(
-            f"RAVDESS folder not found: {root}. Set --data-dir to the folder containing actor folders."
+            f"RAVDESS folder not found: {root}. Copy Actor_01 through Actor_24 into data/ravdess."
         )
     records = []
     for path in sorted(root.rglob("*")):
@@ -62,7 +68,7 @@ def build_manifest(data_dir):
     if not records:
         raise ValueError(
             f"No RAVDESS speech WAV files found under {root}. "
-            "Expected names such as 03-01-05-01-02-01-12.wav."
+            "Expected filenames such as 03-01-05-01-02-01-12.wav."
         )
     return records
 
@@ -72,7 +78,7 @@ def assign_speaker_splits(records, seed=42):
     speakers = sorted({row["speaker_id"] for row in records})
     if len(speakers) < 5:
         raise ValueError(
-            f"Need at least 5 distinct RAVDESS actors for group splitting; found {len(speakers)}."
+            f"Need at least 5 distinct RAVDESS actors for group splits; found {len(speakers)}."
         )
     random.Random(seed).shuffle(speakers)
     test_count = max(1, round(len(speakers) * 0.20))
@@ -115,54 +121,77 @@ def write_manifest(records, destination):
     return destination
 
 
-def train_model(
-    records,
-    output_dir,
-    model_dir,
-    epochs,
-    batch_size,
-    backbone_learning_rate,
-    head_learning_rate,
-):
-    import inspect
+def pool_hidden_states(hidden_states):
+    """Mean+std pool [frames, hidden_dim] WavLM states into a 2*hidden vector."""
+    import numpy as np
+    values = np.asarray(hidden_states, dtype=np.float32)
+    if values.ndim != 2 or values.shape[0] == 0:
+        raise ValueError("Expected non-empty [frames, hidden_dim] WavLM states.")
+    mean = values.mean(axis=0)
+    std = values.std(axis=0)
+    return np.concatenate([mean, std]).astype(np.float32, copy=False)
+
+
+def _cache_fingerprint(records):
+    digest = hashlib.sha256()
+    digest.update(BASE_MODEL_NAME.encode("utf-8"))
+    digest.update(POOLING.encode("utf-8"))
+    digest.update(str(SAMPLE_RATE).encode("ascii"))
+    for row in records:
+        path = Path(row["path"])
+        stat = path.stat()
+        digest.update(str(path).encode("utf-8", errors="replace"))
+        digest.update(str(stat.st_size).encode("ascii"))
+        digest.update(str(stat.st_mtime_ns).encode("ascii"))
+        digest.update(row["label"].encode("utf-8"))
+        digest.update(row["speaker_id"].encode("utf-8"))
+        digest.update(row["split"].encode("ascii"))
+    return digest.hexdigest()
+
+
+def extract_or_load_features(records, cache_path, force_rebuild=False):
     import numpy as np
     import librosa
     import soundfile as sf
     import torch
-    from sklearn.metrics import (
-        accuracy_score, classification_report, confusion_matrix, f1_score
-    )
-    from transformers import (
-        AutoModelForAudioClassification,
-        AutoProcessor,
-        EarlyStoppingCallback,
-        Trainer,
-        TrainingArguments,
-    )
+    from transformers import AutoFeatureExtractor, AutoModel
 
-    output_dir = Path(output_dir)
-    model_dir = Path(model_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[Training] Device: {device}")
-    print(f"[Training] Backbone: {BASE_MODEL_NAME}")
-    print(
-        f"[Training] Learning rates - backbone: {backbone_learning_rate}; "
-        f"emotion head: {head_learning_rate}"
-    )
-    if device == "cpu":
-        print("[Training] CUDA unavailable; full WavLM fine-tuning may take several hours.")
+    cache_path = Path(cache_path)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    fingerprint = _cache_fingerprint(records)
+    if cache_path.is_file() and not force_rebuild:
+        try:
+            with np.load(cache_path, allow_pickle=False) as saved:
+                if str(saved["fingerprint"].item()) == fingerprint:
+                    features = saved["features"].astype(np.float32, copy=False)
+                    labels = saved["labels"].astype(str)
+                    speakers = saved["speakers"].astype(str)
+                    splits = saved["splits"].astype(str)
+                    if len(features) == len(records):
+                        print(f"[Features] Reusing cached WavLM features: {cache_path}")
+                        return features, labels, speakers, splits
+        except (OSError, ValueError, KeyError):
+            print("[Features] Existing cache is invalid; rebuilding it.")
 
-    class AudioDataset(torch.utils.data.Dataset):
-        def __init__(self, rows, processor):
-            self.rows = rows
-            self.processor = processor
+    # Keep resource use predictable and leave headroom for Windows.
+    thread_count = max(1, min(4, os.cpu_count() or 2))
+    torch.set_num_threads(thread_count)
+    try:
+        torch.set_num_interop_threads(1)
+    except RuntimeError:
+        pass
 
-        def __len__(self):
-            return len(self.rows)
+    device = torch.device("cpu")
+    print(f"[Features] Loading frozen {BASE_MODEL_NAME} on CPU...")
+    feature_extractor = AutoFeatureExtractor.from_pretrained(BASE_MODEL_NAME)
+    encoder = AutoModel.from_pretrained(BASE_MODEL_NAME).to(device)
+    encoder.eval()
+    extracted = []
+    total = len(records)
+    start = time.perf_counter()
 
-        def __getitem__(self, index):
-            row = self.rows[index]
+    with torch.inference_mode():
+        for index, row in enumerate(records, start=1):
             waveform, sample_rate = sf.read(
                 row["path"], dtype="float32", always_2d=False
             )
@@ -170,245 +199,230 @@ def train_model(
                 waveform = waveform.mean(axis=1)
             if waveform.size == 0 or not np.isfinite(waveform).all():
                 raise ValueError(f"Invalid or empty audio file: {row['path']}")
-            if sample_rate != 16000:
+            if sample_rate != SAMPLE_RATE:
                 waveform = librosa.resample(
-                    waveform, orig_sr=sample_rate, target_sr=16000
+                    waveform, orig_sr=sample_rate, target_sr=SAMPLE_RATE
                 )
-            encoded = self.processor(
+            encoded = feature_extractor(
                 waveform.astype(np.float32, copy=False),
-                sampling_rate=16000,
+                sampling_rate=SAMPLE_RATE,
                 return_tensors="pt",
             )
-            return {
-                "input_values": encoded["input_values"][0],
-                "labels": LABEL_TO_ID[row["label"]],
-            }
+            input_values = encoded["input_values"].to(device)
+            hidden = encoder(input_values=input_values).last_hidden_state[0]
+            extracted.append(pool_hidden_states(hidden.cpu().numpy()))
 
-    class AudioCollator:
-        def __init__(self, processor):
-            self.processor = processor
-
-        def __call__(self, features):
-            batch = self.processor.pad(
-                {"input_values": [item["input_values"] for item in features]},
-                padding=True,
-                return_tensors="pt",
-            )
-            batch["labels"] = torch.tensor(
-                [item["labels"] for item in features], dtype=torch.long
-            )
-            return batch
-
-    train_rows = [row for row in records if row["split"] == "train"]
-    validation_rows = [row for row in records if row["split"] == "validation"]
-    test_rows = [row for row in records if row["split"] == "test"]
-    if not train_rows or not validation_rows or not test_rows:
-        raise ValueError("Train, validation, and test splits must all contain audio.")
-
-    processor = AutoProcessor.from_pretrained(BASE_MODEL_NAME)
-    model = AutoModelForAudioClassification.from_pretrained(
-        BASE_MODEL_NAME,
-        num_labels=len(LABELS),
-        label2id=LABEL_TO_ID,
-        id2label={index: label for label, index in LABEL_TO_ID.items()},
-        ignore_mismatched_sizes=True,
-    )
-    model.config.problem_type = "single_label_classification"
-    # Keep the entire WavLM stack trainable. The previous run froze the
-    # convolutional feature encoder and produced zero recall for two classes.
-
-    train_dataset = AudioDataset(train_rows, processor)
-    validation_dataset = AudioDataset(validation_rows, processor)
-    test_dataset = AudioDataset(test_rows, processor)
-
-    def compute_metrics(prediction):
-        logits, targets = prediction
-        predicted = np.argmax(logits, axis=-1)
-        return {
-            "accuracy": float(accuracy_score(targets, predicted)),
-            "f1_macro": float(f1_score(
-                targets,
-                predicted,
-                labels=list(range(len(LABELS))),
-                average="macro",
-                zero_division=0,
-            )),
-        }
-
-    class LayerwiseTrainer(Trainer):
-        """Use a smaller learning rate for WavLM and a larger one for its new head."""
-        def create_optimizer(self):
-            if self.optimizer is not None:
-                return self.optimizer
-            groups = {
-                (is_head, no_decay): []
-                for is_head in (False, True)
-                for no_decay in (False, True)
-            }
-            for name, parameter in self.model.named_parameters():
-                if not parameter.requires_grad:
-                    continue
-                lower_name = name.lower()
-                is_head = "classifier" in lower_name or "projector" in lower_name
-                no_decay = (
-                    name.endswith(".bias")
-                    or "layer_norm" in lower_name
-                    or "layernorm" in lower_name
+            if index == 1 or index % 25 == 0 or index == total:
+                elapsed = time.perf_counter() - start
+                rate = index / max(elapsed, 1e-6)
+                remaining = (total - index) / max(rate, 1e-6)
+                print(
+                    f"[Features] {index}/{total} clips | "
+                    f"{rate:.2f} clips/sec | estimated remaining {remaining / 60:.1f} min"
                 )
-                groups[(is_head, no_decay)].append(parameter)
 
-            optimizer_groups = []
-            for (is_head, no_decay), parameters in groups.items():
-                if not parameters:
-                    continue
-                optimizer_groups.append({
-                    "params": parameters,
-                    "lr": head_learning_rate if is_head else backbone_learning_rate,
-                    "weight_decay": 0.0 if no_decay else 0.01,
-                })
-            self.optimizer = torch.optim.AdamW(
-                optimizer_groups, betas=(0.9, 0.999), eps=1e-8
+    features = np.stack(extracted).astype(np.float32, copy=False)
+    labels = np.asarray([row["label"] for row in records], dtype=str)
+    speakers = np.asarray([row["speaker_id"] for row in records], dtype=str)
+    splits = np.asarray([row["split"] for row in records], dtype=str)
+    np.savez_compressed(
+        cache_path,
+        fingerprint=np.asarray(fingerprint),
+        features=features,
+        labels=labels,
+        speakers=speakers,
+        splits=splits,
+    )
+    print(f"[Features] Cached {len(features)} embeddings to {cache_path}")
+    del encoder
+    return features, labels, speakers, splits
+
+
+def train_classifier(features, labels, splits, output_dir, model_dir):
+    import json
+    import joblib
+    import numpy as np
+    from sklearn.metrics import (
+        accuracy_score, classification_report, confusion_matrix, f1_score
+    )
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.svm import SVC
+    from transformers import AutoFeatureExtractor
+
+    train_mask = splits == "train"
+    validation_mask = splits == "validation"
+    test_mask = splits == "test"
+    if not train_mask.any() or not validation_mask.any() or not test_mask.any():
+        raise ValueError("Train, validation and test splits must all contain audio.")
+
+    X_train, y_train = features[train_mask], labels[train_mask]
+    X_val, y_val = features[validation_mask], labels[validation_mask]
+    X_test, y_test = features[test_mask], labels[test_mask]
+
+    candidates = []
+    for kernel in ("linear", "rbf"):
+        for c_value in (0.1, 1.0, 10.0):
+            candidate = Pipeline([
+                ("scale", StandardScaler()),
+                ("classifier", SVC(
+                    kernel=kernel,
+                    C=c_value,
+                    gamma="scale",
+                    class_weight="balanced",
+                    probability=True,
+                    random_state=42,
+                )),
+            ])
+            candidate.fit(X_train, y_train)
+            val_predictions = candidate.predict(X_val)
+            val_macro_f1 = float(f1_score(
+                y_val, val_predictions, labels=LABELS,
+                average="macro", zero_division=0,
+            ))
+            val_accuracy = float(accuracy_score(y_val, val_predictions))
+            candidates.append({
+                "model": candidate,
+                "kernel": kernel,
+                "C": c_value,
+                "validation_macro_f1": val_macro_f1,
+                "validation_accuracy": val_accuracy,
+            })
+            print(
+                f"[Classifier] kernel={kernel:6s} C={c_value:<4} "
+                f"validation macro-F1={val_macro_f1:.4f} "
+                f"accuracy={val_accuracy:.4f}"
             )
-            return self.optimizer
 
-    parameters = inspect.signature(TrainingArguments.__init__).parameters
-    strategy_key = (
-        "eval_strategy" if "eval_strategy" in parameters
-        else "evaluation_strategy"
+    # Validation macro-F1 selects the classifier; test data is untouched here.
+    best = max(
+        candidates,
+        key=lambda item: (
+            item["validation_macro_f1"],
+            item["validation_accuracy"],
+            -item["C"],
+        ),
     )
-    kwargs = {
-        "output_dir": str(output_dir / "trainer_state"),
-        "num_train_epochs": epochs,
-        "per_device_train_batch_size": batch_size,
-        "per_device_eval_batch_size": batch_size,
-        "gradient_accumulation_steps": 2,
-        "warmup_ratio": 0.10,
-        "logging_strategy": "epoch",
-        "save_strategy": "epoch",
-        "load_best_model_at_end": True,
-        "metric_for_best_model": "f1_macro",
-        "greater_is_better": True,
-        "save_total_limit": 2,
-        "dataloader_num_workers": 0,
-        "fp16": device == "cuda",
-        "report_to": "none",
-        "seed": 42,
-        "data_seed": 42,
+    best_model = best["model"]
+    test_predictions = best_model.predict(X_test)
+    test_probability = best_model.predict_proba(X_test)
+    class_order = list(best_model.named_steps["classifier"].classes_)
+    cm = confusion_matrix(y_test, test_predictions, labels=LABELS)
+    report = classification_report(
+        y_test, test_predictions, labels=LABELS,
+        target_names=LABELS, output_dict=True, zero_division=0,
+    )
+
+    model_dir = Path(model_dir)
+    output_dir = Path(output_dir)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    joblib.dump(best_model, model_dir / "voice_emotion_head.joblib", compress=3)
+
+    metadata = {
+        "model_type": "wavlm_frozen_embedding_svc",
+        "backbone": BASE_MODEL_NAME,
+        "labels": LABELS,
+        "class_order": class_order,
+        "sample_rate": SAMPLE_RATE,
+        "pooling": POOLING,
+        "feature_dimension": int(features.shape[1]),
+        "selected_kernel": best["kernel"],
+        "selected_C": best["C"],
+        "validation_macro_f1": best["validation_macro_f1"],
+        "validation_accuracy": best["validation_accuracy"],
+        "test_speakers": sorted(set(
+            np.asarray([row for row in []], dtype=str).tolist()
+        )),
+        "training_method": (
+            "Frozen WavLM mean+std embeddings with validation-selected "
+            "class-balanced SVM. WavLM weights were not fine-tuned."
+        ),
     }
-    kwargs[strategy_key] = "epoch"
-    training_args = TrainingArguments(**kwargs)
-    trainer = LayerwiseTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=validation_dataset,
-        data_collator=AudioCollator(processor),
-        compute_metrics=compute_metrics,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
-    )
-    trainer.train()
-
-    # Validation is used for model selection and reported separately from test.
-    validation_metrics = trainer.evaluate(validation_dataset)
-    best_validation_macro_f1 = trainer.state.best_metric
-    predictions = trainer.predict(test_dataset)
-    predicted_ids = np.argmax(predictions.predictions, axis=-1)
-    true_ids = predictions.label_ids
-    metrics = {
-        "accuracy": float(accuracy_score(true_ids, predicted_ids)),
+    report_data = {
+        "accuracy": float(accuracy_score(y_test, test_predictions)),
         "macro_f1": float(f1_score(
-            true_ids, predicted_ids,
-            labels=list(range(len(LABELS))),
+            y_test, test_predictions, labels=LABELS,
             average="macro", zero_division=0,
         )),
-        "classification_report": classification_report(
-            true_ids, predicted_ids,
-            labels=list(range(len(LABELS))),
-            target_names=LABELS,
-            output_dict=True,
-            zero_division=0,
-        ),
-        "confusion_matrix": confusion_matrix(
-            true_ids, predicted_ids, labels=list(range(len(LABELS)))
-        ).tolist(),
-        "test_speakers": sorted({row["speaker_id"] for row in test_rows}),
-        "test_files": len(test_rows),
+        "classification_report": report,
+        "confusion_matrix": cm.tolist(),
         "labels": LABELS,
-        "backbone": BASE_MODEL_NAME,
-        "validation_metrics": validation_metrics,
-        "best_validation_macro_f1": best_validation_macro_f1,
-        "training_epochs_completed": trainer.state.epoch,
+        "selected_classifier": {
+            "kernel": best["kernel"],
+            "C": best["C"],
+        },
+        "validation": {
+            "macro_f1": best["validation_macro_f1"],
+            "accuracy": best["validation_accuracy"],
+            "candidate_results": [
+                {key: item[key] for key in (
+                    "kernel", "C", "validation_macro_f1", "validation_accuracy"
+                )}
+                for item in candidates
+            ],
+        },
+        "test_files": int(test_mask.sum()),
         "note": (
-            "Held-out-speaker RAVDESS results. RAVDESS is acted English speech; "
-            "these metrics do not establish accuracy on spontaneous or Indian-language speech."
+            "Held-out-speaker RAVDESS results. RAVDESS contains acted English "
+            "speech; this does not establish accuracy on spontaneous speech "
+            "or Indian languages. WavLM embeddings are frozen; only the SVM "
+            "classifier was trained."
         ),
     }
-
-    model_dir.mkdir(parents=True, exist_ok=True)
-    trainer.save_model(str(model_dir))
-    processor.save_pretrained(str(model_dir))
-    metadata = {
-        "backbone": BASE_MODEL_NAME,
-        "labels": LABELS,
-        "sample_rate": 16000,
-        "best_validation_macro_f1": best_validation_macro_f1,
-        "validation_metrics": validation_metrics,
-        "trained_epochs": trainer.state.epoch,
-        "validation_speakers": sorted({
-            row["speaker_id"] for row in validation_rows
-        }),
-        "training_speakers": sorted({
-            row["speaker_id"] for row in train_rows
-        }),
-    }
-    (model_dir / "speechmind_metadata.json").write_text(
-        json.dumps(metadata, indent=2), encoding="utf-8"
+    metadata_path = model_dir / "speechmind_metadata.json"
+    (model_dir / "feature_extractor_config.json").write_text(
+        json.dumps({
+            "backbone": BASE_MODEL_NAME,
+            "sample_rate": SAMPLE_RATE,
+            "pooling": POOLING,
+        }, indent=2),
+        encoding="utf-8",
     )
-
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     report_path = output_dir / "test_metrics.json"
-    report_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
-    print(json.dumps({
-        "test_accuracy": metrics["accuracy"],
-        "test_macro_f1": metrics["macro_f1"],
-        "best_validation_macro_f1": best_validation_macro_f1,
-        "epochs_completed": trainer.state.epoch,
-        "checkpoint": str(model_dir),
-        "report": str(report_path),
-    }, indent=2))
+    report_path.write_text(json.dumps(report_data, indent=2), encoding="utf-8")
+
+    print("\n[Result] Held-out test evaluation")
+    print(f"Accuracy: {report_data['accuracy']:.4f}")
+    print(f"Macro-F1: {report_data['macro_f1']:.4f}")
+    print(f"Selected: {best['kernel']} SVM, C={best['C']}")
+    print(f"Report: {report_path}")
+    print(f"Checkpoint: {model_dir}")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
-    parser.add_argument("--output-dir", default="training_outputs/wavlm_ravdess")
-    parser.add_argument("--model-dir", default="checkpoints/voice_emotion_wavlm")
+    parser.add_argument("--output-dir", default="training_outputs/wavlm_cpu")
+    parser.add_argument("--model-dir", default="checkpoints/voice_emotion_wavlm_cpu")
     parser.add_argument("--prepare-only", action="store_true")
-    parser.add_argument("--epochs", type=int, default=12)
-    parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--backbone-learning-rate", type=float, default=1e-5)
-    parser.add_argument("--head-learning-rate", type=float, default=5e-5)
+    parser.add_argument("--rebuild-features", action="store_true")
     args = parser.parse_args()
 
     records = assign_speaker_splits(build_manifest(args.data_dir))
     output_dir = Path(args.output_dir)
-    manifest_path = write_manifest(records, output_dir / "manifest_with_splits.csv")
+    manifest_path = write_manifest(
+        records, output_dir / "manifest_with_splits.csv"
+    )
     summary = summarize(records)
     (output_dir / "dataset_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
     )
     print(f"[Dataset] Found {len(records)} labeled RAVDESS speech clips.")
     print(json.dumps(summary, indent=2))
-    print(f"[Dataset] Manifest saved: {manifest_path}")
-    if not args.prepare_only:
-        train_model(
-            records,
-            output_dir,
-            args.model_dir,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            backbone_learning_rate=args.backbone_learning_rate,
-            head_learning_rate=args.head_learning_rate,
-        )
+    print(f"[Dataset] Manifest: {manifest_path}")
+
+    if args.prepare_only:
+        return
+
+    features, labels, speakers, splits = extract_or_load_features(
+        records,
+        output_dir / "wavlm_features_cache.npz",
+        force_rebuild=args.rebuild_features,
+    )
+    print(f"[Features] Matrix shape: {features.shape}")
+    train_classifier(features, labels, splits, output_dir, args.model_dir)
 
 
 if __name__ == "__main__":
