@@ -1,9 +1,9 @@
 """
 SpeechMind text-emotion branch.
 
-A fine-tuned checkpoint is required. Base MuRIL with a newly initialized
-classification head is not an emotion classifier, so this module deliberately
-disables the branch when no trained, label-compatible checkpoint is present.
+Use a locally fine-tuned MuRIL checkpoint for supported Indic/multilingual data.
+When that checkpoint is absent, use a pretrained English-only emotion model for
+English transcripts. Never apply the English model to Indic-language text.
 """
 import json
 from pathlib import Path
@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 BASE_MODEL_NAME = "google/muril-base-cased"
+ENGLISH_FALLBACK_MODEL = "j-hartmann/emotion-english-distilroberta-base"
 CHECKPOINT_DIR = Path("checkpoints/text_emotion_muril")
 EXPECTED_LABELS = {
     "joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"
@@ -50,20 +51,23 @@ class TextEmotionClassifier:
         self.model = None
         self.tokenizer = None
         self.labels = None
+        self.model_source = None
+        self.multilingual_checkpoint = False
         self.load_error = None
+        self.english_fallback_attempted = False
 
-        metadata_path = CHECKPOINT_DIR / "speechmind_metadata.json"
         if not CHECKPOINT_DIR.is_dir():
-            self.load_error = f"Fine-tuned checkpoint not found: {CHECKPOINT_DIR}"
-            print(f"[TextEmotion] DISABLED: {self.load_error}")
+            self.load_error = f"Fine-tuned MuRIL checkpoint not found: {CHECKPOINT_DIR}"
+            print(f"[TextEmotion] MuRIL unavailable: {self.load_error}")
             return
 
         try:
-            metadata = {}
-            if metadata_path.is_file():
-                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-
-            print(f"[TextEmotion] Loading trained checkpoint from {CHECKPOINT_DIR}...")
+            metadata_path = CHECKPOINT_DIR / "speechmind_metadata.json"
+            metadata = (
+                json.loads(metadata_path.read_text(encoding="utf-8"))
+                if metadata_path.is_file() else {}
+            )
+            print(f"[TextEmotion] Loading fine-tuned MuRIL from {CHECKPOINT_DIR}...")
             tokenizer = AutoTokenizer.from_pretrained(str(CHECKPOINT_DIR))
             model = AutoModelForSequenceClassification.from_pretrained(
                 str(CHECKPOINT_DIR)
@@ -85,26 +89,49 @@ class TextEmotionClassifier:
             self.tokenizer = tokenizer
             self.model = model
             self.labels = labels
+            self.model_source = str(CHECKPOINT_DIR)
+            self.multilingual_checkpoint = True
             self.available = True
-            print(f"[TextEmotion] Fine-tuned checkpoint loaded with labels: {labels}")
+            print(f"[TextEmotion] Fine-tuned MuRIL loaded with labels: {labels}")
         except Exception as error:
             self.load_error = str(error)
-            self.model = None
-            self.tokenizer = None
-            self.labels = None
-            print(f"[TextEmotion] DISABLED: checkpoint could not be loaded ({error}).")
+            print(f"[TextEmotion] MuRIL checkpoint unavailable: {error}")
+
+    def _load_english_fallback(self):
+        if self.english_fallback_attempted:
+            return
+        self.english_fallback_attempted = True
+        try:
+            print(
+                "[TextEmotion] Loading English-only pretrained fallback "
+                f"{ENGLISH_FALLBACK_MODEL}..."
+            )
+            tokenizer = AutoTokenizer.from_pretrained(ENGLISH_FALLBACK_MODEL)
+            model = AutoModelForSequenceClassification.from_pretrained(
+                ENGLISH_FALLBACK_MODEL
+            ).to(DEVICE)
+            labels = _resolve_label_order({}, model.config)
+            if labels is None:
+                raise ValueError(
+                    "English fallback does not expose the expected seven emotion labels."
+                )
+            model.eval()
+            self.tokenizer = tokenizer
+            self.model = model
+            self.labels = labels
+            self.model_source = ENGLISH_FALLBACK_MODEL
+            self.multilingual_checkpoint = False
+            self.available = True
+            print(f"[TextEmotion] English fallback loaded with labels: {labels}")
+        except Exception as error:
+            self.load_error = (
+                f"Could not load English fallback {ENGLISH_FALLBACK_MODEL}: {error}"
+            )
+            print(f"[TextEmotion] English fallback unavailable: {error}")
 
     @torch.no_grad()
-    def predict(self, text: str) -> dict:
-        if not self.available or self.model is None or self.tokenizer is None:
-            return {
-                "emotion": "unavailable",
-                "confidence": 0.0,
-                "distribution": {},
-                "available": False,
-                "reason": self.load_error or "No compatible trained checkpoint is available.",
-            }
-
+    def predict(self, text: str, language: str = None) -> dict:
+        language_code = str(language or "unknown").lower().strip()
         if not text or not text.strip():
             return {
                 "emotion": "unavailable",
@@ -112,6 +139,40 @@ class TextEmotionClassifier:
                 "distribution": {},
                 "available": False,
                 "reason": "No transcript was produced.",
+                "model_source": None,
+            }
+
+        if not self.available and language_code in ("en", "english"):
+            self._load_english_fallback()
+
+        if not self.available or self.model is None or self.tokenizer is None:
+            reason = self.load_error or "No compatible trained checkpoint is available."
+            if language_code not in ("en", "english"):
+                reason = (
+                    "No fine-tuned multilingual MuRIL checkpoint is installed. "
+                    "The available fallback supports English transcripts only."
+                )
+            return {
+                "emotion": "unavailable",
+                "confidence": 0.0,
+                "distribution": {},
+                "available": False,
+                "reason": reason,
+                "model_source": None,
+            }
+
+        if not self.multilingual_checkpoint and language_code not in ("en", "english"):
+            return {
+                "emotion": "unavailable",
+                "confidence": 0.0,
+                "distribution": {},
+                "available": False,
+                "reason": (
+                    "The loaded English emotion model cannot classify "
+                    f"'{language_code}' transcripts. A fine-tuned multilingual MuRIL "
+                    "checkpoint is required for this language."
+                ),
+                "model_source": self.model_source,
             }
 
         inputs = self.tokenizer(
@@ -132,4 +193,6 @@ class TextEmotionClassifier:
                 for index, label in enumerate(self.labels)
             },
             "available": True,
+            "reason": None,
+            "model_source": self.model_source,
         }
