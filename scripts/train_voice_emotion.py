@@ -33,6 +33,7 @@ DEFAULT_DATA_DIR = os.environ.get(
 BASE_MODEL_NAME = "microsoft/wavlm-base-plus"
 SAMPLE_RATE = 16000
 POOLING = "mean_std"
+PREPROCESSING_VERSION = "mono_16khz_trim25_peak_normalize_v1"
 
 
 def parse_ravdess_filename(path):
@@ -136,6 +137,7 @@ def _cache_fingerprint(records):
     digest = hashlib.sha256()
     digest.update(BASE_MODEL_NAME.encode("utf-8"))
     digest.update(POOLING.encode("utf-8"))
+    digest.update(PREPROCESSING_VERSION.encode("utf-8"))
     digest.update(str(SAMPLE_RATE).encode("ascii"))
     for row in records:
         path = Path(row["path"])
@@ -203,6 +205,10 @@ def extract_or_load_features(records, cache_path, force_rebuild=False):
                 waveform = librosa.resample(
                     waveform, orig_sr=sample_rate, target_sr=SAMPLE_RATE
                 )
+            waveform, _ = librosa.effects.trim(waveform, top_db=25)
+            peak = float(np.max(np.abs(waveform))) if waveform.size else 0.0
+            if peak > 0:
+                waveform = waveform / peak
             encoded = feature_extractor(
                 waveform.astype(np.float32, copy=False),
                 sampling_rate=SAMPLE_RATE,
@@ -238,7 +244,7 @@ def extract_or_load_features(records, cache_path, force_rebuild=False):
     return features, labels, speakers, splits
 
 
-def train_classifier(features, labels, splits, output_dir, model_dir):
+def train_classifier(features, labels, speakers, splits, output_dir, model_dir):
     import json
     import joblib
     import numpy as np
@@ -331,9 +337,9 @@ def train_classifier(features, labels, splits, output_dir, model_dir):
         "selected_C": best["C"],
         "validation_macro_f1": best["validation_macro_f1"],
         "validation_accuracy": best["validation_accuracy"],
-        "test_speakers": sorted(set(
-            np.asarray([row for row in []], dtype=str).tolist()
-        )),
+        "test_speakers": sorted(set(speakers[test_mask].tolist())),
+        "training_speakers": sorted(set(speakers[train_mask].tolist())),
+        "validation_speakers": sorted(set(speakers[validation_mask].tolist())),
         "training_method": (
             "Frozen WavLM mean+std embeddings with validation-selected "
             "class-balanced SVM. WavLM weights were not fine-tuned."
@@ -376,6 +382,7 @@ def train_classifier(features, labels, splits, output_dir, model_dir):
             "backbone": BASE_MODEL_NAME,
             "sample_rate": SAMPLE_RATE,
             "pooling": POOLING,
+            "preprocessing": PREPROCESSING_VERSION,
         }, indent=2),
         encoding="utf-8",
     )
@@ -422,7 +429,7 @@ def main():
         force_rebuild=args.rebuild_features,
     )
     print(f"[Features] Matrix shape: {features.shape}")
-    train_classifier(features, labels, splits, output_dir, args.model_dir)
+    train_classifier(features, labels, speakers, splits, output_dir, args.model_dir)
 
 
 if __name__ == "__main__":
