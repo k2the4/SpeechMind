@@ -61,10 +61,12 @@ class SpeechMindPipeline:
         language = asr_result.get("language", "unknown")
         quality_value = asr_result.get("quality_score", asr_result.get("confidence"))
         try:
-            asr_confidence = float(quality_value) if quality_value is not None else 0.0
+            asr_confidence = (
+                max(0.0, min(1.0, float(quality_value)))
+                if quality_value is not None else None
+            )
         except (TypeError, ValueError):
-            asr_confidence = 0.0
-        asr_confidence = max(0.0, min(1.0, asr_confidence))
+            asr_confidence = None
 
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=2) as executor:
@@ -95,7 +97,7 @@ class SpeechMindPipeline:
             "language_source": asr_result.get("language_source"),
             "transcript": transcript,
             "asr_model": asr_result.get("asr_model", "unknown"),
-            "asr_confidence": round(asr_confidence, 3),
+            "asr_confidence": round(asr_confidence, 3) if asr_confidence is not None else None,
             "asr_quality_score": (
                 round(asr_confidence, 3) if quality_value is not None else None
             ),
@@ -108,6 +110,7 @@ class SpeechMindPipeline:
             "text_emotion_available": bool(text_result.get("available", True)),
             "text_emotion_reason": text_result.get("reason"),
             "text_emotion_model_source": text_result.get("model_source"),
+            "text_emotion_languages": sorted(self.text_emotion.supported_languages),
             "voice_emotion": fused["voice_emotion"],
             "voice_model_source": voice_result.get("model_source"),
             "voice_inference_device": voice_result.get("inference_device"),
