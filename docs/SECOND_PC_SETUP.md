@@ -1,54 +1,82 @@
 # Setting up SpeechMind on a second Windows PC
 
-## Supported setup
+## Goal
 
-- Windows 10/11
-- Python 3.11 (recommended; Python 3.10 is accepted)
-- A virtual environment local to this repository
-- PyTorch selected from the packages in `requirements.txt`
-- CUDA is used automatically only when the installed PyTorch build and NVIDIA driver support it; otherwise training runs on CPU
+Prepare a fresh Windows 10/11 PC with Python, PyTorch, FFmpeg, SpeechMind dependencies, tests, and the local folders needed to run WavLM voice-emotion training.
 
-## One-time setup
+## What must be installed manually first
 
-1. Install Git for Windows if you want to clone/pull the repository.
-2. Install Python 3.11 and enable the Python Launcher (`py.exe`).
-3. Clone or download this repository.
-4. Double-click `SETUP_SECOND_PC.bat` from the project root.
-5. Wait for the setup checks to finish. The full log is `second_pc_setup.log`.
+Install Git for Windows from https://git-scm.com/downloads/win. During setup:
+- Set Visual Studio Code as Git's default editor.
+- Choose the option that makes Git available from the command line and third-party software.
+- The other defaults are suitable.
 
-The setup script creates `.venv`, installs `requirements.txt`, checks core imports and CUDA visibility, runs the unit tests, creates the local dataset/output folders, and checks for FFmpeg. It does not install anything globally into system Python.
+Restart VS Code after Git installation.
+
+## Get the project
+
+Open the empty SpeechMind folder in VS Code. In its PowerShell terminal, run:
+
+```powershell
+git clone https://github.com/k2the4/SpeechMind.git .
+```
+
+The dot means clone into the currently opened, empty folder.
+
+## One-click environment setup
+
+Double-click `SETUP_SECOND_PC.bat` from the project root.
+
+The script:
+1. Installs Python 3.11 with WinGet if it is missing.
+2. Installs FFmpeg with WinGet if it is missing.
+3. Creates the project-local `.venv`.
+4. Detects an NVIDIA driver using `nvidia-smi`.
+5. Installs a CUDA 12.8 PyTorch/TorchAudio build when an NVIDIA driver is detected; otherwise installs the CPU build.
+6. Installs the remaining packages from `requirements.txt`.
+7. Verifies core imports, CUDA visibility, and audio dependencies.
+8. Runs the unit tests.
+9. Creates local dataset, checkpoint, and training-output folders.
+
+The setup log is `second_pc_setup.log`. If Python was just installed but cannot be found by the current terminal, close VS Code, reopen the project, and run the setup file again.
+
+The Torch installation command follows the official PyTorch Windows installation selector. See https://pytorch.org/get-started/locally/.
 
 ## Dataset required for training
 
-The RAVDESS audio files are not part of GitHub. Copy the existing RAVDESS speech dataset (the actor folders and their WAV files) into:
+The RAVDESS WAV files are not in GitHub. Copy the already-downloaded RAVDESS speech dataset (Actor_01 through Actor_24) into:
 
 ```
 data/ravdess/
 ```
 
-The resulting layout should look like:
+Expected example:
 
 ```
 data/ravdess/
   Actor_01/
     03-01-01-01-01-01-01.wav
-    ...
   Actor_02/
     ...
 ```
 
-The training script recognizes official RAVDESS speech filenames recursively. Do not rename the WAV files. The setup script does not copy data from another PC or download the dataset.
+Do not rename the WAV files. The training script recursively scans the folder. The setup script cannot copy files from your other PC; use an external drive or your own OneDrive sync.
 
 ## Start training
 
-After the dataset is copied, double-click `TRAIN_VOICE_EMOTION.bat`. It uses the local `.venv`, checks PyTorch/CUDA, and asks before CPU training. The WavLM checkpoint is saved separately at `checkpoints/voice_emotion_wavlm`; test metrics are saved at `training_outputs/wavlm_ravdess/test_metrics.json`.
+After the dataset is present, double-click `TRAIN_VOICE_EMOTION.bat`.
 
-## Hardware note
+The training script downloads `microsoft/wavlm-base-plus` automatically from Hugging Face on its first run, fine-tunes it, selects the best checkpoint using validation macro-F1, and evaluates on the held-out test speakers.
 
-WavLM full fine-tuning is resource-intensive. Setup reports whether PyTorch sees CUDA, but that alone does not guarantee enough VRAM or RAM. If this PC has no compatible NVIDIA GPU, training may be very slow. Keep the PC plugged into power and ensure adequate free disk space before starting.
+Outputs:
+- Checkpoint: `checkpoints/voice_emotion_wavlm/`
+- Metrics: `training_outputs/wavlm_ravdess/test_metrics.json`
+- Training log: `training_launcher.log`
 
-## Troubleshooting
+## Hardware notes
 
-- `second_pc_setup.log`: dependency, import, test, and FFmpeg diagnostics.
-- `training_launcher.log`: training-time diagnostics.
-- Do not copy `.venv`, model checkpoints, or cache folders from the old PC. Recreate the environment on this PC using the setup script.
+Full WavLM fine-tuning is compute-intensive. CPU mode may take many hours. CUDA detection does not guarantee sufficient VRAM. Keep the PC plugged in and ensure adequate free disk space. The training launcher asks before proceeding on CPU.
+
+## What is not transferred from the old PC
+
+Do not copy the old PC's `.venv` or model cache. They are machine-specific and should be recreated. RAVDESS audio must be copied separately. The Hugging Face WavLM weights download automatically on the new PC.
