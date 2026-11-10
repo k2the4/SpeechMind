@@ -157,7 +157,8 @@ def _parse_transcript_file(path: Path) -> list[tuple[str, str]]:
         if not line.strip():
             continue
         try:
-            parsed = next(csv.reader([line]))
+            delimiter = "\\t" if path.suffix.lower() == ".tsv" else ","
+            parsed = next(csv.reader([line], delimiter=delimiter))
         except (csv.Error, StopIteration):
             parsed = [line]
         parsed = [cell.strip() for cell in parsed]
@@ -189,6 +190,46 @@ def _parse_transcript_file(path: Path) -> list[tuple[str, str]]:
     return rows
 
 
+
+def _speaker_metadata_map(extract_root: Path) -> dict[str, str]:
+    """Best-effort filename -> speaker ID mapping from sentence_stats metadata."""
+    mapping: dict[str, str] = {}
+    for metadata_path in extract_root.rglob("sentence_stats.csv"):
+        try:
+            with metadata_path.open("r", encoding="utf-8-sig", newline="") as handle:
+                reader = csv.DictReader(handle)
+                for row in reader:
+                    normalized = {
+                        str(key or "").strip().lower(): str(value or "").strip()
+                        for key, value in row.items()
+                    }
+                    speaker_id = next(
+                        (
+                            value for key, value in normalized.items()
+                            if "speaker" in key and value
+                        ),
+                        "",
+                    )
+                    audio_value = next(
+                        (
+                            value for value in normalized.values()
+                            if ".wav" in value.lower()
+                        ),
+                        "",
+                    )
+                    if speaker_id and audio_value:
+                        match = re.search(
+                            r"[^\\\\/\\s,;]+\\.wav",
+                            audio_value,
+                            flags=re.IGNORECASE,
+                        )
+                        if match:
+                            mapping[Path(match.group(0)).name.lower()] = speaker_id
+        except (OSError, csv.Error):
+            continue
+    return mapping
+
+
 def build_manifest(extract_root: Path = EXTRACT_ROOT) -> list[dict]:
     audio_files = [
         path for path in extract_root.rglob("*")
@@ -209,11 +250,12 @@ def build_manifest(extract_root: Path = EXTRACT_ROOT) -> list[dict]:
         split = _split(parts)
         audio_lookup[(domain, split, audio_path.name.lower())] = audio_path
 
+    speaker_metadata = _speaker_metadata_map(extract_root)
     transcript_paths = [
         path for path in extract_root.rglob("*")
         if path.is_file()
         and path.suffix.lower() in {".csv", ".txt", ".tsv", ".json"}
-        and "transcripts" in [part.lower() for part in path.parts]
+        and any(part.lower() in {"transcript", "transcripts"} for part in path.parts)
     ]
     rows: list[dict] = []
     matched_audio: set[Path] = set()
@@ -248,7 +290,10 @@ def build_manifest(extract_root: Path = EXTRACT_ROOT) -> list[dict]:
                 "transcript": transcript,
                 "age_group": age_group,
                 "split": audio_split,
-                "speaker_id": _speaker_from_name(audio_path.name),
+                "speaker_id": (
+                    speaker_metadata.get(audio_path.name.lower())
+                    or _speaker_from_name(audio_path.name)
+                ),
                 "audio_filename": audio_path.name,
                 "transcript_source": str(transcript_path.relative_to(extract_root)).replace("\\", "/"),
             })
@@ -308,7 +353,13 @@ def main() -> int:
     try:
         DATA_ROOT.mkdir(parents=True, exist_ok=True)
         download_archive()
-        if not any(EXTRACT_ROOT.iterdir()) if EXTRACT_ROOT.exists() else True:
+        has_audio = (
+            EXTRACT_ROOT.exists()
+            and any(EXTRACT_ROOT.rglob("*.wav"))
+        )
+        if not has_audio:
+            if EXTRACT_ROOT.exists():
+                shutil.rmtree(EXTRACT_ROOT)
             print("[HiACC] Extracting corpus archive...")
             safe_extract(ARCHIVE_PATH, EXTRACT_ROOT)
         rows = build_manifest()
