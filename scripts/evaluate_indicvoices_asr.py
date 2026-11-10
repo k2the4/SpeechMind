@@ -10,6 +10,14 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
+# When this file is launched directly as
+#   python scripts/evaluate_indicvoices_asr.py
+# Python puts scripts/ (not the repository root) on sys.path. Add the
+# repository root before importing the top-level models/ and utils/ packages.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 # Prevent an inherited shell environment from accidentally using a metered API.
 os.environ["SPEECHMIND_ASR_PROVIDER"] = "local"
 
@@ -18,7 +26,7 @@ from scripts.asr_metrics import aggregate_error_counts, error_counts
 from utils.audio_utils import load_audio
 
 
-DEFAULT_SAMPLE_DIR = Path("data/indicvoices/hindi/valid_sample")
+DEFAULT_SAMPLE_DIR = PROJECT_ROOT / "data/indicvoices/hindi/valid_sample"
 
 
 def read_manifest(path: Path) -> list[dict]:
