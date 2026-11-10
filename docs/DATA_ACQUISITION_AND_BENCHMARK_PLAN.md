@@ -182,3 +182,34 @@ The updated evaluator now records output scripts, decoder-level metrics, and dur
 `BENCHMARK_INDICVOICES_HINDI_WHISPER.bat`.
 
 Next compare forced Whisper against forced IndicConformer on the exact same 100 clips. Keep the same sample and manifest. Only after that should the automatic Hindi routing policy be changed. Hinglish needs its own paired code-switch evaluation set; these Hindi results cannot be presented as Hinglish results. The dataset has no emotion ground-truth labels.
+
+
+## Forced Whisper Small benchmark (same 100 Hindi clips)
+
+The Whisper Small comparison was run on exactly the same 100-record Hindi validation sample. This run used Whisper's automatic language detection (`language=None`), not a forced Hindi decoder hint.
+
+Results:
+- Normalized-reference WER: 73.13% (977 errors / 1,336 reference words).
+- Normalized-reference CER: 47.50% (2,842 errors / 5,983 reference characters).
+- Verbatim-reference WER: 72.86%.
+- Verbatim-reference CER: 47.20%.
+- Scenario WER: Extempore 75.19%, Conversation 76.43%, Read 66.67%.
+- Hypothesis script counts: Devanagari 59, Latin 25, Arabic 9, Devanagari+Latin 3, Hangul 1, CJK/Japanese 1, empty/other 2.
+- Initialization: 2.05 seconds.
+- Mean inference: 20.55 seconds/clip; median: 12.22 seconds.
+- Total clip inference: 2,058.61 seconds (~34.3 minutes).
+
+On the identical sample, forced IndicConformer produced 14.22% normalized WER and 5.11% CER, with a 0.428-second mean clip inference time. The automatic pipeline produced 26.72% WER and 16.08% CER.
+
+Interpretation:
+- Whisper Small in its automatic language-detection mode is a poor choice for this Hindi validation sample. Many Hindi clips were transcribed in Latin or non-Devanagari scripts, and the decoder was about 48 times slower per clip than IndicConformer on this CPU benchmark.
+- The poor Whisper result is not evidence that every Whisper model or a Hindi-forced Whisper decoder would perform identically. The tested path uses automatic language detection, and a separate forced-Hindi comparison is being added.
+- This Hindi-only experiment does not measure Hinglish or language-switching accuracy.
+- Do not use these results as a universal ranking across languages. IndicConformer may be appropriate for Hindi, while a different recognizer may work better for English or code-mixed speech.
+
+A separate diagnostic mode now forces the Hindi language code only inside the benchmark:
+`BENCHMARK_INDICVOICES_HINDI_WHISPER_FORCED_HI.bat`.
+
+This is strictly a benchmark control. It does not add a language selector to the SpeechMind interface or alter the fixed product requirement that end users speak naturally without specifying a language.
+
+Next action: run the forced-Hindi Whisper benchmark on the same local sample. After comparing it with forced IndicConformer and auto Whisper, select a Hindi-specific decoder policy for the ASR router. Preserve automatic detection for the product and add separate code-mixed evaluation before deciding the Hinglish recognizer.
