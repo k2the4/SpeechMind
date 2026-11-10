@@ -10,12 +10,11 @@ openai-whisper
 onnx==1.20.1
 onnxruntime==1.20.1
 
-# Audio processing and optional hosted ASR provider
+# Audio processing
 librosa
 soundfile
 scipy
 numpy
-requests
 
 # IndicTrans2 translation (legacy local provider; optional)
 sentencepiece
