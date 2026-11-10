@@ -22,6 +22,7 @@ class SpeechRecognizer:
             raise ValueError("ASR backend must be auto, bodhan, or whisper.")
 
         self.bodhan_client = bodhan_client or BodhanClient.from_env()
+        self._strict_backend = backend == "bodhan"
         if backend == "bodhan" and self.bodhan_client is None:
             raise RuntimeError(
                 "Bodhan backend was requested but BODHAN_API_KEY is not configured."
