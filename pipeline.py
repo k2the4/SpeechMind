@@ -13,6 +13,7 @@ from models.asr import SpeechRecognizer
 from models.bodhan_client import BodhanClient
 from models.text_emotion import TextEmotionClassifier
 from models.voice_emotion import VoiceEmotionRecognizer
+from models.indic_language_id import IndicLanguageIdentifier
 from fusion_layer import fuse
 
 TRANSLATABLE_LANGUAGES = {
@@ -27,6 +28,7 @@ class SpeechMindPipeline:
         self.asr = SpeechRecognizer(
             backend="auto", bodhan_client=self.bodhan_client
         )
+        self.language_identifier = IndicLanguageIdentifier()
         self.text_emotion = TextEmotionClassifier()
         self.voice_emotion = VoiceEmotionRecognizer()
         self.translator = None
@@ -93,7 +95,13 @@ class SpeechMindPipeline:
         timings["asr"] = round(time.perf_counter() - stage_start, 3)
 
         transcript = asr_result.get("transcript", "")
-        language = asr_result.get("language", "unknown")
+        language_id_result = self.language_identifier.predict(transcript)
+        # Prefer segment-level IndicLID when its weights are installed. The
+        # script-only fallback is explicit and is not reported as model LID.
+        asr_result.update(language_id_result)
+        language = asr_result.get(
+            "language_profile", asr_result.get("language", "unknown")
+        )
         quality_value = asr_result.get(
             "quality_score", asr_result.get("confidence")
         )
@@ -136,6 +144,9 @@ class SpeechMindPipeline:
                 "language_profile", language
             ),
             "language_profile_note": asr_result.get("language_profile_note"),
+            "language_identifier": asr_result.get("language_identifier"),
+            "language_id_available": asr_result.get("language_id_available", False),
+            "language_segments": asr_result.get("language_segments", []),
             "script_evidence": asr_result.get("script_evidence", []),
             "language_detection_score": asr_result.get("language_detection_score"),
             "language_source": asr_result.get("language_source"),
