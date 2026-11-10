@@ -1,45 +1,30 @@
-﻿# Python environment
 .venv/
 venv/
-env/
-
-# Python cache
 __pycache__/
 *.py[cod]
-*.pyo
-
-# Model weights and checkpoints
-pretrained_models/
-checkpoints/
-*.safetensors
-*.bin
-*.pt
-*.pth
-*.onnx
-
-# Secrets
 .env
 .env.*
 !.env.example
-secrets.toml
+.streamlit/secrets.toml
 
-# Audio and generated files
+# Local datasets / downloaded corpora
+data/
+datasets/
 *.wav
 *.mp3
-*.flac
-outputs/
-temp/
+*.m4a
 
-# IDE and OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Local datasets, training reports, and experiment outputs
-data/
+# Model checkpoints and caches
+checkpoints/
 training_outputs/
-*_manifest.csv
+*.joblib
+*.npz
+*.safetensors
+*.pt
+*.pth
+*.bin
+
+# Local caches and logs
+.cache/
+huggingface/
+*.log
