@@ -78,16 +78,27 @@ class IndicLanguageIdentifier:
 
     @staticmethod
     def summarize_labels(labels: list[str]) -> str:
-        """Convert IndicLID labels into a conservative product-level profile."""
-        languages = set()
-        for label in labels:
-            code = str(label).replace("__label__", "").strip().split("_", 1)[0]
-            language = LANGUAGE_NAMES.get(code)
-            if language:
-                languages.add(language)
-
+        """Convert IndicLID segment labels into a product-level language profile."""
+        normalized = [
+            str(label).replace("__label__", "").strip()
+            for label in labels
+        ]
+        languages = {
+            LANGUAGE_NAMES[label.split("_", 1)[0]]
+            for label in normalized
+            if label.split("_", 1)[0] in LANGUAGE_NAMES
+        }
         if not languages:
             return "undetermined"
+
+        has_english = "eng_Latn" in normalized
+        has_hindi_roman = "hin_Latn" in normalized
+        has_hindi_native = "hin_Deva" in normalized
+
+        # Romanized Hindi is the core Hinglish use case even when a short clip
+        # contains no English segment. Hindi + English segments are also Hinglish.
+        if has_hindi_roman or (has_english and has_hindi_native):
+            return "hinglish"
         if languages == {"en"}:
             return "en"
         if languages == {"hi"}:
@@ -102,8 +113,6 @@ class IndicLanguageIdentifier:
             return "te"
         if languages == {"pa"}:
             return "pa"
-        if "en" in languages and "hi" in languages:
-            return "hinglish"
         if len(languages) == 1:
             return next(iter(languages))
         return "code_mixed"
