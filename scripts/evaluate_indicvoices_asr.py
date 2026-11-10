@@ -78,12 +78,21 @@ def transcribe_one(
             bool(result.get("asr_fallback", False)),
             result.get("asr_fallback_reason"),
         )
-    if model == "whisper":
-        raw = recognizer._decode_with_whisper(audio, language=None)
-        result = recognizer._whisper_result(
-            raw, language_source="benchmark_whisper_auto"
+    if model in ("whisper", "whisper-hi"):
+        # "whisper" measures the model's own language identification;
+        # "whisper-hi" is a diagnostic forced-Hindi comparison. Neither
+        # option changes SpeechMind's no-language-selector product UX.
+        language = "hi" if model == "whisper-hi" else None
+        raw = recognizer._decode_with_whisper(audio, language=language)
+        source = (
+            "benchmark_whisper_forced_hindi"
+            if language == "hi" else "benchmark_whisper_auto"
         )
-        return str(result.get("transcript") or ""), "whisper-small", False, None
+        result = recognizer._whisper_result(raw, language_source=source)
+        model_label = (
+            "whisper-small-forced-hi" if language == "hi" else "whisper-small-auto"
+        )
+        return str(result.get("transcript") or ""), model_label, False, None
     if model == "indicconformer":
         result = recognizer._indic_result_with_whisper_fallback(audio, "hi")
         return (
@@ -99,7 +108,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sample-dir", type=Path, default=DEFAULT_SAMPLE_DIR)
     parser.add_argument(
-        "--model", choices=("auto", "whisper", "indicconformer"), default="auto"
+        "--model", choices=("auto", "whisper", "whisper-hi", "indicconformer"), default="auto"
     )
     parser.add_argument(
         "--limit", type=int, default=0,
