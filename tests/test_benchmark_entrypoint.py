@@ -51,5 +51,28 @@ class BenchmarkEntrypointTests(unittest.TestCase):
         )
 
 
+
+    def test_indicconformer_warmup_is_before_clip_timing(self):
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "evaluate_indicvoices_asr.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('if args.model in ("auto", "indicconformer"):', source)
+        warmup_line = source.index("recognizer._load_indic_model()")
+        inference_timer_line = source.index("inference_started = time.perf_counter()")
+        loop_line = source.index("for index, record in enumerate(records, start=1):")
+        self.assertLess(warmup_line, inference_timer_line)
+        self.assertLess(inference_timer_line, loop_line)
+        self.assertIn('"model_initialization_seconds"', source)
+        self.assertIn('"median_inference_seconds"', source)
+
+    def test_forced_indicconformer_launcher_exists(self):
+        root = Path(__file__).resolve().parents[1]
+        launcher = root / "BENCHMARK_INDICVOICES_HINDI_INDICCONFORMER.bat"
+        self.assertTrue(launcher.is_file())
+        content = launcher.read_text(encoding="utf-8")
+        self.assertIn("--model indicconformer", content)
+
 if __name__ == "__main__":
     unittest.main()
