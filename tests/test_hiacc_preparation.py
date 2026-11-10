@@ -19,6 +19,9 @@ class HiACCPreparationTests(unittest.TestCase):
         self.assertEqual(_domain(("HiACC", "Children", "transcripts", "val")), "children")
         self.assertEqual(_split(("Adult", "audio", "train", "a.wav")), "train")
         self.assertEqual(_split(("Children", "transcripts", "validation")), "val")
+        self.assertEqual(_split(("Adult", "Audio", "Training_Data", "a.wav")), "train")
+        self.assertEqual(_split(("Adult", "Audio", "Testing", "a.wav")), "test")
+        self.assertEqual(_split(("Adult", "Audio", "validation_set", "a.wav")), "val")
 
     def test_speaker_id_is_extracted_when_present(self):
         self.assertEqual(_speaker_from_name("speaker_ABC123_utt01.wav"), "ABC123")
