@@ -28,18 +28,10 @@ class SpeechMindPipeline:
         self.voice_emotion = VoiceEmotionRecognizer()
         self.translator = None
         self.translator_enabled = load_translator
-        self.translator_provider = os.getenv(
-            "SPEECHMIND_TRANSLATOR_PROVIDER", "local"
-        ).strip().lower()
-        if self.translator_provider not in {"local", "bodhan"}:
-            raise ValueError(
-                "SPEECHMIND_TRANSLATOR_PROVIDER must be either 'local' or 'bodhan'."
-            )
         self.translator_error = None
         print(
-            "[Pipeline] Core models initialized. "
-            f"ASR provider={os.getenv('SPEECHMIND_ASR_PROVIDER', 'local')}; "
-            f"translation provider={self.translator_provider}."
+            "[Pipeline] Core local models initialized. "
+            "No hosted or metered inference service is configured."
         )
 
     def _translate(self, transcript: str, language: str) -> str:
@@ -48,22 +40,8 @@ class SpeechMindPipeline:
         if not self.translator_enabled:
             return transcript
 
-        # Bodhan Indic-Translate accepts code-mixed input without requiring a
-        # single source-language code. Call it even if Whisper's primary
-        # language guess is English, because the utterance may still be mixed.
-        if self.translator_provider == "bodhan":
-            try:
-                if self.translator is None:
-                    print("[Pipeline] Loading Bodhan Indic-Translate API adapter...")
-                    from models.bodhan_translation import BodhanTranslator
-                    self.translator = BodhanTranslator()
-                return self.translator.to_english(transcript, language)
-            except Exception as error:
-                self.translator_error = str(error)
-                print(f"[Pipeline] Bodhan translation unavailable: {error}")
-                return transcript
-
-        # Existing local IndicTrans2 path remains available as the default.
+        # Local IndicTrans2 path. Mixed-language translation will be improved
+        # after the Hinglish ASR output is benchmarked.
         if language == "en" or language not in TRANSLATABLE_LANGUAGES:
             return transcript
         try:
@@ -129,7 +107,7 @@ class SpeechMindPipeline:
             "language_source": asr_result.get("language_source"),
             "transcript": transcript,
             "asr_model": asr_result.get("asr_model", "unknown"),
-            "asr_provider": asr_result.get("provider", "local"),
+            "asr_provider": "local",
             "asr_fallback": bool(asr_result.get("asr_fallback", False)),
             "asr_fallback_reason": asr_result.get("asr_fallback_reason"),
             "asr_requested_model": asr_result.get("asr_requested_model"),
@@ -162,7 +140,7 @@ class SpeechMindPipeline:
             "fusion_weights": fused["fusion_weights"],
             "processing_time_sec": timings["total"],
             "timings_sec": timings,
-            "translator_provider": self.translator_provider,
+            "translator_provider": "local_indictrans2",
             "translator_loaded": self.translator is not None,
             "translator_error": self.translator_error,
         }
