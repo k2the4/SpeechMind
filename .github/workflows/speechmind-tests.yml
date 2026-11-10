@@ -3,7 +3,9 @@ name: SpeechMind tests
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "feature/**"
 
 jobs:
   unit-tests:
