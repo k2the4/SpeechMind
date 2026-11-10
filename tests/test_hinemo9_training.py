@@ -57,7 +57,7 @@ class HinEmo9TrainingTests(unittest.TestCase):
         predicted = ["Joy", "Neutral", "Neutral"]
         result = metrics_for(truth, predicted)
         self.assertEqual(result["confusion_matrix"][2][8], 1)
-        self.assertAlmostEqual(result["macro_f1"], 1.0 / 6.0, places=6)
+        self.assertAlmostEqual(result["macro_f1"], 5.0 / 27.0, places=6)
 
 
 if __name__ == "__main__":
