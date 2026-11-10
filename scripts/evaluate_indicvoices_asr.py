@@ -69,7 +69,7 @@ def duration_bucket(duration: float) -> str:
 
 def transcribe_one(
     recognizer: SpeechRecognizer, audio, model: str
-) -> tuple[str, str, bool, str | None]:
+) -> tuple[str, str, bool, str | None, str | None]:
     if model == "auto":
         result = recognizer.transcribe(audio)
         return (
