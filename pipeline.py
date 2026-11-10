@@ -35,6 +35,7 @@ class SpeechMindPipeline:
         self.translator_enabled = load_translator
         self.translator_error = None
         self.translation_provider = "none"
+        self.translation_available = False
         print(
             "[Pipeline] ASR backend: "
             + self.asr.provider
@@ -44,13 +45,16 @@ class SpeechMindPipeline:
     def _translate(self, transcript: str, language: str) -> str:
         if not transcript or not transcript.strip():
             self.translation_provider = "none"
-            return transcript
+            self.translation_available = False
+            return ""
         if language == "en":
             self.translation_provider = "identity_english"
+            self.translation_available = True
             return transcript
         if not self.translator_enabled:
             self.translation_provider = "disabled"
-            return transcript
+            self.translation_available = False
+            return ""
 
         # The Bodhan translation endpoint infers the source and accepts Romanized
         # and code-mixed Indic text; do not pass a guessed source-language code.
@@ -61,6 +65,7 @@ class SpeechMindPipeline:
                     "provider", "bodhan_indic_translate"
                 )
                 self.translator_error = None
+                self.translation_available = True
                 return result["translation"]
             except Exception as error:
                 self.translator_error = str(error)
@@ -70,20 +75,29 @@ class SpeechMindPipeline:
         # language. Never feed a guessed language code for a code-mixed transcript.
         if language not in TRANSLATABLE_LANGUAGES:
             self.translation_provider = "unavailable_offline"
-            return transcript
+            self.translator_error = (
+                "English meaning for this code-mixed or unrecognized transcript "
+                "requires the optional Bodhan translation service."
+            )
+            self.translation_available = False
+            return ""
         try:
             if self.translator is None:
                 print("[Pipeline] Loading offline IndicTrans2 on demand...")
                 from models.translation import Translator
                 self.translator = Translator()
             translated = self.translator.to_english(transcript, language)
+            if not translated or translated.strip() == transcript.strip():
+                raise RuntimeError("Offline IndicTrans2 did not produce a distinct English translation.")
             self.translation_provider = "local_indictrans2"
+            self.translation_available = True
             return translated
         except Exception as error:
             self.translator_error = str(error)
             self.translation_provider = "unavailable_offline"
+            self.translation_available = False
             print(f"[Pipeline] Offline translation unavailable: {error}")
-            return transcript
+            return ""
 
     def run(self, audio_path: str) -> dict:
         total_start = time.perf_counter()
@@ -171,6 +185,8 @@ class SpeechMindPipeline:
             "asr_avg_no_speech_prob": asr_result.get("avg_no_speech_prob"),
             "asr_avg_compression_ratio": asr_result.get("avg_compression_ratio"),
             "meaning_en": english_meaning,
+            "translation_available": self.translation_available,
+            "translation_reason": self.translator_error,
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
             "text_emotion_reason": text_result.get("reason"),
