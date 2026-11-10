@@ -16,6 +16,7 @@ import torch
 import whisper
 
 from models.asr_quality import estimate_whisper_quality
+from models.language_utils import infer_transcript_language
 
 WHISPER_MODEL = os.getenv("SPEECHMIND_WHISPER_MODEL", "small")
 BODHAN_BASE_URL = os.getenv("BODHAN_API_BASE_URL", "https://api.bodhan.ai/v1").rstrip("/")
@@ -196,7 +197,7 @@ class BodhanASRClient:
             else "mixed" if len(unique_languages) > 1
             else None
         )
-        language = _transcript_language_label(transcript, language)
+        language = infer_transcript_language(transcript, language, unique_languages)
         return {
             "transcript": transcript,
             "language": language,
@@ -271,7 +272,7 @@ class SpeechRecognizer:
         )
         transcript = str(result.get("text", "")).strip()
         detected = str(result.get("language") or "unknown").lower().strip()
-        language = _transcript_language_label(transcript, detected)
+        language = infer_transcript_language(transcript, detected)
         quality = estimate_whisper_quality(result.get("segments", []), transcript)
 
         return {
