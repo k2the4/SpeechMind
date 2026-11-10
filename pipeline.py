@@ -130,6 +130,9 @@ class SpeechMindPipeline:
             "transcript": transcript,
             "asr_model": asr_result.get("asr_model", "unknown"),
             "asr_provider": asr_result.get("provider", "local"),
+            "asr_fallback": bool(asr_result.get("asr_fallback", False)),
+            "asr_fallback_reason": asr_result.get("asr_fallback_reason"),
+            "asr_requested_model": asr_result.get("asr_requested_model"),
             "asr_confidence": round(asr_confidence, 3) if asr_confidence is not None else None,
             "asr_quality_score": (
                 round(asr_confidence, 3) if asr_confidence is not None else None
