@@ -1,16 +1,20 @@
 """
 SpeechMind ASR and language identification.
 
-Whisper handles automatic language identification and transcription for
-English/other supported Whisper languages. A confident Indic-language
-detection can route speech to IndicConformer. Users can override language
-detection for short or noisy clips where automatic detection is uncertain.
+The default local provider retains Whisper/IndicConformer compatibility.
+An optional Bodhan API provider is available for code-mixed Indian speech.
+The hosted provider is opt-in because it sends audio to a third party and is
+metered. Whisper's language detector supplies only a primary-language hint;
+it does not describe all language switches in the utterance.
 """
+import os
+
 import torch
 import whisper
 from transformers import AutoModel
 
 from models.asr_quality import estimate_whisper_quality
+from models.bodhan_asr import BodhanASR
 
 WHISPER_MODEL = "small"
 INDIC_CONFORMER_MODEL = "ai4bharat/indic-conformer-600m-multilingual"
@@ -50,13 +54,22 @@ class SpeechRecognizer:
     def __init__(self):
         self.model_name = f"openai/whisper-{WHISPER_MODEL}"
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"[ASR] Loading Whisper-{WHISPER_MODEL}...")
+        provider = os.getenv("SPEECHMIND_ASR_PROVIDER", "local").strip().lower()
+        if provider not in {"local", "bodhan"}:
+            raise ValueError(
+                "SPEECHMIND_ASR_PROVIDER must be either 'local' or 'bodhan'."
+            )
+        self.bodhan_asr = BodhanASR() if provider == "bodhan" else None
+        print(f"[ASR] Loading Whisper-{WHISPER_MODEL} for language identification...")
         self.whisper = whisper.load_model(WHISPER_MODEL, device=str(self.device))
         self.indic_model = None
-        print(f"[ASR] Whisper loaded on {self.device}; IndicConformer will load on demand.")
+        print(
+            f"[ASR] Whisper loaded on {self.device}; "
+            f"ASR provider={provider}; IndicConformer remains lazy-loaded."
+        )
 
     def _detect_language(self, audio_numpy):
-        """Return Whisper's language guess and its uncalibrated detection score."""
+        """Return Whisper's primary-language guess and uncalibrated score."""
         padded = whisper.pad_or_trim(audio_numpy)
         mel = whisper.log_mel_spectrogram(
             padded, n_mels=self.whisper.dims.n_mels
@@ -73,7 +86,6 @@ class SpeechRecognizer:
             )
             self.indic_model.eval()
             self.indic_model.to(self.device)
-            print("[ASR] IndicConformer loaded.")
         return self.indic_model
 
     def _decode_with_whisper(self, audio_numpy, language=None):
@@ -101,8 +113,27 @@ class SpeechRecognizer:
             hint = None
         hint = LANGUAGE_ALIASES.get(hint, hint)
 
-        # An explicit language selection bypasses unreliable auto-detection on
-        # very short clips and is honored consistently by the selected decoder.
+        # The code-mixed provider must receive the complete utterance without a
+        # user-supplied language lock. Whisper is used only to report a primary
+        # language; Bodhan performs the actual transcription automatically.
+        if self.bodhan_asr is not None:
+            try:
+                detected_language, language_score = self._detect_language(audio_numpy)
+            except Exception as error:
+                print(f"[ASR] Primary-language detection unavailable: {error}")
+                detected_language, language_score = "unknown", None
+            result = self.bodhan_asr.transcribe(audio_numpy)
+            result["language"] = detected_language
+            result["language_detection_score"] = (
+                round(language_score, 3) if language_score is not None else None
+            )
+            result["language_source"] = (
+                "whisper_primary_language_only;bodhan_code_mixed_asr"
+            )
+            result["language_hint_ignored"] = bool(hint)
+            return result
+
+        # Legacy local path remains available as the default and fallback.
         if hint:
             if hint in INDIC_LANGUAGES:
                 transcript = self._indic_transcribe(audio_numpy, hint)
@@ -113,12 +144,12 @@ class SpeechRecognizer:
                     "quality_score": None,
                     "quality_method": "unavailable_for_indicconformer",
                     "language_detection_score": None,
-                    "language_source": "user_selected",
+                    "language_source": "user_selected_legacy",
                     "asr_model": "indic-conformer-600m",
                 }
             whisper_result = self._decode_with_whisper(audio_numpy, language=hint)
             return self._whisper_result(
-                whisper_result, language_fallback=hint, language_source="user_selected"
+                whisper_result, language_fallback=hint, language_source="user_selected_legacy"
             )
 
         try:
@@ -145,8 +176,6 @@ class SpeechRecognizer:
                 "asr_model": "indic-conformer-600m",
             }
 
-        # Do not lock Whisper to a language selected with a weak score. Let
-        # its transcription pass detect the language again in that case.
         decode_language = (
             detected_language
             if language_score >= MIN_WHISPER_LANGUAGE_LOCK_SCORE
