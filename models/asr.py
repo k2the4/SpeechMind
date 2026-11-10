@@ -63,6 +63,7 @@ class SpeechRecognizer:
         print(f"[ASR] Loading Whisper-{WHISPER_MODEL} for language identification...")
         self.whisper = whisper.load_model(WHISPER_MODEL, device=str(self.device))
         self.indic_model = None
+        self.indic_model_error = None
         print(
             f"[ASR] Whisper loaded on {self.device}; "
             f"ASR provider={provider}; IndicConformer remains lazy-loaded."
@@ -79,14 +80,63 @@ class SpeechRecognizer:
         return str(language).lower().strip(), float(probabilities[language])
 
     def _load_indic_model(self):
+        if self.indic_model_error is not None:
+            raise RuntimeError(
+                "IndicConformer initialization previously failed; using Whisper fallback."
+            ) from self.indic_model_error
         if self.indic_model is None:
             print("[ASR] Loading IndicConformer-600M on demand...")
-            self.indic_model = AutoModel.from_pretrained(
-                INDIC_CONFORMER_MODEL, trust_remote_code=True
-            )
-            self.indic_model.eval()
-            self.indic_model.to(self.device)
+            try:
+                self.indic_model = AutoModel.from_pretrained(
+                    INDIC_CONFORMER_MODEL, trust_remote_code=True
+                )
+                self.indic_model.eval()
+                self.indic_model.to(self.device)
+            except Exception as error:
+                self.indic_model_error = error
+                raise
         return self.indic_model
+
+    def _indic_result_with_whisper_fallback(
+        self, audio_numpy, language_code, language_detection_score=None
+    ):
+        """Prefer IndicConformer; fall back to Whisper instead of aborting ASR."""
+        try:
+            transcript = self._indic_transcribe(audio_numpy, language_code)
+            return {
+                "transcript": transcript,
+                "language": language_code,
+                "confidence": None,
+                "quality_score": None,
+                "quality_method": "unavailable_for_indicconformer",
+                "language_detection_score": (
+                    round(language_detection_score, 3)
+                    if language_detection_score is not None else None
+                ),
+                "language_source": "whisper_detection",
+                "asr_model": "indic-conformer-600m",
+                "asr_fallback": False,
+                "asr_fallback_reason": None,
+            }
+        except Exception as error:
+            reason = f"{type(error).__name__}: {error}"
+            print(
+                "[ASR] IndicConformer failed; falling back to Whisper "
+                f"for {language_code}: {reason}"
+            )
+            whisper_result = self._decode_with_whisper(
+                audio_numpy, language=language_code
+            )
+            result = self._whisper_result(
+                whisper_result,
+                language_fallback=language_code,
+                language_detection_score=language_detection_score,
+                language_source="indicconformer_failed_whisper_fallback",
+            )
+            result["asr_fallback"] = True
+            result["asr_fallback_reason"] = reason
+            result["asr_requested_model"] = "indic-conformer-600m"
+            return result
 
     def _decode_with_whisper(self, audio_numpy, language=None):
         return self.whisper.transcribe(
@@ -136,17 +186,12 @@ class SpeechRecognizer:
         # Legacy local path remains available as the default and fallback.
         if hint:
             if hint in INDIC_LANGUAGES:
-                transcript = self._indic_transcribe(audio_numpy, hint)
-                return {
-                    "transcript": transcript,
-                    "language": hint,
-                    "confidence": None,
-                    "quality_score": None,
-                    "quality_method": "unavailable_for_indicconformer",
-                    "language_detection_score": None,
-                    "language_source": "user_selected_legacy",
-                    "asr_model": "indic-conformer-600m",
-                }
+                result = self._indic_result_with_whisper_fallback(audio_numpy, hint)
+                result["language_source"] = (
+                    "user_selected_legacy_with_indicconformer_fallback"
+                    if result.get("asr_fallback") else "user_selected_legacy"
+                )
+                return result
             whisper_result = self._decode_with_whisper(audio_numpy, language=hint)
             return self._whisper_result(
                 whisper_result, language_fallback=hint, language_source="user_selected_legacy"
@@ -164,17 +209,9 @@ class SpeechRecognizer:
         indic_language = WHISPER_TO_INDIC.get(detected_language)
         if indic_language in INDIC_LANGUAGES and language_score >= MIN_INDIC_ROUTE_SCORE:
             print(f"[ASR] Detected {INDIC_LANGUAGES[indic_language]}; using IndicConformer.")
-            transcript = self._indic_transcribe(audio_numpy, indic_language)
-            return {
-                "transcript": transcript,
-                "language": indic_language,
-                "confidence": None,
-                "quality_score": None,
-                "quality_method": "unavailable_for_indicconformer",
-                "language_detection_score": round(language_score, 3),
-                "language_source": "whisper_detection",
-                "asr_model": "indic-conformer-600m",
-            }
+            return self._indic_result_with_whisper_fallback(
+                audio_numpy, indic_language, language_detection_score=language_score
+            )
 
         decode_language = (
             detected_language
