@@ -67,9 +67,14 @@ def validate_rows(rows: list[dict], split: str, require_gold: bool = False):
         raw_label = str(row.get("label", "")).strip().lower()
         label = LABEL_TO_ID.get(raw_label)
         source = str(row.get("label_source", "")).strip().lower()
-        if not text or label is None:
+        if not text:
             skipped += 1
             continue
+        if label is None:
+            raise ValueError(
+                f"Unknown emotion label '{raw_label}' in {split} row {index + 1}. "
+                "Do not silently drop or remap labels."
+            )
         if require_gold and source != "human_gold":
             raise ValueError(
                 f"{split} contains a non-gold record at row {index + 1}; "
