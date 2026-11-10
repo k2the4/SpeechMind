@@ -96,5 +96,22 @@ class BenchmarkEntrypointTests(unittest.TestCase):
             launcher.read_text(encoding="utf-8"),
         )
 
+
+    def test_whisper_forced_hindi_mode_is_distinct_from_auto(self):
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "evaluate_indicvoices_asr.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('choices=("auto", "whisper", "whisper-hi", "indicconformer")', source)
+        self.assertIn('language = "hi" if model == "whisper-hi" else None', source)
+        self.assertIn('"benchmark_whisper_forced_hindi"', source)
+
+    def test_forced_hindi_whisper_launcher_exists(self):
+        root = Path(__file__).resolve().parents[1]
+        launcher = root / "BENCHMARK_INDICVOICES_HINDI_WHISPER_FORCED_HI.bat"
+        self.assertTrue(launcher.is_file())
+        self.assertIn("--model whisper-hi", launcher.read_text(encoding="utf-8"))
+
 if __name__ == "__main__":
     unittest.main()
