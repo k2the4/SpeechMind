@@ -102,7 +102,7 @@ class HiACCPreparationTests(unittest.TestCase):
             info_dir.mkdir(parents=True)
             info = info_dir / "speaker_info.csv"
             info.write_text(
-                "PID,Gender,Age,L1\\nAD09,F,36,Hindi\\n",
+                "PID,Gender,Age,L1\nAD09,F,36,Hindi\n",
                 encoding="utf-8",
             )
             mapping = _speaker_metadata_map(root)
