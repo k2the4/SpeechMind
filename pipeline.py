@@ -1,11 +1,9 @@
 """
-SpeechMind end-to-end inference pipeline.
+SpeechMind end-to-end local inference pipeline.
 
-ASR and translation providers are configurable. Hosted Bodhan providers are
-opt-in because they transmit audio/transcript data externally and incur usage
-charges. The default remains the existing local provider.
+The original transcript, English meaning, text analysis, voice analysis, and
+combined interpretation remain distinct outputs.
 """
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 
