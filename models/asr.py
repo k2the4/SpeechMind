@@ -1,209 +1,293 @@
 """
-SpeechMind ASR and language identification.
+SpeechMind automatic multilingual ASR.
 
-Whisper handles automatic language identification and transcription for
-English/other supported Whisper languages. A confident Indic-language
-detection can route speech to IndicConformer. Users can override language
-detection for short or noisy clips where automatic detection is uncertain.
+The user never selects a language. The local Whisper path transcribes in automatic
+multilingual mode. An optional Bodhan provider is available for code-switch-aware
+Indian ASR, but it is only used when explicitly selected in the local .env file.
 """
+from __future__ import annotations
+
+import io
+import os
+from typing import Any
+
+import numpy as np
 import torch
 import whisper
-from transformers import AutoModel
 
 from models.asr_quality import estimate_whisper_quality
 
-WHISPER_MODEL = "small"
-INDIC_CONFORMER_MODEL = "ai4bharat/indic-conformer-600m-multilingual"
-MIN_INDIC_ROUTE_SCORE = 0.65
-MIN_WHISPER_LANGUAGE_LOCK_SCORE = 0.70
+WHISPER_MODEL = os.getenv("SPEECHMIND_WHISPER_MODEL", "small")
+BODHAN_BASE_URL = os.getenv("BODHAN_API_BASE_URL", "https://api.bodhan.ai/v1").rstrip("/")
+BODHAN_ASR_MODEL = os.getenv("BODHAN_ASR_MODEL", "indic-transcribe")
+SAMPLE_RATE = 16000
+BODHAN_MAX_SECONDS = 28.0
 
-INDIC_LANGUAGES = {
-    "as": "Assamese", "bn": "Bengali", "brx": "Bodo", "doi": "Dogri",
-    "gu": "Gujarati", "hi": "Hindi", "kn": "Kannada", "kok": "Konkani",
-    "ks": "Kashmiri", "mai": "Maithili", "ml": "Malayalam", "mni": "Manipuri",
-    "mr": "Marathi", "ne": "Nepali", "or": "Odia", "pa": "Punjabi",
-    "sa": "Sanskrit", "sat": "Santali", "sd": "Sindhi", "ta": "Tamil",
-    "te": "Telugu", "ur": "Urdu",
-}
-WHISPER_TO_INDIC = {
-    "assamese": "as", "as": "as", "bengali": "bn", "bn": "bn",
-    "bodo": "brx", "brx": "brx", "dogri": "doi", "doi": "doi",
-    "gujarati": "gu", "gu": "gu", "hindi": "hi", "hi": "hi",
-    "kannada": "kn", "kn": "kn", "konkani": "kok", "kok": "kok",
-    "kashmiri": "ks", "ks": "ks", "maithili": "mai", "mai": "mai",
-    "malayalam": "ml", "ml": "ml", "manipuri": "mni", "mni": "mni",
-    "marathi": "mr", "mr": "mr", "nepali": "ne", "ne": "ne",
-    "odia": "or", "oriya": "or", "or": "or", "punjabi": "pa", "pa": "pa",
-    "sanskrit": "sa", "sa": "sa", "santali": "sat", "sat": "sat",
-    "sindhi": "sd", "sd": "sd", "tamil": "ta", "ta": "ta",
-    "telugu": "te", "te": "te", "urdu": "ur", "ur": "ur",
-}
-LANGUAGE_ALIASES = {
-    "english": "en", "assamese": "as", "bengali": "bn", "gujarati": "gu",
-    "hindi": "hi", "kannada": "kn", "malayalam": "ml", "marathi": "mr",
-    "odia": "or", "punjabi": "pa", "tamil": "ta", "telugu": "te",
-    "urdu": "ur",
-}
+
+def _has_devanagari(text: str) -> bool:
+    return any("\u0900" <= char <= "\u097f" for char in text)
+
+
+def _has_latin(text: str) -> bool:
+    return any(("a" <= char.lower() <= "z") for char in text)
+
+
+def _transcript_language_label(text: str, provider_language: str | None) -> str:
+    """Use script evidence for mixed output; otherwise preserve provider metadata."""
+    if _has_devanagari(text) and _has_latin(text):
+        return "hi-en-mixed"
+    if provider_language:
+        normalized = str(provider_language).lower().strip()
+        return "en" if normalized in {"en", "english"} else normalized
+    return "unknown"
+
+
+def _chunk_for_hosted_asr(audio: np.ndarray, max_seconds: float = BODHAN_MAX_SECONDS):
+    """Split long audio near silence; do not modify the original voice-branch audio."""
+    audio = np.asarray(audio, dtype=np.float32).reshape(-1)
+    max_samples = int(max_seconds * SAMPLE_RATE)
+    if len(audio) <= max_samples:
+        return [(0, len(audio), audio)]
+
+    try:
+        import librosa
+
+        intervals = librosa.effects.split(
+            audio, top_db=32, frame_length=512, hop_length=128
+        )
+    except Exception:
+        intervals = np.asarray([], dtype=np.int64)
+
+    if len(intervals) == 0:
+        intervals = np.asarray(
+            [(start, min(start + max_samples, len(audio)))
+             for start in range(0, len(audio), max_samples)],
+            dtype=np.int64,
+        )
+
+    chunks = []
+    pending_start = None
+    pending_end = None
+
+    for raw_start, raw_end in intervals:
+        start, end = int(raw_start), int(raw_end)
+        while end - start > max_samples:
+            if pending_start is not None and pending_end is not None:
+                chunks.append((pending_start, pending_end, audio[pending_start:pending_end]))
+                pending_start = pending_end = None
+            cut = start + max_samples
+            chunks.append((start, cut, audio[start:cut]))
+            start = cut
+
+        if pending_start is None:
+            pending_start, pending_end = start, end
+        elif end - pending_start <= max_samples:
+            pending_end = end
+        else:
+            chunks.append((pending_start, pending_end, audio[pending_start:pending_end]))
+            pending_start, pending_end = start, end
+
+    if pending_start is not None and pending_end is not None:
+        chunks.append((pending_start, pending_end, audio[pending_start:pending_end]))
+
+    return [item for item in chunks if len(item[2]) > int(0.15 * SAMPLE_RATE)]
+
+
+def _deduplicate_chunk_join(texts: list[str]) -> str:
+    """Remove a short exact repeated word overlap, if the provider emits one."""
+    merged: list[str] = []
+    for text in texts:
+        words = str(text or "").strip().split()
+        if not words:
+            continue
+        overlap = 0
+        max_overlap = min(8, len(merged), len(words))
+        for size in range(max_overlap, 0, -1):
+            if [w.casefold() for w in merged[-size:]] == [
+                w.casefold() for w in words[:size]
+            ]:
+                overlap = size
+                break
+        merged.extend(words[overlap:])
+    return " ".join(merged).strip()
+
+
+class BodhanASRClient:
+    """Hosted code-switch-aware Indian ASR. Audio leaves the device only in this mode."""
+
+    def __init__(self):
+        self.api_key = (
+            os.getenv("BODHAN_ASR_API_KEY")
+            or os.getenv("BODHAN_API_KEY")
+            or ""
+        ).strip()
+        if not self.api_key:
+            raise RuntimeError(
+                "Bodhan ASR was selected but BODHAN_ASR_API_KEY is missing. "
+                "Add the key to your local .env file; do not commit it."
+            )
+        try:
+            import requests
+        except ImportError as error:
+            raise RuntimeError(
+                "Bodhan ASR requires the 'requests' package. Install requirements.txt."
+            ) from error
+        self.requests = requests
+        self.endpoint = f"{BODHAN_BASE_URL}/audio/transcriptions"
+
+    def _transcribe_chunk(self, audio: np.ndarray) -> dict[str, Any]:
+        try:
+            import soundfile as sf
+        except ImportError as error:
+            raise RuntimeError("Bodhan ASR requires soundfile.") from error
+
+        buffer = io.BytesIO()
+        sf.write(buffer, audio, SAMPLE_RATE, format="WAV", subtype="PCM_16")
+        buffer.seek(0)
+        try:
+            response = self.requests.post(
+                self.endpoint,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                files={"file": ("speechmind.wav", buffer, "audio/wav")},
+                data={"model": BODHAN_ASR_MODEL},
+                timeout=(15, 180),
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as error:
+            detail = getattr(getattr(error, "response", None), "text", None)
+            raise RuntimeError(
+                f"Bodhan transcription request failed: {detail or error}"
+            ) from error
+
+        if isinstance(payload, str):
+            return {"text": payload}
+        if not isinstance(payload, dict):
+            raise RuntimeError("Bodhan ASR returned an unsupported response format.")
+        if payload.get("error"):
+            raise RuntimeError(f"Bodhan ASR error: {payload['error']}")
+
+        transcript = (
+            payload.get("text")
+            or payload.get("transcript")
+            or payload.get("transcription")
+        )
+        if not isinstance(transcript, str):
+            raise RuntimeError(
+                "Bodhan ASR response did not contain a text/transcript field."
+            )
+        return {
+            "text": transcript.strip(),
+            "language": payload.get("language"),
+            "segments": payload.get("segments"),
+        }
+
+    def transcribe(self, audio: np.ndarray) -> dict:
+        chunks = _chunk_for_hosted_asr(audio)
+        results = [self._transcribe_chunk(chunk) for _, _, chunk in chunks]
+        transcript = _deduplicate_chunk_join([item["text"] for item in results])
+        provider_languages = [
+            str(item["language"]).lower().strip()
+            for item in results if item.get("language")
+        ]
+        unique_languages = sorted(set(provider_languages))
+        language = (
+            unique_languages[0] if len(unique_languages) == 1
+            else "mixed" if len(unique_languages) > 1
+            else None
+        )
+        language = _transcript_language_label(transcript, language)
+        return {
+            "transcript": transcript,
+            "language": language,
+            "languages_detected": unique_languages,
+            "confidence": None,
+            "quality_score": None,
+            "quality_method": "not_exposed_by_bodhan_response",
+            "language_detection_score": None,
+            "language_source": "bodhan_asr_provider" if language != "unknown" else "provider_unspecified",
+            "asr_model": BODHAN_ASR_MODEL,
+            "asr_backend": "bodhan",
+            "asr_chunk_count": len(chunks),
+            "asr_segments": [
+                {
+                    "start_sec": round(start / SAMPLE_RATE, 3),
+                    "end_sec": round(end / SAMPLE_RATE, 3),
+                    "text": item["text"],
+                }
+                for (start, end, _), item in zip(chunks, results)
+            ],
+        }
 
 
 class SpeechRecognizer:
     def __init__(self):
-        self.model_name = f"openai/whisper-{WHISPER_MODEL}"
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"[ASR] Loading Whisper-{WHISPER_MODEL}...")
-        self.whisper = whisper.load_model(WHISPER_MODEL, device=str(self.device))
-        self.indic_model = None
-        print(f"[ASR] Whisper loaded on {self.device}; IndicConformer will load on demand.")
-
-    def _detect_language(self, audio_numpy):
-        """Return Whisper's language guess and its uncalibrated detection score."""
-        padded = whisper.pad_or_trim(audio_numpy)
-        mel = whisper.log_mel_spectrogram(
-            padded, n_mels=self.whisper.dims.n_mels
-        ).to(self.device)
-        _, probabilities = self.whisper.detect_language(mel)
-        language = max(probabilities, key=probabilities.get)
-        return str(language).lower().strip(), float(probabilities[language])
-
-    def _load_indic_model(self):
-        if self.indic_model is None:
-            print("[ASR] Loading IndicConformer-600M on demand...")
-            self.indic_model = AutoModel.from_pretrained(
-                INDIC_CONFORMER_MODEL, trust_remote_code=True
+        self.backend = os.getenv("SPEECHMIND_ASR_BACKEND", "whisper").strip().lower()
+        if self.backend not in {"whisper", "bodhan"}:
+            raise ValueError(
+                "SPEECHMIND_ASR_BACKEND must be 'whisper' or 'bodhan'. "
+                "Experimental local ASR candidates are benchmarked separately."
             )
-            self.indic_model.eval()
-            self.indic_model.to(self.device)
-            print("[ASR] IndicConformer loaded.")
-        return self.indic_model
 
-    def _decode_with_whisper(self, audio_numpy, language=None):
-        return self.whisper.transcribe(
-            audio_numpy,
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.whisper = None
+        self.bodhan = None
+
+        if self.backend == "bodhan":
+            self.bodhan = BodhanASRClient()
+            self.model_name = BODHAN_ASR_MODEL
+            print("[ASR] Bodhan code-switch-aware hosted ASR selected.")
+        else:
+            self.model_name = f"openai/whisper-{WHISPER_MODEL}"
+            print(f"[ASR] Loading Whisper-{WHISPER_MODEL} in automatic-language mode...")
+            self.whisper = whisper.load_model(WHISPER_MODEL, device=str(self.device))
+            print(f"[ASR] Whisper loaded on {self.device}; no language is forced.")
+
+    def transcribe(self, audio) -> dict:
+        if isinstance(audio, torch.Tensor):
+            waveform = audio.detach().cpu().numpy()
+        else:
+            waveform = audio
+        waveform = np.asarray(waveform, dtype=np.float32).squeeze()
+        if waveform.ndim != 1 or waveform.size == 0:
+            raise ValueError("ASR expects non-empty mono audio.")
+        if not np.isfinite(waveform).all():
+            raise ValueError("ASR received NaN or infinite audio.")
+
+        if self.backend == "bodhan":
+            return self.bodhan.transcribe(waveform)
+
+        # Whisper's transcription pass performs its own automatic language
+        # detection. We intentionally do not run a separate file-level language
+        # classifier and route the entire recording to one monolingual decoder.
+        result = self.whisper.transcribe(
+            waveform,
             task="transcribe",
-            language=language,
+            language=None,
             fp16=False,
             verbose=False,
             beam_size=5,
             condition_on_previous_text=False,
         )
+        transcript = str(result.get("text", "")).strip()
+        detected = str(result.get("language") or "unknown").lower().strip()
+        language = _transcript_language_label(transcript, detected)
+        quality = estimate_whisper_quality(result.get("segments", []), transcript)
 
-    def transcribe(self, audio, language_hint=None) -> dict:
-        if isinstance(audio, torch.Tensor):
-            audio_numpy = audio.detach().cpu().numpy()
-        else:
-            audio_numpy = audio
-        audio_numpy = audio_numpy.squeeze()
-        if audio_numpy.ndim != 1 or audio_numpy.size == 0:
-            raise ValueError("ASR expects non-empty mono audio.")
-
-        hint = None if language_hint is None else str(language_hint).lower().strip()
-        if hint in ("", "auto", "auto-detect", "none"):
-            hint = None
-        hint = LANGUAGE_ALIASES.get(hint, hint)
-
-        # An explicit language selection bypasses unreliable auto-detection on
-        # very short clips and is honored consistently by the selected decoder.
-        if hint:
-            if hint in INDIC_LANGUAGES:
-                transcript = self._indic_transcribe(audio_numpy, hint)
-                return {
-                    "transcript": transcript,
-                    "language": hint,
-                    "confidence": None,
-                    "quality_score": None,
-                    "quality_method": "unavailable_for_indicconformer",
-                    "language_detection_score": None,
-                    "language_source": "user_selected",
-                    "asr_model": "indic-conformer-600m",
-                }
-            whisper_result = self._decode_with_whisper(audio_numpy, language=hint)
-            return self._whisper_result(
-                whisper_result, language_fallback=hint, language_source="user_selected"
-            )
-
-        try:
-            detected_language, language_score = self._detect_language(audio_numpy)
-        except Exception as error:
-            print(f"[ASR] Language detection failed; Whisper will detect during transcription: {error}")
-            whisper_result = self._decode_with_whisper(audio_numpy)
-            return self._whisper_result(
-                whisper_result, language_source="whisper_transcription_auto"
-            )
-
-        indic_language = WHISPER_TO_INDIC.get(detected_language)
-        if indic_language in INDIC_LANGUAGES and language_score >= MIN_INDIC_ROUTE_SCORE:
-            print(f"[ASR] Detected {INDIC_LANGUAGES[indic_language]}; using IndicConformer.")
-            transcript = self._indic_transcribe(audio_numpy, indic_language)
-            return {
-                "transcript": transcript,
-                "language": indic_language,
-                "confidence": None,
-                "quality_score": None,
-                "quality_method": "unavailable_for_indicconformer",
-                "language_detection_score": round(language_score, 3),
-                "language_source": "whisper_detection",
-                "asr_model": "indic-conformer-600m",
-            }
-
-        # Do not lock Whisper to a language selected with a weak score. Let
-        # its transcription pass detect the language again in that case.
-        decode_language = (
-            detected_language
-            if language_score >= MIN_WHISPER_LANGUAGE_LOCK_SCORE
-            else None
-        )
-        whisper_result = self._decode_with_whisper(
-            audio_numpy, language=decode_language
-        )
-        return self._whisper_result(
-            whisper_result,
-            language_fallback=detected_language,
-            language_detection_score=language_score,
-            language_source="whisper_detection_and_decode",
-        )
-
-    @staticmethod
-    def _whisper_result(
-        whisper_result,
-        language_fallback=None,
-        language_detection_score=None,
-        language_source="whisper_transcription_auto",
-    ):
-        transcript = whisper_result.get("text", "").strip()
-        detected = str(
-            whisper_result.get("language") or language_fallback or "unknown"
-        ).lower().strip()
-        language = "en" if detected in ("en", "english") else detected
-        quality = estimate_whisper_quality(
-            whisper_result.get("segments", []), transcript
-        )
-        result = {
+        return {
             "transcript": transcript,
             "language": language,
+            "languages_detected": [language] if language != "unknown" else [],
             "confidence": quality["quality_score"],
             "quality_score": quality["quality_score"],
             "quality_method": "whisper_token_quality_heuristic_uncalibrated",
             "avg_logprob": quality["avg_logprob"],
             "avg_no_speech_prob": quality["avg_no_speech_prob"],
             "avg_compression_ratio": quality["avg_compression_ratio"],
+            "language_detection_score": None,
+            "language_source": "whisper_transcription_auto",
             "asr_model": "whisper-small",
-            "language_source": language_source,
+            "asr_backend": "whisper",
+            "asr_chunk_count": 1,
+            "asr_segments": result.get("segments", []),
         }
-        if language_detection_score is not None:
-            result["language_detection_score"] = round(
-                float(language_detection_score), 3
-            )
-        return result
-
-    def _indic_transcribe(self, audio, language_code):
-        model = self._load_indic_model()
-        if isinstance(audio, torch.Tensor):
-            wav = audio.detach().clone().float()
-        else:
-            wav = torch.tensor(audio, dtype=torch.float32)
-        wav = wav.squeeze().unsqueeze(0).to(self.device)
-        with torch.inference_mode():
-            transcription = model(wav, language_code, "ctc")
-        if isinstance(transcription, (list, tuple)):
-            transcription = transcription[0]
-        return str(transcription).strip()
