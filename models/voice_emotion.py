@@ -123,6 +123,7 @@ class VoiceEmotionRecognizer:
         return {"emotion":emotion,"confidence":round(float(distribution[emotion]),3),
             "distribution":distribution,"arousal":self._estimate_arousal(distribution),
             "inference_device":str(self.device),"inference_windows":len(chunks),
+            "arousal_method":"emotion_distribution_heuristic_not_acoustic_measurement",
             "model_source":self.model_source,"validation_macro_f1":self.model_metadata.get("validation_macro_f1") if self.model_metadata else None}
 
     @staticmethod
