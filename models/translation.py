@@ -69,5 +69,4 @@ class Translator:
             translated = self.ip.postprocess_batch(decoded, lang="eng_Latn")
             return translated[0]
         except Exception as e:
-            print(f"[Translation] Failed ({e}); falling back to original transcript")
-            return text
+            raise RuntimeError(f"IndicTrans2 translation failed: {e}") from e
