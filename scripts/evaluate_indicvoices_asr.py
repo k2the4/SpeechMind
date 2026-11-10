@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import time
+import statistics
 from collections import defaultdict
 from pathlib import Path
 
@@ -83,13 +84,35 @@ def main() -> int:
 
         print(f"[ASR Benchmark] Model={args.model}; clips={len(records)}")
         print("[ASR Benchmark] Local inference only; no API provider is used.")
+        total_started = time.perf_counter()
+        initialization_started = time.perf_counter()
         recognizer = SpeechRecognizer()
+
+        # The IndicConformer model is lazy-loaded. For Hindi-split benchmarking,
+        # warm it before timing individual clips so model loading/download time
+        # does not get attributed to the first recording.
+        indicconformer_warmup_error = None
+        if args.model in ("auto", "indicconformer"):
+            print("[ASR Benchmark] Initializing IndicConformer before clip timing...")
+            try:
+                recognizer._load_indic_model()
+            except Exception as error:
+                indicconformer_warmup_error = f"{type(error).__name__}: {error}"
+                print(
+                    "[ASR Benchmark] IndicConformer initialization failed; "
+                    "per-clip fallback will use Whisper where applicable."
+                )
+        initialization_seconds = time.perf_counter() - initialization_started
+        print(
+            f"[ASR Benchmark] Model initialization: {initialization_seconds:.1f}s "
+            "(reported separately)"
+        )
+        inference_started = time.perf_counter()
 
         rows = []
         normalized_metrics = []
         verbatim_metrics = []
         scenario_groups = defaultdict(list)
-        total_started = time.perf_counter()
 
         for index, record in enumerate(records, start=1):
             audio_path = args.sample_dir / record["audio_file"]
@@ -150,7 +173,9 @@ def main() -> int:
             writer.writeheader()
             writer.writerows(rows)
 
+        clip_elapsed = time.perf_counter() - inference_started
         elapsed = time.perf_counter() - total_started
+        inference_values = [row["inference_seconds"] for row in rows]
         summary = {
             "dataset": "ai4bharat/IndicVoices",
             "config": "hindi",
@@ -165,15 +190,22 @@ def main() -> int:
                 scenario: aggregate_error_counts(group)
                 for scenario, group in scenario_groups.items()
             },
-            "mean_inference_seconds": sum(
-                row["inference_seconds"] for row in rows
-            ) / max(1, len(rows)),
+            "model_initialization_seconds": round(initialization_seconds, 3),
+            "indicconformer_warmup_error": indicconformer_warmup_error,
+            "clip_inference_elapsed_seconds": round(clip_elapsed, 3),
+            "mean_inference_seconds": round(
+                statistics.mean(inference_values), 3
+            ) if inference_values else 0.0,
+            "median_inference_seconds": round(
+                statistics.median(inference_values), 3
+            ) if inference_values else 0.0,
             "total_elapsed_seconds": round(elapsed, 3),
             "predictions_csv": str(csv_path),
             "notes": [
                 "WER and CER are computed after NFKC normalization, lowercasing, punctuation removal, and whitespace collapse.",
                 "Normalized and verbatim references are reported separately.",
                 "This is ASR evaluation only; IndicVoices has no emotion labels in this manifest.",
+                "Model initialization is reported separately from per-clip inference time.",
                 "Metrics apply only to this bounded Hindi validation sample, not to Hinglish or all Indian languages.",
             ],
         }
