@@ -1,23 +1,24 @@
 # SpeechMind Python dependencies.
 # SETUP_SECOND_PC.bat installs the matching PyTorch + TorchAudio build
-# (CUDA when an NVIDIA driver is present; CPU otherwise) before this file.
+# before this file. The current development machine should use CPU inference.
 
 # Transformers and speech models
 transformers==4.46.3
 accelerate
 openai-whisper
 
-# Audio processing
+# Audio processing and optional hosted ASR provider
 librosa
 soundfile
 scipy
 numpy
+requests
 
-# IndicTrans2 translation (optional; loaded only for supported non-English audio)
+# IndicTrans2 translation (legacy local provider; optional)
 sentencepiece
 sacremoses
 mosestokenizer
-# Install IndicTransToolkit separately only if translation is required:
+# Install IndicTransToolkit separately only if local IndicTrans2 translation is used:
 # pip install indictranstoolkit
 
 # Application and evaluation
