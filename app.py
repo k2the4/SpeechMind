@@ -23,40 +23,24 @@ def get_pipeline():
     return SpeechMindPipeline()
 
 
-LANGUAGE_OPTIONS = {
-    "Auto-detect": None,
-    "English": "en",
-    "Assamese": "as",
-    "Bengali": "bn",
-    "Bodo": "brx",
-    "Dogri": "doi",
-    "Gujarati": "gu",
-    "Hindi": "hi",
-    "Kannada": "kn",
-    "Kashmiri": "ks",
-    "Konkani": "kok",
-    "Maithili": "mai",
-    "Malayalam": "ml",
-    "Manipuri": "mni",
-    "Marathi": "mr",
-    "Nepali": "ne",
-    "Odia": "or",
-    "Punjabi": "pa",
-    "Sanskrit": "sa",
-    "Santali": "sat",
-    "Sindhi": "sd",
-    "Tamil": "ta",
-    "Telugu": "te",
-    "Urdu": "ur",
-}
-
-selected_language = st.selectbox(
-    "Speech language",
-    options=list(LANGUAGE_OPTIONS),
-    index=0,
-    help="For short clips or unclear accents, select the language being spoken instead of relying on automatic detection.",
+st.caption(
+    "Speak naturally. SpeechMind handles language detection and Hindi-English "
+    "code-switching automatically; there is no language selector."
 )
-language_hint = LANGUAGE_OPTIONS[selected_language]
+
+cloud_configured = bool(os.getenv("BODHAN_API_KEY", "").strip())
+if cloud_configured:
+    st.info(
+        "Cloud speech processing is enabled. Audio is sent to Bodhan AI for "
+        "automatic transcription, and the transcript is sent for English meaning "
+        "conversion. This is a pay-per-use service. See the Bodhan API pricing "
+        "before using real or private recordings."
+    )
+else:
+    st.info(
+        "Local mode is active (Whisper Small). Add a Bodhan API key to enable "
+        "the Hinglish-first cloud transcription and code-mixed translation backend."
+    )
 
 uploaded_file = st.file_uploader(
     "Upload a short audio clip (WAV/MP3/M4A), or record one below",
@@ -81,7 +65,7 @@ if audio_source is not None:
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
-                result = pipeline.run(tmp_path, language_hint=language_hint)
+                result = pipeline.run(tmp_path)
                 result["model_init_time_sec"] = model_init_time
         except Exception as error:
             st.error(f"Analysis failed: {error}")
@@ -108,7 +92,7 @@ if audio_source is not None:
 
             left, right = st.columns(2)
             with left:
-                st.metric("Language", result["language"].upper())
+                st.metric("Language profile", result.get("language_profile", result["language"]))
                 st.metric("Text Emotion", result["text_emotion"].title())
                 st.metric("Valence", result["valence"])
             with right:
@@ -141,6 +125,12 @@ if audio_source is not None:
                 st.json({
                     "stage_timings_sec": result.get("timings_sec", {}),
                     "asr_model": result.get("asr_model"),
+                    "asr_provider": result.get("asr_provider"),
+                    "asr_chunks": result.get("asr_chunks"),
+                    "asr_provider_fallback_reason": result.get("asr_provider_fallback_reason"),
+                    "language_profile": result.get("language_profile"),
+                    "language_profile_note": result.get("language_profile_note"),
+                    "script_evidence": result.get("script_evidence"),
                     "language_source": result.get("language_source"),
                     "language_detection_score": result.get("language_detection_score"),
                     "asr_quality_score": result.get("asr_quality_score"),
@@ -156,6 +146,8 @@ if audio_source is not None:
                     "voice_inference_windows": result.get("voice_inference_windows"),
                     "voice_validation_macro_f1": result.get("voice_validation_macro_f1"),
                     "fusion_weights": result.get("fusion_weights"),
+                    "translation_provider": result.get("translation_provider"),
+                    "cloud_processing_enabled": result.get("cloud_processing_enabled"),
                     "translator_loaded": result.get("translator_loaded"),
                     "translator_error": result.get("translator_error"),
                 })
