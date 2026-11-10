@@ -97,7 +97,10 @@ class TextEmotionClassifier:
             self.labels = labels
             self.model_source = str(HINEMO9_DIR)
             self.model_type = "hinemo9_char_word_tfidf_linear_svc"
-            self.supported_languages = {"en", "hi", "hinglish", "en-or-romanized-hinglish"}
+            self.supported_languages = {
+                "en", "hi", "hinglish", "en-or-romanized-hinglish",
+                "english_or_romanized_hinglish", "code_mixed_or_mixed_script",
+            }
             self.multilingual_checkpoint = True
             self.available = True
             print(f"[TextEmotion] HinEmo-9 classifier loaded with labels: {labels}")
