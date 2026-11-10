@@ -14,7 +14,6 @@ import whisper
 from transformers import AutoModel
 
 from models.asr_quality import estimate_whisper_quality
-from models.bodhan_asr import BodhanASR
 
 WHISPER_MODEL = "small"
 INDIC_CONFORMER_MODEL = "ai4bharat/indic-conformer-600m-multilingual"
@@ -54,19 +53,13 @@ class SpeechRecognizer:
     def __init__(self):
         self.model_name = f"openai/whisper-{WHISPER_MODEL}"
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        provider = os.getenv("SPEECHMIND_ASR_PROVIDER", "local").strip().lower()
-        if provider not in {"local", "bodhan"}:
-            raise ValueError(
-                "SPEECHMIND_ASR_PROVIDER must be either 'local' or 'bodhan'."
-            )
-        self.bodhan_asr = BodhanASR() if provider == "bodhan" else None
         print(f"[ASR] Loading Whisper-{WHISPER_MODEL} for language identification...")
         self.whisper = whisper.load_model(WHISPER_MODEL, device=str(self.device))
         self.indic_model = None
         self.indic_model_error = None
         print(
             f"[ASR] Whisper loaded on {self.device}; "
-            f"ASR provider={provider}; IndicConformer remains lazy-loaded."
+            "IndicConformer remains lazy-loaded."
         )
 
     def _detect_language(self, audio_numpy):
@@ -163,27 +156,7 @@ class SpeechRecognizer:
             hint = None
         hint = LANGUAGE_ALIASES.get(hint, hint)
 
-        # The code-mixed provider must receive the complete utterance without a
-        # user-supplied language lock. Whisper is used only to report a primary
-        # language; Bodhan performs the actual transcription automatically.
-        if self.bodhan_asr is not None:
-            try:
-                detected_language, language_score = self._detect_language(audio_numpy)
-            except Exception as error:
-                print(f"[ASR] Primary-language detection unavailable: {error}")
-                detected_language, language_score = "unknown", None
-            result = self.bodhan_asr.transcribe(audio_numpy)
-            result["language"] = detected_language
-            result["language_detection_score"] = (
-                round(language_score, 3) if language_score is not None else None
-            )
-            result["language_source"] = (
-                "whisper_primary_language_only;bodhan_code_mixed_asr"
-            )
-            result["language_hint_ignored"] = bool(hint)
-            return result
-
-        # Legacy local path remains available as the default and fallback.
+        # Local open-source inference path. Language is never selected in the UI.
         if hint:
             if hint in INDIC_LANGUAGES:
                 result = self._indic_result_with_whisper_fallback(audio_numpy, hint)
