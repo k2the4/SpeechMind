@@ -94,3 +94,37 @@ For emotion:
 ## Immediate next action
 
 Use the free Hugging Face access route for IndicVoices. Start with a small Hindi validation subset (streamed, not bulk-downloaded) after inspecting the available configuration names and schema. Then implement a bounded dataset inspection/download script and ASR benchmark runner with Windows launchers. No paid dataset or API is required for this plan.
+
+
+## Verified Hindi schema and first inspection
+
+The first authenticated three-record inspection succeeded using the streamed Hindi validation split. The returned rows exposed:
+- `audio_filepath`: an audio feature that provided FLAC bytes and a source filename.
+- `text`: the dataset's transcript text.
+- `normalized`: normalized transcript reference.
+- `verbatim`: verbatim transcript reference.
+- `duration`: audio duration in seconds.
+- `lang`: language code.
+- `speaker_id`: speaker identifier.
+- `scenario` and `task_name`: recording/task context.
+- `gender`, `age_group`, `state`, and `district`: metadata fields.
+
+The three inspected examples were short Hindi chunks from the same speaker and an Extempore / District Specific scenario. Adjacent chunk numbering in their audio filenames suggests that a speaker may contribute multiple chunks from one longer recording. The benchmark sampler therefore shuffles the stream and defaults to at most one clip per speaker to improve speaker diversity.
+
+The browser viewer reported approximately 451K rows for the Hindi subset and 5.53K in the validation split at the time the user inspected it. Dataset counts can change with repository revisions; the downloader records the exact subset used in its output summary.
+
+## Bounded local validation workflow
+
+After Hugging Face authentication in the SpeechMind virtual environment:
+1. Run `DOWNLOAD_INDICVOICES_HINDI_SAMPLE.bat`.
+2. The script streams the Hindi `valid` split, shuffles a 1,024-record buffer, and saves at most 100 FLAC clips with at most one clip per speaker.
+3. It stores `manifest.jsonl`, `sample_summary.json`, `ATTRIBUTION.txt`, and audio files under `data/indicvoices/hindi/valid_sample/`.
+4. It does not train any model and does not download the full validation split or the full-length archives.
+
+Then run `BENCHMARK_INDICVOICES_HINDI.bat` to evaluate SpeechMind's current local automatic ASR route. Results are stored under `data/indicvoices/hindi/valid_sample/benchmarks/auto/`:
+- `predictions.csv`: reference transcripts, ASR hypotheses, per-clip WER/CER, speaker/task metadata, and inference time.
+- `summary.json`: corpus-level WER/CER for both normalized and verbatim references, plus scenario breakdowns.
+
+The benchmark can also be run manually with `--model whisper` or `--model indicconformer` to compare the individual local decoders. The automatic route remains the first benchmark because it reflects the current SpeechMind local ASR logic.
+
+Metrics are calculated on a small, shuffled sample from the Hindi validation split. They are a first diagnostic, not a publishable benchmark and not evidence of Hinglish performance. This dataset has speech transcripts but no emotion ground-truth labels in the inspected records, so it is for ASR evaluation only.
