@@ -108,10 +108,25 @@ def _domain(parts: tuple[str, ...]) -> str:
 
 
 def _split(parts: tuple[str, ...]) -> str:
-    lowered = [part.lower() for part in parts]
-    for value in ("train", "test", "val", "valid", "validation"):
-        if value in lowered:
-            return "val" if value in ("val", "valid", "validation") else value
+    """Infer train/test/validation from common directory naming conventions."""
+    aliases = {
+        "train": "train", "training": "train", "trainset": "train",
+        "trainingset": "train", "tr": "train", "trn": "train",
+        "test": "test", "testing": "test", "testset": "test",
+        "testingset": "test", "ts": "test", "tst": "test",
+        "val": "val", "valid": "val", "validation": "val",
+        "dev": "val", "devset": "val", "validset": "val",
+        "validationset": "val",
+    }
+    for part in parts:
+        name = Path(str(part)).stem.lower()
+        compact = re.sub(r"[^a-z]", "", name)
+        if compact in aliases:
+            return aliases[compact]
+        tokens = [token for token in re.split(r"[^a-z]+", name) if token]
+        for token in tokens:
+            if token in aliases:
+                return aliases[token]
     return "unknown"
 
 
@@ -157,9 +172,9 @@ def _parse_transcript_file(path: Path) -> list[tuple[str, str]]:
         if not line.strip():
             continue
         try:
-            delimiter = "\\t" if path.suffix.lower() == ".tsv" else ","
+            delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
             parsed = next(csv.reader([line], delimiter=delimiter))
-        except (csv.Error, StopIteration):
+        except (csv.Error, StopIteration, ValueError):
             parsed = [line]
         parsed = [cell.strip() for cell in parsed]
         filename_index = next(
@@ -251,12 +266,22 @@ def build_manifest(extract_root: Path = EXTRACT_ROOT) -> list[dict]:
         audio_lookup[(domain, split, audio_path.name.lower())] = audio_path
 
     speaker_metadata = _speaker_metadata_map(extract_root)
+    # Transcript files in the archive may be named .txt/.csv without a
+    # parent folder literally called "transcripts". Search small text files
+    # across the corpus, excluding metadata and annotation tables; the parser
+    # accepts a file only when rows actually contain a WAV filename.
     transcript_paths = [
         path for path in extract_root.rglob("*")
         if path.is_file()
         and path.suffix.lower() in {".csv", ".txt", ".tsv", ".json"}
-        and any(part.lower() in {"transcript", "transcripts"} for part in path.parts)
+        and not any(
+            part.lower() in {"metadata", "annotations", "annotation"}
+            for part in path.parts
+        )
+        and path.stat().st_size <= 50 * 1024 * 1024
     ]
+
+
     rows: list[dict] = []
     matched_audio: set[Path] = set()
     unmatched_transcripts = 0
@@ -268,16 +293,31 @@ def build_manifest(extract_root: Path = EXTRACT_ROOT) -> list[dict]:
             key = (domain, split, filename.lower())
             audio_path = audio_lookup.get(key)
             if audio_path is None:
-                # If transcript subdirectories omit the domain or split, permit
-                # basename matching only when it resolves to one unique WAV.
+                # Transcript indexes may be outside the split tree. Match
+                # by basename first, then use known domain/split labels to
+                # disambiguate only when they produce candidates.
                 matches = [
-                    value for (d, s, n), value in audio_lookup.items()
-                    if n == filename.lower()
-                    and (domain == "unknown" or d == domain)
-                    and (split == "unknown" or s == split)
+                    value for (d, split_value, name), value in audio_lookup.items()
+                    if name == filename.lower()
                 ]
+                if domain != "unknown":
+                    narrowed = [
+                        value for value in matches
+                        if _domain(value.relative_to(extract_root).parts) == domain
+                    ]
+                    if narrowed:
+                        matches = narrowed
+                if split != "unknown":
+                    narrowed = [
+                        value for value in matches
+                        if _split(value.relative_to(extract_root).parts) == split
+                    ]
+                    if narrowed:
+                        matches = narrowed
                 if len(matches) == 1:
                     audio_path = matches[0]
+
+
             if audio_path is None:
                 unmatched_transcripts += 1
                 continue
@@ -365,7 +405,9 @@ def main() -> int:
         rows = build_manifest()
         if not any(row["split"] == "test" for row in rows):
             raise RuntimeError(
-                "The manifest contains no test split. Check dataset_summary.json."
+                "The manifest has no test split. The archive is already extracted. "
+                "Run INSPECT_HIACC_LAYOUT.bat to inspect its actual paths; do not "
+                "download or extract it again."
             )
         (DATA_ROOT / "ATTRIBUTION.txt").write_text(
             "HiACC: Hinglish Adult & Children Code-switched corpus\n"
