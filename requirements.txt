@@ -15,6 +15,7 @@ numpy
 # Optional cloud provider and local configuration
 requests
 python-dotenv
+fasttext-wheel
 
 # IndicTrans2 offline translation fallback
 sentencepiece
