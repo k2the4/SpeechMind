@@ -131,6 +131,11 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         for label in UNIFIED_EMOTIONS
     }
     overall_emotion = _top_emotion(fused_scores)
+    text_top = _top_emotion(text_distribution) if text_available else None
+    voice_top = _top_emotion(voice_distribution) if voice_available else None
+    signals_agree = (
+        text_top == voice_top if text_available and voice_available else None
+    )
     interpretation = {
         "joy": "Positive and celebratory emotional expression",
         "sadness": "Sad or subdued emotional expression",
@@ -143,6 +148,12 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
     return {
         "text_emotion": text_result.get("emotion", "unavailable"),
         "voice_emotion": voice_result.get("emotion", "unavailable"),
+        "signals_agree": signals_agree,
+        "signal_agreement": (
+            "agree" if signals_agree is True
+            else "disagree" if signals_agree is False
+            else "single_branch"
+        ),
         "valence": VALENCE_MAP.get(overall_emotion, "Neutral"),
         "arousal": voice_result.get("arousal", "Unknown"),
         "confidence": round(fused_scores[overall_emotion], 3),
