@@ -6,6 +6,9 @@
 transformers==4.46.3
 accelerate
 openai-whisper
+# AI4Bharat IndicConformer custom inference code requires CPU ONNX Runtime.
+onnx==1.20.1
+onnxruntime==1.20.1
 
 # Audio processing and optional hosted ASR provider
 librosa
