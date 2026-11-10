@@ -242,6 +242,30 @@ def _speaker_metadata_map(extract_root: Path) -> dict[str, str]:
                             mapping[Path(match.group(0)).name.lower()] = speaker_id
         except (OSError, csv.Error):
             continue
+    # HiACC's speaker_info.csv maps participant IDs (PID) to demographics.
+    # Audio names begin with that PID, e.g. AD09001.wav -> AD09 and
+    # CH03006.wav -> CH03. Use this to enforce speaker-aware benchmark sampling.
+    audio_by_domain: dict[str, list[Path]] = {"adult": [], "children": []}
+    for audio_path in extract_root.rglob("*.wav"):
+        domain = _domain(audio_path.relative_to(extract_root).parts)
+        if domain in audio_by_domain:
+            audio_by_domain[domain].append(audio_path)
+
+    for info_path in extract_root.rglob("speaker_info.csv"):
+        domain = _domain(info_path.relative_to(extract_root).parts)
+        if domain not in audio_by_domain:
+            continue
+        try:
+            with info_path.open("r", encoding="utf-8-sig", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    pid = str(row.get("PID") or row.get("pid") or "").strip()
+                    if not pid:
+                        continue
+                    for audio_path in audio_by_domain[domain]:
+                        if audio_path.stem.upper().startswith(pid.upper()):
+                            mapping.setdefault(audio_path.name.lower(), pid)
+        except (OSError, csv.Error):
+            continue
     return mapping
 
 
