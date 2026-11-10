@@ -21,7 +21,9 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 MODEL_NAME = "google/muril-base-cased"
-LABELS = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]
+# HinEmo-9 does not annotate disgust; its Love, Nostalgia, and Devotion
+# categories are distinct and are not collapsed into the seven-way voice taxonomy.
+LABELS = ["joy", "sadness", "anger", "fear", "surprise", "neutral"]
 LABEL_TO_ID = {label: index for index, label in enumerate(LABELS)}
 ALIASES = {
     "joy": "joy", "happy": "joy", "happiness": "joy", "excited": "joy",
