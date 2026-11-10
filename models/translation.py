@@ -39,7 +39,7 @@ def _has_latin(text: str) -> bool:
 
 
 def is_code_mixed_script(text: str) -> bool:
-    return _has_devanagari(text) and _has_latin(text)
+    return has_devanagari(text) and _has_latin(text)
 
 
 class Translator:
@@ -162,23 +162,25 @@ class Translator:
                     return None
 
         if language in {"en", "english"} and not mixed_script:
-            # For Latin-only text, Romanized Hinglish can be indistinguishable
-            # from English from script alone. Do not call it a translation.
-            self.backend = "unchanged_or_romanized_unknown"
-            self.last_reason = (
-                "The transcript is Latin-script and may be English or Romanized "
-                "Hinglish. Configure Bodhan Indic-Translate to resolve code-mixed meaning."
-            )
-            return None
+            if looks_romanized_hindi(text):
+                self.backend = "romanized_hinglish_untranslated"
+                self.last_reason = (
+                    "The transcript appears to contain Romanized Hindi. "
+                    "Configure Bodhan Indic-Translate for code-mixed English meaning."
+                )
+                return None
+            self.backend = "identity-english"
+            self.last_reason = None
+            return text
 
-        if mixed_script or (language in FLORES_CODE and not _has_devanagari(text)):
+        if mixed_script or (language in FLORES_CODE and not has_devanagari(text)):
             self.last_reason = (
                 "The local IndicTrans2 fallback is not treated as a reliable "
                 "romanized/code-mixed translator. Configure Bodhan Indic-Translate."
             )
             return None
 
-        if language not in FLORES_CODE or not _has_devanagari(text):
+        if language not in FLORES_CODE or not has_devanagari(text):
             self.last_reason = (
                 "No compatible local translation route is available for this transcript."
             )
