@@ -175,7 +175,14 @@ class BodhanClient:
             raise BodhanAPIError(f"Bodhan transcription request failed: {error}") from error
 
         if response.status_code >= 400:
-            detail = response.text[:500]
+            try:
+                error = response.json().get("error", {})
+                detail = error.get("message") or error.get("code") or response.text[:500]
+                request_id = error.get("request_id")
+                if request_id:
+                    detail = f"{detail} (request_id={request_id})"
+            except (ValueError, AttributeError):
+                detail = response.text[:500]
             raise BodhanAPIError(
                 f"Bodhan transcription returned HTTP {response.status_code}: {detail}"
             )
@@ -233,7 +240,14 @@ class BodhanClient:
             raise BodhanAPIError(f"Bodhan translation request failed: {error}") from error
 
         if response.status_code >= 400:
-            detail = response.text[:500]
+            try:
+                error = response.json().get("error", {})
+                detail = error.get("message") or error.get("code") or response.text[:500]
+                request_id = error.get("request_id")
+                if request_id:
+                    detail = f"{detail} (request_id={request_id})"
+            except (ValueError, AttributeError):
+                detail = response.text[:500]
             raise BodhanAPIError(
                 f"Bodhan translation returned HTTP {response.status_code}: {detail}"
             )
