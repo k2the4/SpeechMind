@@ -44,11 +44,11 @@ From the SpeechMind root folder:
 .\BENCHMARK_ASR.bat
 ```
 
-The benchmark uses both recognizers when Bodhan is configured. Without an API key, only local Whisper is evaluated. Bodhan is not silently substituted for Whisper in the benchmark; an explicit Bodhan benchmark failure is reported as a skip/error.
+The benchmark uses both recognizers when Bodhan is configured. Without an API key, only local Whisper is evaluated. Bodhan is not silently substituted for Whisper in the benchmark; an explicit Bodhan benchmark failure is reported as a skip/error. Results are grouped overall, by the manifest's language column and by its split column. Mean ASR latency is reported as well.
 
 ## 4. Outputs
 
-- `training_outputs/asr_benchmark/metrics.json`: aggregate WER/CER by backend.
+- `training_outputs/asr_benchmark/metrics.json`: overall and per-language/per-split WER/CER plus latency by backend.
 - `training_outputs/asr_benchmark/predictions.csv`: source reference, model transcript, clip metadata and per-clip errors.
 
 WER and CER are calculated after Unicode normalization, lowercasing and punctuation removal. For mixed scripts, preserve the intended orthography in references. If evaluating transliteration equivalence, define a separate normalization protocol and report it separately; do not hide script errors by aggressive normalization.
