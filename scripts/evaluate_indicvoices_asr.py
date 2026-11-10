@@ -1,25 +1,23 @@
-"""Benchmark local SpeechMind ASR against an IndicVoices Hindi sample."""
+"""Benchmark local SpeechMind ASR against a bounded IndicVoices Hindi sample."""
 from __future__ import annotations
 
 import argparse
 import csv
 import json
 import os
+import statistics
 import sys
 import time
-import statistics
-from collections import defaultdict
+import unicodedata
+from collections import Counter, defaultdict
 from pathlib import Path
 
-# When this file is launched directly as
-#   python scripts/evaluate_indicvoices_asr.py
-# Python puts scripts/ (not the repository root) on sys.path. Add the
-# repository root before importing the top-level models/ and utils/ packages.
+# Make direct execution from scripts/ resolve top-level project packages.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Prevent an inherited shell environment from accidentally using a metered API.
+# The benchmark is local-only; never inherit a metered provider from the shell.
 os.environ["SPEECHMIND_ASR_PROVIDER"] = "local"
 
 from models.asr import SpeechRecognizer
@@ -41,6 +39,34 @@ def read_manifest(path: Path) -> list[dict]:
     return records
 
 
+def detect_script(text: str) -> str:
+    """Coarsely summarize Unicode scripts in ASR output (not language ID)."""
+    scripts = set()
+    for char in str(text or ""):
+        name = unicodedata.name(char, "")
+        if "DEVANAGARI" in name:
+            scripts.add("Devanagari")
+        elif "ARABIC" in name:
+            scripts.add("Arabic")
+        elif "LATIN" in name:
+            scripts.add("Latin")
+        elif "HIRAGANA" in name or "KATAKANA" in name or "CJK" in name:
+            scripts.add("CJK/Japanese")
+        elif "HANGUL" in name:
+            scripts.add("Hangul")
+    return "+".join(sorted(scripts)) if scripts else "empty_or_other"
+
+
+def duration_bucket(duration: float) -> str:
+    if duration < 1.0:
+        return "<1s"
+    if duration < 1.5:
+        return "1-1.5s"
+    if duration < 3.0:
+        return "1.5-3s"
+    return ">=3s"
+
+
 def transcribe_one(
     recognizer: SpeechRecognizer, audio, model: str
 ) -> tuple[str, str, bool, str | None]:
@@ -54,7 +80,9 @@ def transcribe_one(
         )
     if model == "whisper":
         raw = recognizer._decode_with_whisper(audio, language=None)
-        result = recognizer._whisper_result(raw, language_source="benchmark_whisper_auto")
+        result = recognizer._whisper_result(
+            raw, language_source="benchmark_whisper_auto"
+        )
         return str(result.get("transcript") or ""), "whisper-small", False, None
     if model == "indicconformer":
         result = recognizer._indic_result_with_whisper_fallback(audio, "hi")
@@ -73,24 +101,28 @@ def main() -> int:
     parser.add_argument(
         "--model", choices=("auto", "whisper", "indicconformer"), default="auto"
     )
-    parser.add_argument("--limit", type=int, default=0, help="Optional maximum number of records.")
+    parser.add_argument(
+        "--limit", type=int, default=0,
+        help="Optional maximum number of records; 0 evaluates the complete sample.",
+    )
     args = parser.parse_args()
 
-    manifest_path = args.sample_dir / "manifest.jsonl"
+    sample_dir = args.sample_dir.resolve()
+    manifest_path = sample_dir / "manifest.jsonl"
+    total_started = time.perf_counter()
     try:
         records = read_manifest(manifest_path)
         if args.limit > 0:
             records = records[:args.limit]
+        if not records:
+            raise ValueError("No benchmark records selected.")
 
         print(f"[ASR Benchmark] Model={args.model}; clips={len(records)}")
         print("[ASR Benchmark] Local inference only; no API provider is used.")
-        total_started = time.perf_counter()
+
         initialization_started = time.perf_counter()
         recognizer = SpeechRecognizer()
 
-        # The IndicConformer model is lazy-loaded. For Hindi-split benchmarking,
-        # warm it before timing individual clips so model loading/download time
-        # does not get attributed to the first recording.
         indicconformer_warmup_error = None
         if args.model in ("auto", "indicconformer"):
             print("[ASR Benchmark] Initializing IndicConformer before clip timing...")
@@ -100,8 +132,9 @@ def main() -> int:
                 indicconformer_warmup_error = f"{type(error).__name__}: {error}"
                 print(
                     "[ASR Benchmark] IndicConformer initialization failed; "
-                    "per-clip fallback will use Whisper where applicable."
+                    "the recognizer's Whisper fallback will be measured."
                 )
+
         initialization_seconds = time.perf_counter() - initialization_started
         print(
             f"[ASR Benchmark] Model initialization: {initialization_seconds:.1f}s "
@@ -113,9 +146,12 @@ def main() -> int:
         normalized_metrics = []
         verbatim_metrics = []
         scenario_groups = defaultdict(list)
+        duration_groups = defaultdict(list)
+        model_groups = defaultdict(list)
+        script_counts = Counter()
 
         for index, record in enumerate(records, start=1):
-            audio_path = args.sample_dir / record["audio_file"]
+            audio_path = sample_dir / record["audio_file"]
             if not audio_path.is_file():
                 raise FileNotFoundError(f"Missing audio file: {audio_path}")
 
@@ -136,16 +172,23 @@ def main() -> int:
             verbatim_result = error_counts(verbatim_reference, hypothesis)
             normalized_metrics.append(normalized_result)
             verbatim_metrics.append(verbatim_result)
+
             scenario = str(record.get("scenario") or "unknown")
+            duration = float(record.get("duration") or 0.0)
+            output_script = detect_script(hypothesis)
             scenario_groups[scenario].append(normalized_result)
+            duration_groups[duration_bucket(duration)].append(normalized_result)
+            model_groups[actual_model].append(normalized_result)
+            script_counts[output_script] += 1
 
             rows.append({
                 "sample_id": record.get("sample_id"),
                 "speaker_id": record.get("speaker_id"),
                 "scenario": scenario,
-                "duration_seconds": record.get("duration"),
+                "duration_seconds": duration,
                 "model_requested": args.model,
                 "model_used": actual_model,
+                "hypothesis_script": output_script,
                 "asr_fallback": used_fallback,
                 "asr_fallback_reason": fallback_reason,
                 "reference_normalized": normalized_reference,
@@ -159,13 +202,17 @@ def main() -> int:
             })
 
             if index % 5 == 0 or index == len(records):
+                current_wer = aggregate_error_counts(normalized_metrics)["wer"]
                 print(
                     f"[ASR Benchmark] {index}/{len(records)} complete; "
-                    f"last={inference_seconds:.1f}s; "
-                    f"WER so far={aggregate_error_counts(normalized_metrics)['wer']:.3f}"
+                    f"last={inference_seconds:.1f}s; WER so far={current_wer:.3f}"
                 )
 
-        output_dir = args.sample_dir / "benchmarks" / args.model
+        clip_elapsed = time.perf_counter() - inference_started
+        elapsed = time.perf_counter() - total_started
+        inference_values = [row["inference_seconds"] for row in rows]
+
+        output_dir = sample_dir / "benchmarks" / args.model
         output_dir.mkdir(parents=True, exist_ok=True)
         csv_path = output_dir / "predictions.csv"
         with csv_path.open("w", encoding="utf-8-sig", newline="") as handle:
@@ -173,9 +220,6 @@ def main() -> int:
             writer.writeheader()
             writer.writerows(rows)
 
-        clip_elapsed = time.perf_counter() - inference_started
-        elapsed = time.perf_counter() - total_started
-        inference_values = [row["inference_seconds"] for row in rows]
         summary = {
             "dataset": "ai4bharat/IndicVoices",
             "config": "hindi",
@@ -183,12 +227,26 @@ def main() -> int:
             "model_requested": args.model,
             "samples": len(rows),
             "fallback_count": sum(1 for row in rows if row["asr_fallback"]),
-            "unique_speakers": len({row["speaker_id"] for row in rows}),
+            "unique_speakers": len({
+                row["speaker_id"] for row in rows if row["speaker_id"]
+            }),
+            "models_used": {
+                model: {
+                    "samples": len(group),
+                    "metrics": aggregate_error_counts(group),
+                }
+                for model, group in model_groups.items()
+            },
+            "hypothesis_script_counts": dict(script_counts),
             "normalized_reference_metrics": aggregate_error_counts(normalized_metrics),
             "verbatim_reference_metrics": aggregate_error_counts(verbatim_metrics),
             "by_scenario": {
-                scenario: aggregate_error_counts(group)
-                for scenario, group in scenario_groups.items()
+                key: aggregate_error_counts(group)
+                for key, group in scenario_groups.items()
+            },
+            "by_duration": {
+                key: aggregate_error_counts(group)
+                for key, group in duration_groups.items()
             },
             "model_initialization_seconds": round(initialization_seconds, 3),
             "indicconformer_warmup_error": indicconformer_warmup_error,
@@ -204,8 +262,9 @@ def main() -> int:
             "notes": [
                 "WER and CER are computed after NFKC normalization, lowercasing, punctuation removal, and whitespace collapse.",
                 "Normalized and verbatim references are reported separately.",
+                "Model initialization is reported separately from per-clip inference.",
+                "Output script breakdown is a Unicode-script diagnostic, not language identification.",
                 "This is ASR evaluation only; IndicVoices has no emotion labels in this manifest.",
-                "Model initialization is reported separately from per-clip inference time.",
                 "Metrics apply only to this bounded Hindi validation sample, not to Hinglish or all Indian languages.",
             ],
         }
