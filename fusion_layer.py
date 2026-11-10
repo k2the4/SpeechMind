@@ -1,20 +1,26 @@
 """
-SpeechMind late-fusion layer.
+SpeechMind multimodal fusion.
 
-Unavailable or untrained branches are excluded rather than treated as
-neutral predictions. The returned top score is an uncalibrated model score,
-not a probability that the prediction is correct.
+Text emotion preserves the nine-label Hinglish taxonomy. Voice emotion retains
+the seven categories represented by the current acoustic training data. The
+fusion stage does not invent voice evidence for text-only labels such as Love,
+Nostalgia or Devotion; it combines available distributions and records the
+individual branch outputs.
 """
 
-UNIFIED_EMOTIONS = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]
+UNIFIED_EMOTIONS = [
+    "love", "joy", "anger", "sadness", "fear",
+    "surprise", "nostalgia", "devotion", "disgust", "neutral",
+]
 DEFAULT_TEXT_WEIGHT = 0.60
 DEFAULT_VOICE_WEIGHT = 0.40
 UNKNOWN_ASR_TEXT_WEIGHT = 0.30
 ASR_CONFIDENCE_LOW_THRESHOLD = 0.60
 
 TEXT_TO_UNIFIED = {
+    "love": "love",
     "joy": "joy", "happy": "joy", "happiness": "joy", "excited": "joy",
-    "excitement": "joy", "love": "joy", "gratitude": "joy", "grateful": "joy",
+    "excitement": "joy", "gratitude": "joy", "grateful": "joy",
     "optimism": "joy", "optimistic": "joy", "amusement": "joy", "celebration": "joy",
     "sad": "sadness", "sadness": "sadness", "grief": "sadness",
     "disappointment": "sadness", "disappointed": "sadness", "remorse": "sadness",
@@ -24,6 +30,8 @@ TEXT_TO_UNIFIED = {
     "anxiety": "fear", "worried": "fear", "worry": "fear", "concern": "fear",
     "confusion": "fear",
     "surprise": "surprise", "surprised": "surprise",
+    "nostalgia": "nostalgia",
+    "devotion": "devotion",
     "disgust": "disgust", "disgusted": "disgust",
     "neutral": "neutral", "calm": "neutral",
 }
@@ -37,8 +45,15 @@ VOICE_TO_UNIFIED = {
     "neutral": "neutral", "calm": "neutral",
 }
 VALENCE_MAP = {
-    "joy": "Positive", "sadness": "Negative", "anger": "Negative",
-    "fear": "Negative", "surprise": "Neutral", "disgust": "Negative",
+    "love": "Positive",
+    "joy": "Positive",
+    "anger": "Negative",
+    "sadness": "Negative",
+    "fear": "Negative",
+    "surprise": "Neutral",
+    "nostalgia": "Mixed",
+    "devotion": "Positive",
+    "disgust": "Negative",
     "neutral": "Neutral",
 }
 
@@ -54,7 +69,10 @@ def _normalize_distribution(distribution):
             continue
         cleaned[str(label).lower()] = value
     total = sum(cleaned.values())
-    return {label: value / total for label, value in cleaned.items()} if total > 0 else {}
+    return (
+        {label: value / total for label, value in cleaned.items()}
+        if total > 0 else {}
+    )
 
 
 def _get_distribution(result):
@@ -78,7 +96,10 @@ def _map_distribution(distribution, mapping):
         if target is not None:
             unified[target] += probability
     total = sum(unified.values())
-    return {label: value / total for label, value in unified.items()} if total > 0 else {}
+    return (
+        {label: value / total for label, value in unified.items()}
+        if total > 0 else {}
+    )
 
 
 def _top_emotion(distribution):
@@ -86,11 +107,10 @@ def _top_emotion(distribution):
 
 
 def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
-    """Fuse the text/voice distributions using ASR token-quality as a weight hint.
+    """Fuse text/voice distributions using the available ASR quality indicator.
 
-    asr_confidence is retained as a compatibility name. For Whisper it is an
-    uncalibrated token-quality heuristic, not transcript correctness. If the
-    decoder exposes no quality score, text receives a conservative 0.30 weight.
+    Scores remain uncalibrated. Text-only categories remain available in the
+    combined distribution but receive no fabricated vocal probability.
     """
     quality_available = asr_confidence is not None
     if quality_available:
@@ -101,15 +121,19 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
     if quality_available:
         asr_confidence = max(0.0, min(1.0, asr_confidence))
 
-    text_available = bool(text_result.get("available", True))
-    voice_available = bool(voice_result.get("available", True))
-    text_distribution = _map_distribution(_get_distribution(text_result), TEXT_TO_UNIFIED)
-    voice_distribution = _map_distribution(_get_distribution(voice_result), VOICE_TO_UNIFIED)
+    text_distribution = _map_distribution(
+        _get_distribution(text_result), TEXT_TO_UNIFIED
+    )
+    voice_distribution = _map_distribution(
+        _get_distribution(voice_result), VOICE_TO_UNIFIED
+    )
+    text_available = bool(text_result.get("available", True)) and bool(text_distribution)
+    voice_available = bool(voice_result.get("available", True)) and bool(voice_distribution)
 
-    text_available = text_available and bool(text_distribution)
-    voice_available = voice_available and bool(voice_distribution)
     if not text_available and not voice_available:
-        raise ValueError("Fusion cannot run: both emotion branches are unavailable or returned unmapped labels.")
+        raise ValueError(
+            "Fusion cannot run: both emotion branches are unavailable or returned unmapped labels."
+        )
 
     if text_available and voice_available:
         if not quality_available:
@@ -126,17 +150,22 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         text_weight, voice_weight = 1.0, 0.0
 
     fused_scores = {
-        label: text_weight * text_distribution.get(label, 0.0)
-        + voice_weight * voice_distribution.get(label, 0.0)
+        label: (
+            text_weight * text_distribution.get(label, 0.0)
+            + voice_weight * voice_distribution.get(label, 0.0)
+        )
         for label in UNIFIED_EMOTIONS
     }
     overall_emotion = _top_emotion(fused_scores)
     interpretation = {
+        "love": "Affectionate or loving emotional expression in the words",
         "joy": "Positive and celebratory emotional expression",
-        "sadness": "Sad or subdued emotional expression",
         "anger": "Angry or frustrated emotional expression",
-        "fear": "Concerned, nervous, or fear-like emotional expression",
+        "sadness": "Sad or hurt emotional expression",
+        "fear": "Concerned, nervous or fear-like emotional expression",
         "surprise": "Surprised or unexpected emotional expression",
+        "nostalgia": "Bittersweet longing or fond remembrance",
+        "devotion": "Reverential or devotional emotional expression",
         "disgust": "Disapproving or disgust-like emotional expression",
         "neutral": "Neutral or emotionally subdued expression",
     }
@@ -147,13 +176,25 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         "arousal": voice_result.get("arousal", "Unknown"),
         "confidence": round(fused_scores[overall_emotion], 3),
         "confidence_is_calibrated": False,
-        "overall_interpretation": interpretation.get(overall_emotion, "Neutral emotional expression"),
+        "overall_interpretation": interpretation.get(
+            overall_emotion, "Neutral emotional expression"
+        ),
         "low_confidence_warning": (
-            not quality_available or asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD
+            not quality_available
+            or asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD
         ),
         "overall_emotion": overall_emotion,
-        "fusion_weights": {"text": round(text_weight, 3), "voice": round(voice_weight, 3)},
+        "fusion_weights": {
+            "text": round(text_weight, 3),
+            "voice": round(voice_weight, 3),
+        },
         "text_distribution": text_distribution,
         "voice_distribution": voice_distribution,
         "fused_distribution": fused_scores,
+        "branch_agreement": (
+            "agree"
+            if text_available and voice_available
+            and text_result.get("emotion") == voice_result.get("emotion")
+            else "different_or_unavailable"
+        ),
     }
