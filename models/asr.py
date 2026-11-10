@@ -1,13 +1,11 @@
 """
-SpeechMind ASR and language identification.
+SpeechMind local ASR and primary-language identification.
 
-The default local provider retains Whisper/IndicConformer compatibility.
-An optional Bodhan API provider is available for code-mixed Indian speech.
-The hosted provider is opt-in because it sends audio to a third party and is
-metered. Whisper's language detector supplies only a primary-language hint;
-it does not describe all language switches in the utterance.
+Hindi currently uses IndicConformer when Whisper's primary-language detector
+recognizes Hindi. English and other routes retain Whisper Small. This is an
+interim local baseline; code-mixed Hindi-English recognition is being evaluated
+separately with Srota rather than routing mixed speech by a single language ID.
 """
-import os
 
 import torch
 import whisper
