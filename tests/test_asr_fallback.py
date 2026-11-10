@@ -28,7 +28,10 @@ class IndicConformerFallbackTests(unittest.TestCase):
         ]
         self.assertEqual(len(fallback_methods), 1)
         method = fallback_methods[0]
-        has_handler = bool(method.handlers)
+        has_handler = any(
+            isinstance(node, ast.Try) and bool(node.handlers)
+            for node in ast.walk(method)
+        )
         calls_whisper = any(
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
