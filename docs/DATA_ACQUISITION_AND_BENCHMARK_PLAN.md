@@ -1,66 +1,79 @@
 # SpeechMind data acquisition and benchmark plan
 
-This document records the data sources to evaluate for the fixed SpeechMind objective. Do not download every dataset in bulk. Start with the smallest directly relevant evaluation set, verify its access terms, and preserve a held-out test split.
+**Cost rule:** SpeechMind development must use free-to-access datasets and local/open-source tools. Do not purchase a dataset, physical media, API subscription, or hosted inference service without explicit approval. Never download a multi-hundred-gigabyte archive merely because it is available.
 
-## Priority 1 — IITG-HingCoS (Hindi-English code-switching ASR)
+## Priority 1 — IndicVoices (free gated access; natural Indian speech)
 
-Official project page:
-https://www.iitg.ac.in/eee/emstlab/HingCoS_Database/HingCoS.html
-
-The IIT Guwahati EMST Lab page describes 25,988 Hinglish text sentences and 25 hours of matching speech for 9,251 code-switched sentences, recorded in realistic environments using landline and mobile phones. The page provides a database request link rather than an unrestricted direct download.
-
-Why this is first:
-- It directly targets Hindi-English code-switching.
-- It contains paired speech and transcripts.
-- It is a much more manageable starting point than multi-hundred-gigabyte corpora.
-
-Action:
-1. Open the official page.
-2. Use its database request link and follow the lab's access process.
-3. Keep the original archive and accompanying transcript/metadata unchanged.
-4. After access is granted, inspect the archive layout before running any preparation script. Do not assume a folder or annotation format before seeing the files.
-5. Keep speaker identities available so train/validation/test splits can be speaker-disjoint.
-
-Do not publish the corpus or redistribute its audio. Follow the provider's access and usage terms.
-
-## Priority 2 — IndicVoices (natural Indian speech)
-
-Official dataset card:
+Official dataset:
 https://huggingface.co/datasets/ai4bharat/IndicVoices
 
-The dataset card describes 23.7K hours from approximately 51K speakers across 22 Indian languages, including read, extempore, and conversational speech. It reports 11.2K hours transcribed as of 23 December 2025 and a CC BY 4.0 license. Hugging Face access is gated/approval-based. The full-length audio archives total approximately 745 GB.
+License: CC BY 4.0, subject to the dataset card and access terms.
 
-Why it matters:
-- It adds natural Indian speech and speaker/accent diversity.
-- It can support ASR benchmarking and language coverage work.
-- It is not an emotion-labelled corpus and must not be treated as one.
+The dataset card describes 23.7K hours of read, extempore, and conversational audio from approximately 51K speakers across 22 Indian languages. It reports 11.2K hours transcribed as of 23 December 2025. The Hugging Face repository is gated, which means a user must sign in and accept/request access. Gated access is not the same as a paid purchase; the current card provides a browser-based access flow. The repository also lists a very large total size (approximately 745 GB), so do not download all files.
 
-Action:
-1. Request access through the Hugging Face dataset page.
-2. Start with one language and a small validation slice, not all 745 GB.
-3. Prefer the curated Hugging Face metadata/transcribed split initially.
-4. Download full-length archives only if a specific experiment requires them.
-5. Respect CC BY 4.0 attribution and any access requirements.
+### How to access without paying
+
+1. Create or sign in to a free Hugging Face account: https://huggingface.co/join
+2. Open https://huggingface.co/datasets/ai4bharat/IndicVoices
+3. On the dataset page, click the access/agree button (wording may be "Agree and access repository" or "Request access").
+4. Review and accept the dataset conditions. If the request is automatically approved, the page will show that access is granted. If manual approval is required, wait for the dataset owner.
+5. Do not download the full-length audio archives (v1–v5). Start with the curated dataset configuration and validation split, and use streaming or a small capped sample for schema inspection.
+
+For Python access, create a read-only Hugging Face access token from https://huggingface.co/settings/tokens. On the SpeechMind PC, authenticate once with:
+
+```powershell
+hf auth login
+```
+
+Paste the token only into the interactive prompt. Do not commit it, put it in a script, or send it in chat.
+
+The dataset card's example uses:
+
+```python
+from datasets import load_dataset
+dataset = load_dataset(
+    "ai4bharat/IndicVoices",
+    "assamese",
+    split="valid",
+    streaming=True,
+)
+first_record = next(iter(dataset))
+print(dataset)
+print(first_record.keys())
+```
+
+For SpeechMind, inspect the available configurations and splits before choosing Hindi. Begin with a small validation sample to inspect the audio and JSON metadata fields. The dataset card's total size refers to the overall repository; the project must not pull all 745 GB. Use only a bounded sample for the first benchmark and record exactly which subset was used.
+
+IndicVoices is natural speech and useful for ASR/language coverage. It is not an emotion-labelled dataset and must not be used as voice/text emotion ground truth.
+
+## Priority 2 — Free Hindi-English code-switching evaluation
+
+IITG-HingCoS is a directly relevant Hindi-English code-switching corpus, but the official request page currently lists a paid physical-media charge of INR 50,000 plus GST for Indian organizations. This project will NOT purchase it. It is excluded unless the provider later offers a free academic/research access route in writing.
+
+Official information page:
+https://www.iitg.ac.in/eee/emstlab/HingCoS_Database/HingCoS.html
+
+Until a free paired Hinglish corpus is secured, build a small consent-based evaluation set from recordings created specifically for this project, with manually checked transcripts and speaker-disjoint splits. Clearly label it as an internal evaluation set, not a public benchmark.
 
 ## Existing voice-emotion data already used
 
 - CREMA-D: 7,442 acted English utterances.
 - RAVDESS: 1,440 acted English utterances used in the current training run.
 
-These datasets remain useful for reproducing the current WavLM baseline and checking the training pipeline. They do not establish performance on natural Indian speech or Hinglish.
+These datasets are already part of the local SpeechMind setup and remain useful for reproducing the WavLM baseline. They do not establish performance on natural Indian speech or Hinglish.
 
 ## Text-emotion data
 
-A Hindi-English code-mixed text-emotion dataset called HinEmo-9 has been identified as a possible research candidate in prior research. Its exact canonical repository, license, annotation provenance, and download availability have not yet been verified for this project. Do not download or train on an assumed similarly named repository.
+A suitable, openly licensed, human-annotated Hindi-English code-mixed emotion corpus has not yet been verified for this project. Do not assume that a similarly named dataset is the correct one. Before using any third-party corpus, verify the canonical repository, license, annotation provenance, label definitions, and split design.
 
-Before using any third-party emotion dataset, verify the exact dataset repository, annotation scheme, license, split design, and whether labels are human-annotated or model-generated. Social-media text is not equivalent to spontaneous spoken dialogue. Use human-annotated examples for primary evaluation.
+Social-media text is not equivalent to spontaneous spoken dialogue. Keep semantic emotion and vocal emotion datasets separate unless labels and collection conditions justify a controlled mapping.
 
 ## Benchmark protocol
 
 For each ASR candidate:
 1. Use the same held-out audio clips and reference transcripts.
 2. Normalize text consistently before WER/CER calculation, while preserving a second raw metric.
-3. Report overall WER/CER and separate Hindi, English, and code-switch slices.
+3. Report overall WER/CER and separate Hindi, English, and code-switch slices where available.
 4. Inspect code-switch boundaries, English entity preservation, numbers, negation, and named entities.
 5. Keep speakers disjoint across splits where speaker IDs exist.
 6. Keep synthetic audio out of the natural-speech test set.
@@ -75,9 +88,9 @@ For translation:
 For emotion:
 - Do not infer emotion labels from ASR confidence.
 - Keep text and voice annotations separate.
-- Use the same seven-class taxonomy only when the source annotation can be mapped reliably.
+- Use the shared seven-class taxonomy only when source annotations can be mapped reliably.
 - Record annotator disagreement and ambiguous examples instead of forcing a label.
 
-## Current next action
+## Immediate next action
 
-Obtain IITG-HingCoS access first. Once the archive is available locally, provide the archive/folder or its file listing. Then add a preparation script against the actual schema, a reproducible ASR benchmark runner, and Windows batch launchers. No dataset downloader is included yet because the first corpus requires access approval and its received archive structure must be inspected rather than guessed.
+Use the free Hugging Face access route for IndicVoices. Start with a small Hindi validation subset (streamed, not bulk-downloaded) after inspecting the available configuration names and schema. Then implement a bounded dataset inspection/download script and ASR benchmark runner with Windows launchers. No paid dataset or API is required for this plan.
