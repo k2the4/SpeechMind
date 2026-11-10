@@ -19,6 +19,18 @@ class HiACCPreparationTests(unittest.TestCase):
         self.assertEqual(_domain(("HiACC", "Children", "transcripts", "val")), "children")
         self.assertEqual(_split(("Adult", "audio", "train", "a.wav")), "train")
         self.assertEqual(_split(("Children", "transcripts", "validation")), "val")
+        self.assertEqual(
+            _split(("Corpus", "adult", "audio", "test_split", "AD09001.wav")),
+            "test",
+        )
+        self.assertEqual(
+            _split(("Corpus", "adult", "audio", "train_split", "AD09002.wav")),
+            "train",
+        )
+        self.assertEqual(
+            _split(("Corpus", "children", "audio", "val_split", "CH03004.wav")),
+            "val",
+        )
         self.assertEqual(_split(("Adult", "Audio", "Training_Data", "a.wav")), "train")
         self.assertEqual(_split(("Adult", "Audio", "Testing", "a.wav")), "test")
         self.assertEqual(_split(("Adult", "Audio", "validation_set", "a.wav")), "val")
@@ -51,6 +63,21 @@ class HiACCPreparationTests(unittest.TestCase):
             path.write_text("आज I went to college", encoding="utf-8")
             rows = _parse_transcript_file(path)
             self.assertEqual(rows, [("sample_001.wav", "आज I went to college")])
+
+    def test_hiacc_adult_transcription_line_format(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "combined_output_changed_test_output.txt"
+            path.write_text(
+                "AD30129.wav, जब वो गुफा तक पहुँचे\\n"
+                "AD21007.wav, better की hometown पर रहो और बाकी feel करो",
+                encoding="utf-8",
+            )
+            rows = _parse_transcript_file(path)
+            self.assertEqual(rows[0], ("AD30129.wav", "जब वो गुफा तक पहुँचे"))
+            self.assertEqual(
+                rows[1],
+                ("AD21007.wav", "better की hometown पर रहो और बाकी feel करो"),
+            )
 
     def test_zip_extraction_rejects_path_traversal(self):
         import zipfile
