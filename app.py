@@ -14,7 +14,7 @@ st.set_page_config(page_title="SpeechMind", page_icon="🎙️", layout="centere
 st.title("SpeechMind")
 st.caption("Multilingual Speech, Meaning and Emotion Recognition — for Indian languages")
 st.warning(
-    "This system identifies emotional and stress-like vocal patterns only. "
+    "SpeechMind estimates emotion expressed in words and vocal delivery. "
     "It does not diagnose anxiety, depression, or any medical or psychological condition."
 )
 
@@ -99,7 +99,7 @@ if audio_source is not None:
             with right:
                 st.metric("Fusion score (uncalibrated)", f"{result['confidence'] * 100:.1f}%")
                 st.metric("Voice Emotion", result["voice_emotion"].title())
-                st.metric("Arousal", result["arousal"])
+                st.metric("Vocal activation (heuristic)", result["arousal"])
 
             quality = result.get("asr_quality_score")
             if quality is not None:
@@ -117,7 +117,13 @@ if audio_source is not None:
             st.subheader("Transcript (original language)")
             st.write(result["transcript"] or "No transcript was produced.")
             st.subheader("Meaning (English)")
-            st.write(result["meaning_en"] or "No translation was produced.")
+            if result.get("translation_available", False):
+                st.write(result["meaning_en"])
+            else:
+                st.warning(
+                    result.get("translation_reason")
+                    or "English meaning conversion is unavailable in the current mode."
+                )
             st.subheader("Overall Interpretation")
             st.write(result["overall_interpretation"])
 
@@ -149,6 +155,9 @@ if audio_source is not None:
                     "voice_inference_device": result.get("voice_inference_device"),
                     "voice_inference_windows": result.get("voice_inference_windows"),
                     "voice_validation_macro_f1": result.get("voice_validation_macro_f1"),
+                    "arousal_method": result.get("arousal_method"),
+                    "translation_available": result.get("translation_available"),
+                    "translation_reason": result.get("translation_reason"),
                     "fusion_weights": result.get("fusion_weights"),
                     "translation_provider": result.get("translation_provider"),
                     "cloud_processing_enabled": result.get("cloud_processing_enabled"),
