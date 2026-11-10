@@ -7,6 +7,7 @@ from scripts.prepare_hiacc_dataset import (
     _domain,
     _parse_transcript_file,
     _speaker_from_name,
+    _speaker_metadata_map,
     _split,
     safe_extract,
 )
@@ -58,6 +59,26 @@ class HiACCPreparationTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Unsafe path"):
                 safe_extract(archive, root / "out")
 
+
+
+    def test_speaker_metadata_is_joined_by_audio_filename(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            metadata = root / "Adult" / "metadata"
+            metadata.mkdir(parents=True)
+            stats = metadata / "sentence_stats.csv"
+            with stats.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle, fieldnames=["audio_file", "speaker_id", "word_count"]
+                )
+                writer.writeheader()
+                writer.writerow({
+                    "audio_file": "Adult/audio/test/clip_001.wav",
+                    "speaker_id": "ADULT_07",
+                    "word_count": 8,
+                })
+            mapping = _speaker_metadata_map(root)
+            self.assertEqual(mapping["clip_001.wav"], "ADULT_07")
 
 if __name__ == "__main__":
     unittest.main()
