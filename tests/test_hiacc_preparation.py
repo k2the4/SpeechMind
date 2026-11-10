@@ -91,6 +91,24 @@ class HiACCPreparationTests(unittest.TestCase):
 
 
 
+    def test_speaker_info_pid_maps_audio_filename_prefix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            audio_dir = root / "Corpus" / "adult" / "audio" / "test_split"
+            audio_dir.mkdir(parents=True)
+            (audio_dir / "AD09001.wav").write_bytes(b"")
+            (audio_dir / "AD09002.wav").write_bytes(b"")
+            info_dir = root / "Corpus" / "adult" / "metadata"
+            info_dir.mkdir(parents=True)
+            info = info_dir / "speaker_info.csv"
+            info.write_text(
+                "PID,Gender,Age,L1\\nAD09,F,36,Hindi\\n",
+                encoding="utf-8",
+            )
+            mapping = _speaker_metadata_map(root)
+            self.assertEqual(mapping["ad09001.wav"], "AD09")
+            self.assertEqual(mapping["ad09002.wav"], "AD09")
+
     def test_speaker_metadata_is_joined_by_audio_filename(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
