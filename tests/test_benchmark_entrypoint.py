@@ -74,5 +74,27 @@ class BenchmarkEntrypointTests(unittest.TestCase):
         content = launcher.read_text(encoding="utf-8")
         self.assertIn("--model indicconformer", content)
 
+
+    def test_benchmark_reports_script_and_duration_diagnostics(self):
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "evaluate_indicvoices_asr.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("def detect_script(", source)
+        self.assertIn("def duration_bucket(", source)
+        self.assertIn('"hypothesis_script": output_script', source)
+        self.assertIn('"hypothesis_script_counts": dict(script_counts)', source)
+        self.assertIn('"by_duration":', source)
+
+    def test_forced_whisper_launcher_exists(self):
+        root = Path(__file__).resolve().parents[1]
+        launcher = root / "BENCHMARK_INDICVOICES_HINDI_WHISPER.bat"
+        self.assertTrue(launcher.is_file())
+        self.assertIn(
+            "--model whisper",
+            launcher.read_text(encoding="utf-8"),
+        )
+
 if __name__ == "__main__":
     unittest.main()
