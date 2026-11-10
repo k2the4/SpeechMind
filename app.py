@@ -1,5 +1,5 @@
 """
-SpeechMind - Streamlit demo.
+SpeechMind — automatic multilingual speech understanding.
 Run with: streamlit run app.py
 """
 import os
@@ -11,10 +11,12 @@ from pipeline import SpeechMindPipeline
 
 st.set_page_config(page_title="SpeechMind", page_icon="🎙️", layout="centered")
 st.title("SpeechMind")
-st.caption("Multilingual Speech, Meaning and Emotion Recognition — for Indian languages")
+st.caption(
+    "Understand natural Indian speech — English, Hindi, Hinglish and selected Indian languages."
+)
 st.warning(
-    "This system identifies emotional and stress-like vocal patterns only. "
-    "It does not diagnose anxiety, depression, or any medical or psychological condition."
+    "SpeechMind describes linguistic and vocal patterns. It does not diagnose "
+    "anxiety, depression, or any medical or psychological condition."
 )
 
 
@@ -23,43 +25,13 @@ def get_pipeline():
     return SpeechMindPipeline()
 
 
-LANGUAGE_OPTIONS = {
-    "Auto-detect": None,
-    "English": "en",
-    "Assamese": "as",
-    "Bengali": "bn",
-    "Bodo": "brx",
-    "Dogri": "doi",
-    "Gujarati": "gu",
-    "Hindi": "hi",
-    "Kannada": "kn",
-    "Kashmiri": "ks",
-    "Konkani": "kok",
-    "Maithili": "mai",
-    "Malayalam": "ml",
-    "Manipuri": "mni",
-    "Marathi": "mr",
-    "Nepali": "ne",
-    "Odia": "or",
-    "Punjabi": "pa",
-    "Sanskrit": "sa",
-    "Santali": "sat",
-    "Sindhi": "sd",
-    "Tamil": "ta",
-    "Telugu": "te",
-    "Urdu": "ur",
-}
-
-selected_language = st.selectbox(
-    "Speech language",
-    options=list(LANGUAGE_OPTIONS),
-    index=0,
-    help="For short clips or unclear accents, select the language being spoken instead of relying on automatic detection.",
+st.caption(
+    "No language selection is needed. Speak naturally; SpeechMind attempts to "
+    "recognize the languages used in your recording."
 )
-language_hint = LANGUAGE_OPTIONS[selected_language]
 
 uploaded_file = st.file_uploader(
-    "Upload a short audio clip (WAV/MP3/M4A), or record one below",
+    "Upload an audio clip (WAV/MP3/M4A), or record one below",
     type=["wav", "mp3", "m4a"],
 )
 recorded_audio = st.audio_input("Or record directly")
@@ -81,7 +53,9 @@ if audio_source is not None:
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
-                result = pipeline.run(tmp_path, language_hint=language_hint)
+                # Always use automatic language identification. The UI must not
+                # force users to label naturally code-mixed speech.
+                result = pipeline.run(tmp_path)
                 result["model_init_time_sec"] = model_init_time
         except Exception as error:
             st.error(f"Analysis failed: {error}")
@@ -95,49 +69,68 @@ if audio_source is not None:
                     pass
 
         if result is not None:
-            if result["low_confidence_warning"]:
-                st.info(
-                    "Speech-recognition quality is low or unavailable. The final result "
-                    "relied more heavily on the voice signal."
-                )
-            if not result.get("text_emotion_available", False):
-                st.warning(
-                    "Text-emotion analysis is unavailable for this language. "
-                    + str(result.get("text_emotion_reason") or "")
-                )
+            st.subheader("Transcript (original speech)")
+            st.write(result.get("transcript") or "No transcript was produced.")
 
-            left, right = st.columns(2)
-            with left:
-                st.metric("Language", result["language"].upper())
-                st.metric("Text Emotion", result["text_emotion"].title())
-                st.metric("Valence", result["valence"])
-            with right:
-                st.metric("Fusion score (uncalibrated)", f"{result['confidence'] * 100:.1f}%")
-                st.metric("Voice Emotion", result["voice_emotion"].title())
-                st.metric("Arousal", result["arousal"])
+            st.subheader("Meaning (English)")
+            st.write(result.get("meaning_en") or "English meaning is unavailable.")
+
+            st.caption(
+                "Detected primary language: "
+                + str(result.get("language", "unknown")).upper()
+                + ". Mixed-language span detection is still being developed."
+            )
 
             quality = result.get("asr_quality_score")
             if quality is not None:
                 st.caption(
-                    f"ASR token-quality heuristic: {quality * 100:.1f}% "
-                    "(not a probability that the transcript is correct)."
+                    f"ASR token-quality indicator: {quality * 100:.1f}% "
+                    "(uncalibrated; not a probability that the transcript is correct)."
                 )
             else:
-                st.caption("ASR quality score is unavailable for this decoder.")
+                st.caption("ASR quality information is unavailable for this decoder.")
 
+            if result.get("low_confidence_warning"):
+                st.info(
+                    "Transcription quality is uncertain. SpeechMind has reduced "
+                    "the influence of the text branch where possible."
+                )
+
+            st.divider()
+            st.subheader("Text analysis")
+            st.metric("Semantic emotion", str(result.get("text_emotion", "unavailable")).title())
+            if not result.get("text_emotion_available", False):
+                st.warning(
+                    "Text-emotion analysis is unavailable. "
+                    + str(result.get("text_emotion_reason") or "")
+                )
+
+            st.subheader("Voice analysis")
+            voice_col, arousal_col = st.columns(2)
+            with voice_col:
+                st.metric("Vocal emotion", str(result.get("voice_emotion", "unavailable")).title())
+            with arousal_col:
+                st.metric("Arousal", str(result.get("arousal", "unknown")))
+
+            st.divider()
+            st.subheader("Combined interpretation")
+            st.write(result.get("overall_interpretation", "Combined interpretation unavailable."))
             st.caption(
-                "The fusion score is not a calibrated probability of correctness. "
-                "Predictions are experimental until validated on held-out, real-world data."
+                "The fusion score is an uncalibrated model score, not a probability "
+                "of correctness. Predictions remain experimental until validated on "
+                "representative held-out Indian speech."
             )
-            st.subheader("Transcript (original language)")
-            st.write(result["transcript"] or "No transcript was produced.")
-            st.subheader("Meaning (English)")
-            st.write(result["meaning_en"] or "No translation was produced.")
-            st.subheader("Overall Interpretation")
-            st.write(result["overall_interpretation"])
+            st.metric(
+                "Combined model score (uncalibrated)",
+                f"{float(result.get('confidence', 0.0)) * 100:.1f}%",
+            )
+            st.metric("Valence", str(result.get("valence", "unknown")))
 
             with st.expander("Performance timings and diagnostics"):
-                st.write(f"Model initialization on this click: {result['model_init_time_sec']} s")
+                st.write(
+                    f"Model initialization on this click: "
+                    f"{result.get('model_init_time_sec', 0.0)} s"
+                )
                 st.json({
                     "stage_timings_sec": result.get("timings_sec", {}),
                     "asr_model": result.get("asr_model"),
@@ -158,7 +151,7 @@ if audio_source is not None:
                     "fusion_weights": result.get("fusion_weights"),
                     "translator_loaded": result.get("translator_loaded"),
                     "translator_error": result.get("translator_error"),
+                    "full_result": result,
                 })
-                st.json(result)
 else:
     st.info("Upload or record an audio clip to get started.")
