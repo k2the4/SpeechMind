@@ -1,4 +1,5 @@
 ﻿# Python environment
+.venv_srota/
 .venv/
 venv/
 env/
