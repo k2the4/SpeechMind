@@ -40,16 +40,29 @@ def read_manifest(path: Path) -> list[dict]:
     return records
 
 
-def transcribe_one(recognizer: SpeechRecognizer, audio, model: str) -> tuple[str, str]:
+def transcribe_one(
+    recognizer: SpeechRecognizer, audio, model: str
+) -> tuple[str, str, bool, str | None]:
     if model == "auto":
         result = recognizer.transcribe(audio)
-        return str(result.get("transcript") or ""), str(result.get("asr_model") or "auto")
+        return (
+            str(result.get("transcript") or ""),
+            str(result.get("asr_model") or "auto"),
+            bool(result.get("asr_fallback", False)),
+            result.get("asr_fallback_reason"),
+        )
     if model == "whisper":
         raw = recognizer._decode_with_whisper(audio, language=None)
         result = recognizer._whisper_result(raw, language_source="benchmark_whisper_auto")
-        return str(result.get("transcript") or ""), "whisper-small"
+        return str(result.get("transcript") or ""), "whisper-small", False, None
     if model == "indicconformer":
-        return recognizer._indic_transcribe(audio, "hi"), "indic-conformer-600m"
+        result = recognizer._indic_result_with_whisper_fallback(audio, "hi")
+        return (
+            str(result.get("transcript") or ""),
+            str(result.get("asr_model") or "indic-conformer-600m"),
+            bool(result.get("asr_fallback", False)),
+            result.get("asr_fallback_reason"),
+        )
     raise ValueError(f"Unknown ASR model: {model}")
 
 
@@ -85,7 +98,9 @@ def main() -> int:
 
             audio = load_audio(str(audio_path))
             started = time.perf_counter()
-            hypothesis, actual_model = transcribe_one(recognizer, audio, args.model)
+            hypothesis, actual_model, used_fallback, fallback_reason = transcribe_one(
+                recognizer, audio, args.model
+            )
             inference_seconds = time.perf_counter() - started
 
             normalized_reference = str(
@@ -108,6 +123,8 @@ def main() -> int:
                 "duration_seconds": record.get("duration"),
                 "model_requested": args.model,
                 "model_used": actual_model,
+                "asr_fallback": used_fallback,
+                "asr_fallback_reason": fallback_reason,
                 "reference_normalized": normalized_reference,
                 "reference_verbatim": verbatim_reference,
                 "hypothesis": hypothesis,
@@ -140,6 +157,7 @@ def main() -> int:
             "split": "valid",
             "model_requested": args.model,
             "samples": len(rows),
+            "fallback_count": sum(1 for row in rows if row["asr_fallback"]),
             "unique_speakers": len({row["speaker_id"] for row in rows}),
             "normalized_reference_metrics": aggregate_error_counts(normalized_metrics),
             "verbatim_reference_metrics": aggregate_error_counts(verbatim_metrics),
