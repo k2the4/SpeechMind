@@ -150,3 +150,35 @@ The result does **not** establish that IndicConformer will achieve 16.3% WER ove
 The evaluator now initializes IndicConformer before per-clip timing and reports model initialization separately. The first original run attributed about 604 seconds of first-use model initialization to a single audio clip, which distorted the latency summary. The next benchmark will report steady per-clip timing separately from initialization.
 
 These are diagnostic results from a bounded 100-record sample, not a publication-grade benchmark. The recordings are Hindi, not Hinglish, and this dataset contains no emotion labels.
+
+
+## Forced IndicConformer benchmark (same 100 clips)
+
+A second benchmark evaluated IndicConformer directly on all 100 Hindi validation clips, using the identical downloaded audio and reference manifest:
+
+- 100 clips, 100 unique speakers, 0 fallbacks.
+- Normalized-reference corpus WER: 14.22% (190 errors / 1,336 words).
+- Normalized-reference corpus CER: 5.11% (306 errors / 5,983 characters).
+- Verbatim-reference WER: 17.52%.
+- Verbatim-reference CER: 6.06%.
+- Scenario WER: Extempore 14.66%, Conversation 16.90%, Read 10.68%.
+- Initialization: 6.84 seconds.
+- Mean per-clip inference: 0.428 seconds; median: 0.366 seconds.
+- 32 of 100 clips had zero WER against the normalized reference.
+- All 100 hypotheses contained Devanagari script; no Latin, Arabic/Urdu, Japanese, or Hangul script was detected in these outputs.
+
+Compared on the same 100 clips:
+- The earlier automatic router gave normalized WER 26.72% and CER 16.08%.
+- Forced IndicConformer gave normalized WER 14.22% and CER 5.11%.
+
+Scenario comparisons (automatic -> forced IndicConformer):
+- Extempore WER: 21.80% -> 14.66%.
+- Conversation WER: 41.90% -> 16.90%.
+- Read WER: 16.93% -> 10.68%.
+
+This strongly indicates the current router's Whisper-selected Hindi clips are a major source of error on this sample. It does **not** prove IndicConformer should replace all decoders for every language or for Hinglish. It is a Hindi-only, 100-speaker diagnostic sample. Four clips still had WER >= 100% at utterance level, and short conversational clips remain difficult.
+
+The updated evaluator now records output scripts, decoder-level metrics, and duration-bucket metrics. A forced Whisper benchmark launcher has also been added:
+`BENCHMARK_INDICVOICES_HINDI_WHISPER.bat`.
+
+Next compare forced Whisper against forced IndicConformer on the exact same 100 clips. Keep the same sample and manifest. Only after that should the automatic Hindi routing policy be changed. Hinglish needs its own paired code-switch evaluation set; these Hindi results cannot be presented as Hinglish results. The dataset has no emotion ground-truth labels.
