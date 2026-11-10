@@ -49,6 +49,40 @@ class FusionTests(unittest.TestCase):
                 asr_confidence=0.9,
             )
 
+    def test_text_specific_hinemo_labels_are_preserved(self):
+        result = fuse(
+            text_result={
+                "emotion": "nostalgia",
+                "distribution": {"nostalgia": 0.95, "sadness": 0.05},
+            },
+            voice_result={
+                "emotion": "neutral",
+                "distribution": {"neutral": 1.0},
+                "arousal": "Low",
+            },
+            asr_confidence=0.95,
+        )
+        self.assertEqual(result["overall_emotion"], "nostalgia")
+        self.assertEqual(result["valence"], "Mixed")
+        self.assertEqual(result["text_emotion"], "nostalgia")
+        self.assertEqual(result["voice_emotion"], "neutral")
+
+    def test_text_only_emotions_do_not_create_fake_voice_scores(self):
+        result = fuse(
+            text_result={
+                "emotion": "devotion",
+                "distribution": {"devotion": 1.0},
+            },
+            voice_result={
+                "emotion": "neutral",
+                "distribution": {"neutral": 1.0},
+                "arousal": "Low",
+            },
+            asr_confidence=0.95,
+        )
+        self.assertEqual(result["voice_distribution"]["devotion"], 0.0)
+        self.assertGreater(result["text_distribution"]["devotion"], 0.99)
+
     def test_confidence_is_explicitly_uncalibrated(self):
         result = fuse(
             text_result={"emotion": "joy", "distribution": {"joy": 1.0}},
