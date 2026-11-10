@@ -1,0 +1,175 @@
+# SpeechMind — Product and Architecture Specification
+
+**Status:** Fixed product direction. Technical implementations may evolve without changing the objective.
+**Canonical reference:** This document governs product scope, user experience, component responsibilities, and processing order.
+
+## 1. Product objective
+
+SpeechMind is a multilingual speech-understanding system designed around how people in India actually speak: naturally switching between English, Hindi, Hinglish, and selected major Indian languages within the same conversation.
+
+Its purpose is not merely speech-to-text. SpeechMind must:
+1. Transcribe what the speaker actually said, preserving natural language mixing.
+2. Explain the complete meaning in English.
+3. Analyze linguistic content and the acoustic/vocal signal independently.
+4. Combine those analyses into a cautious, explainable interpretation of the audio.
+
+The speaker must not select English, Hindi, or Hinglish before recording. Language identification and code-switch handling should be automatic. Hinglish is a natural speaking pattern, not a mode the user must select.
+
+SpeechMind is not a medical, psychological, lie-detection, personality, or intent-diagnosis product. It reports observable linguistic and vocal patterns and must not claim to know a speaker's actual internal state.
+
+## 2. Intended language scope
+
+Core:
+- English
+- Hindi
+- Hinglish (Hindi-English code-switching, including Romanized Hindi and mixed scripts)
+
+Planned regional-language expansion is deliberately limited. Initial candidates are Bengali, Marathi, Tamil, Telugu, and Punjabi. A language must be evaluated before it is advertised as supported.
+
+Language selection is not a required input. The system should detect language and language switching from audio. If detection is uncertain, it should preserve uncertainty rather than silently force a language.
+
+## 3. User-facing experience
+
+1. Upload an audio clip or record speech.
+2. Press Analyze.
+3. SpeechMind automatically recognizes the spoken language(s).
+4. Display the original transcript, preserving code-switching.
+5. Display the English meaning separately.
+6. Display text/semantic analysis.
+7. Display vocal/acoustic analysis.
+8. Display a combined interpretation, including disagreement or uncertainty when branches do not agree.
+
+The original transcript must never be overwritten by translation. Transliteration and translation are distinct:
+- Transliteration changes script while retaining the language and wording.
+- Translation expresses the meaning in English.
+
+The results page prioritizes original transcript and English meaning, then the two independent analyses and combined interpretation. Diagnostics remain expandable.
+
+## 4. Target processing architecture
+
+Audio input
+-> Audio preparation and quality checks
+-> Automatic multilingual/code-switching ASR
+-> Original mixed-language transcript + timestamps/language spans + ASR quality
+-> Parallel analysis:
+   A. Text understanding: semantic emotion from the original transcript
+   B. Vocal understanding: vocal emotion and acoustic/prosodic features from audio
+-> English meaning conversion from the original transcript
+-> Reliability-aware multimodal fusion
+-> Results: original transcript, English meaning, text analysis, voice analysis, combined interpretation, quality/uncertainty
+
+Translation and emotion analysis must not replace or mutate the original transcript. Text emotion analyzes the original-language/code-mixed transcript, not only its English translation. The voice branch analyzes audio directly and does not depend on ASR correctness.
+
+## 5. Component responsibilities
+
+### 5.1 Audio input and preparation
+- Accept common audio uploads and in-app recording.
+- Decode to consistent mono, 16 kHz audio for model compatibility.
+- Preserve meaningful pauses and low-volume speech where possible.
+- Compute quality indicators such as clipping, silence, duration, and noise where feasible.
+- Do not apply destructive trimming or denoising without validating its effect on emotion recognition.
+
+### 5.2 ASR and language identification
+- Recognize speech automatically without a required language selector.
+- Support code-switching within one utterance, especially Hindi-English/Hinglish.
+- Preserve English and Indian-language words as spoken.
+- Prefer segment/span-level language identification over assigning one language to an entire recording.
+- Retain timestamps, decoder metadata, and honest quality indicators.
+- Never describe an uncalibrated heuristic as probability that a transcript is correct.
+- Benchmark candidates on the same held-out audio before choosing a default. Indic-Transcribe Core/Flex, Whisper, and other suitable models are candidates, not assumed winners.
+
+### 5.3 Original transcript
+- Preserve actual spoken content and natural language mixture.
+- Make script rendering a recognition/presentation decision, not a forced language selection.
+- Keep transcript, language spans, timestamps, and ASR diagnostics as structured data.
+
+### 5.4 English meaning
+- Produce a natural English rendering of the complete meaning, including code-mixed input.
+- Do not merely copy an English-heavy transcript and call it translation.
+- Preserve names, numbers, intent, tense, negation, and important nuance.
+- If translation is unavailable or uncertain, disclose that and retain the original transcript.
+- Evaluate meaning preservation separately from ASR word error.
+
+### 5.5 Text/semantic analysis
+- Analyze the original transcript, including code-mixed and Romanized Hindi.
+- Estimate linguistic/semantic emotion from words and phrasing.
+- Use a shared, documented emotion taxonomy across branches.
+- Treat MuRIL and XLM-R as candidates to evaluate; fine-tune with suitable human-labelled code-mixed data.
+- Do not run an English-only model on Hindi/Hinglish and present it as multilingual.
+
+### 5.6 Vocal/acoustic analysis
+- Analyze audio independently of the transcript.
+- Estimate vocal emotional expression using prosody, pitch, energy, rhythm, voice quality, and learned speech representations.
+- Keep vocal emotion separate from semantic emotion.
+- Estimate arousal from validated acoustic evidence or a separately validated model, not simply from the emotion label.
+- WavLM remains the current baseline; emotion2vec is a candidate for controlled comparison.
+- CREMA-D/RAVDESS results are baseline evidence only; they do not establish performance on spontaneous Indian speech.
+
+### 5.7 Reliability-aware fusion
+- Combine text and voice distributions only when each branch is available and valid.
+- Account for ASR quality when weighting text analysis, but do not treat heuristic ASR scores as calibrated probabilities.
+- Validate or learn fusion weights using validation data rather than assuming fixed 60/40 weights are universally correct.
+- Preserve and display branch-level outputs.
+- Detect and explain disagreement (for example, positive wording with subdued or distressed vocal delivery).
+- Allow uncertainty or insufficient evidence; do not force a confident single label.
+- Never claim that the output reveals the speaker's true internal emotional state.
+
+## 6. Emotion taxonomy and output
+
+Current shared taxonomy:
+- joy
+- sadness
+- anger
+- fear
+- surprise
+- disgust
+- neutral
+
+The taxonomy changes only through an explicit product decision and corresponding dataset/model migration. Keep these concepts distinct:
+- Semantic/text emotion: what the words communicate.
+- Vocal emotion: how the voice sounds.
+- Valence: positive/negative/neutral dimension, where validated.
+- Arousal: activation/intensity dimension, where validated.
+- Combined interpretation: cautious synthesis of available evidence.
+
+A top classifier score is not automatically a probability of correctness. Calibrated confidence is shown only after calibration is measured on representative held-out data.
+
+## 7. Evaluation requirements
+
+- ASR: WER, CER, language-span/code-switch handling, per-language and per-condition breakdowns.
+- Translation: human-rated meaning preservation, adequacy, and critical error checks.
+- Text emotion: macro-F1, per-class precision/recall/F1, confusion matrix, language/script breakdown.
+- Voice emotion: speaker-independent macro-F1, per-class metrics, recording-condition breakdown.
+- Fusion: held-out macro-F1, calibration, branch disagreement analysis, and abstention/uncertainty quality.
+
+Avoid data leakage by keeping speakers disjoint across train/validation/test wherever identities are available. Keep natural, human-recorded test data separate from synthetic augmentation. Do not claim real-world Hinglish performance based only on acted English corpora.
+
+## 8. Hardware and deployment constraints
+
+The current development machine is Windows with 16 GB RAM and an NVIDIA GT 730. Treat modern model inference/training as CPU-first unless a compatible runtime is demonstrated. Large ASR/translation models may require hosted endpoints or remote GPU for benchmarking. Any hosted audio service requires explicit privacy, cost, retention, and consent review before adoption.
+
+Training and evaluation must be reproducible through documented scripts and Windows batch launchers. Dataset downloads must be separate from training, include source/license/access notes, verify files, and never silently download huge datasets during application startup.
+
+## 9. Current implementation status (baseline, not product contract)
+
+The repository currently contains:
+- Librosa-based audio decoding/resampling/normalization.
+- Whisper Small language detection and transcription, with IndicConformer routing for a detected Indic language.
+- IndicTrans2 distilled translation for supported single-language transcripts.
+- MuRIL text-emotion loading only when a fine-tuned checkpoint exists; an English-only fallback exists.
+- WavLM Base Plus frozen embeddings and an SVM voice-emotion classifier trained on CREMA-D + RAVDESS.
+- Rule-based late fusion with fixed heuristic weights.
+- Streamlit upload/record interface.
+
+These are implementation details that may change. They do not override the product objective. The language selector is not part of the intended product experience and must not return as a required step.
+
+## 10. Development principles
+
+1. Preserve the product objective and user journey.
+2. Prefer evidence and controlled benchmarks over model popularity or assumptions.
+3. Do not replace a working model until the replacement has been evaluated on comparable data.
+4. Keep original transcript, English meaning, text analysis, voice analysis, and combined interpretation as distinct outputs.
+5. Be transparent about unsupported languages, limitations, uncertainty, and external service use.
+6. Keep training, data preparation, inference, and UI concerns modular.
+7. Do not claim local execution, training, or testing unless it was actually performed.
+8. Explain product-level changes before implementing them; routine engineering improvements can proceed within this specification.
