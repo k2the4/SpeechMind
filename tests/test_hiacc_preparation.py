@@ -68,7 +68,7 @@ class HiACCPreparationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "combined_output_changed_test_output.txt"
             path.write_text(
-                "AD30129.wav, जब वो गुफा तक पहुँचे\\n"
+                "AD30129.wav, जब वो गुफा तक पहुँचे\n"
                 "AD21007.wav, better की hometown पर रहो और बाकी feel करो",
                 encoding="utf-8",
             )
