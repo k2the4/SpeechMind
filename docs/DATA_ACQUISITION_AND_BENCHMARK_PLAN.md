@@ -51,8 +51,7 @@ These datasets remain useful for reproducing the current WavLM baseline and chec
 
 ## Text-emotion data
 
-HinEmo-9 is a candidate Hindi-English code-mixed text emotion dataset:
-https://huggingface.co/datasets/
+A Hindi-English code-mixed text-emotion dataset called HinEmo-9 has been identified as a possible research candidate in prior research. Its exact canonical repository, license, annotation provenance, and download availability have not yet been verified for this project. Do not download or train on an assumed similarly named repository.
 
 Before using any third-party emotion dataset, verify the exact dataset repository, annotation scheme, license, split design, and whether labels are human-annotated or model-generated. Social-media text is not equivalent to spontaneous spoken dialogue. Use human-annotated examples for primary evaluation.
 
