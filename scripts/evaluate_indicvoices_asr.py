@@ -77,6 +77,7 @@ def transcribe_one(
             str(result.get("asr_model") or "auto"),
             bool(result.get("asr_fallback", False)),
             result.get("asr_fallback_reason"),
+            result.get("language"),
         )
     if model in ("whisper", "whisper-hi"):
         # "whisper" measures the model's own language identification;
@@ -89,10 +90,29 @@ def transcribe_one(
             if language == "hi" else "benchmark_whisper_auto"
         )
         result = recognizer._whisper_result(raw, language_source=source)
+        output_language = result.get("language")
+        if language == "hi":
+            print(
+                "[ASR Benchmark] Forced language=hi; "
+                f"Whisper result language={output_language!r}"
+            )
+            if output_language and str(output_language).lower() != "hi":
+                raise RuntimeError(
+                    "Forced-Hindi benchmark verification failed: Whisper returned "
+                    f"language={output_language!r}, expected 'hi'. Stopping after "
+                    "this clip to avoid wasting time. Check that the forced language "
+                    "argument reaches the installed Whisper decoder."
+                )
         model_label = (
             "whisper-small-forced-hi" if language == "hi" else "whisper-small-auto"
         )
-        return str(result.get("transcript") or ""), model_label, False, None
+        return (
+            str(result.get("transcript") or ""),
+            model_label,
+            False,
+            None,
+            output_language,
+        )
     if model == "indicconformer":
         result = recognizer._indic_result_with_whisper_fallback(audio, "hi")
         return (
@@ -100,6 +120,7 @@ def transcribe_one(
             str(result.get("asr_model") or "indic-conformer-600m"),
             bool(result.get("asr_fallback", False)),
             result.get("asr_fallback_reason"),
+            result.get("language"),
         )
     raise ValueError(f"Unknown ASR model: {model}")
 
@@ -166,9 +187,13 @@ def main() -> int:
 
             audio = load_audio(str(audio_path))
             started = time.perf_counter()
-            hypothesis, actual_model, used_fallback, fallback_reason = transcribe_one(
-                recognizer, audio, args.model
-            )
+            (
+                hypothesis,
+                actual_model,
+                used_fallback,
+                fallback_reason,
+                decoder_language,
+            ) = transcribe_one(recognizer, audio, args.model)
             inference_seconds = time.perf_counter() - started
 
             normalized_reference = str(
@@ -197,6 +222,7 @@ def main() -> int:
                 "duration_seconds": duration,
                 "model_requested": args.model,
                 "model_used": actual_model,
+                "decoder_language": decoder_language,
                 "hypothesis_script": output_script,
                 "asr_fallback": used_fallback,
                 "asr_fallback_reason": fallback_reason,
