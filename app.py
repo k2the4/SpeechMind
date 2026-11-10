@@ -8,6 +8,7 @@ import time
 
 import streamlit as st
 from pipeline import SpeechMindPipeline
+from models.bodhan_client import BodhanClient
 
 st.set_page_config(page_title="SpeechMind", page_icon="🎙️", layout="centered")
 st.title("SpeechMind")
@@ -28,7 +29,7 @@ st.caption(
     "code-switching automatically; there is no language selector."
 )
 
-cloud_configured = bool(os.getenv("BODHAN_API_KEY", "").strip())
+cloud_configured = BodhanClient.from_env() is not None
 if cloud_configured:
     st.info(
         "Cloud speech processing is enabled. Audio is sent to Bodhan AI for "
@@ -130,6 +131,9 @@ if audio_source is not None:
                     "asr_provider_fallback_reason": result.get("asr_provider_fallback_reason"),
                     "language_profile": result.get("language_profile"),
                     "language_profile_note": result.get("language_profile_note"),
+                    "language_identifier": result.get("language_identifier"),
+                    "language_id_available": result.get("language_id_available"),
+                    "language_segments": result.get("language_segments"),
                     "script_evidence": result.get("script_evidence"),
                     "language_source": result.get("language_source"),
                     "language_detection_score": result.get("language_detection_score"),
