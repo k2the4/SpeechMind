@@ -11,6 +11,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from models.language_utils import is_code_mixed_script, looks_romanized_hindi
 
 BASE_MODEL_NAME = "google/muril-base-cased"
 ENGLISH_FALLBACK_MODEL = "j-hartmann/emotion-english-distilroberta-base"
@@ -150,15 +151,20 @@ class TextEmotionClassifier:
                 "model_source": None,
             }
 
-        if not self.available and language_code in ("en", "english"):
+        if (
+            not self.available
+            and language_code in ("en", "english")
+            and not is_code_mixed_script(text)
+            and not looks_romanized_hindi(text)
+        ):
             self._load_english_fallback()
 
         if not self.available or self.model is None or self.tokenizer is None:
             reason = self.load_error or "No compatible trained checkpoint is available."
             if language_code not in ("en", "english"):
                 reason = (
-                    "No fine-tuned multilingual MuRIL checkpoint is installed. "
-                    "The available fallback supports English transcripts only."
+                    "No compatible text-emotion checkpoint is installed for this "
+                    "language or code-mixed transcript."
                 )
             return {
                 "emotion": "unavailable",
@@ -169,9 +175,23 @@ class TextEmotionClassifier:
                 "model_source": None,
             }
 
-        if language_code not in self.supported_languages and not (
-            language_code == "english" and "en" in self.supported_languages
+        language_supported = language_code in self.supported_languages
+        if language_code in {"mixed", "hi-en", "hi_en", "hi-en-mixed"}:
+            language_supported = bool(
+                self.supported_languages
+                & {"hinglish", "hi-en", "hi_en", "hi-en-mixed", "mixed"}
+            )
+        if language_code in {"en", "english"} and (
+            is_code_mixed_script(text) or looks_romanized_hindi(text)
         ):
+            language_supported = bool(
+                self.supported_languages
+                & {"hinglish", "hi-en", "hi_en", "hi-en-mixed", "mixed"}
+            )
+        language_supported = language_supported or (
+            language_code == "english" and "en" in self.supported_languages
+        )
+        if not language_supported:
             return {
                 "emotion": "unavailable",
                 "confidence": 0.0,
