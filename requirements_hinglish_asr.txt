@@ -1,0 +1,4 @@
+# Isolated local environment for Srota Hinglish ASR.
+# Do not install these into SpeechMind's existing .venv: qwen-asr pins a
+# different Transformers release and must not disturb IndicConformer/WavLM.
+qwen-asr==0.0.6

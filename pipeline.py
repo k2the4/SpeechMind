@@ -1,8 +1,8 @@
 """
-SpeechMind end-to-end inference pipeline.
+SpeechMind end-to-end local inference pipeline.
 
-IndicConformer and IndicTrans2 are loaded only when needed. Timings and model
-diagnostics are returned to make performance changes measurable.
+The original transcript, English meaning, text analysis, voice analysis, and
+combined interpretation remain distinct outputs.
 """
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -27,12 +27,20 @@ class SpeechMindPipeline:
         self.translator = None
         self.translator_enabled = load_translator
         self.translator_error = None
-        print("[Pipeline] Core models initialized. Optional models remain lazy-loaded.")
+        print(
+            "[Pipeline] Core local models initialized. "
+            "No hosted or metered inference service is configured."
+        )
 
     def _translate(self, transcript: str, language: str) -> str:
-        if not transcript or language == "en":
+        if not transcript:
             return transcript
-        if not self.translator_enabled or language not in TRANSLATABLE_LANGUAGES:
+        if not self.translator_enabled:
+            return transcript
+
+        # Local IndicTrans2 path. Mixed-language translation will be improved
+        # after the Hinglish ASR output is benchmarked.
+        if language == "en" or language not in TRANSLATABLE_LANGUAGES:
             return transcript
         try:
             if self.translator is None:
@@ -97,6 +105,10 @@ class SpeechMindPipeline:
             "language_source": asr_result.get("language_source"),
             "transcript": transcript,
             "asr_model": asr_result.get("asr_model", "unknown"),
+            "asr_provider": "local",
+            "asr_fallback": bool(asr_result.get("asr_fallback", False)),
+            "asr_fallback_reason": asr_result.get("asr_fallback_reason"),
+            "asr_requested_model": asr_result.get("asr_requested_model"),
             "asr_confidence": round(asr_confidence, 3) if asr_confidence is not None else None,
             "asr_quality_score": (
                 round(asr_confidence, 3) if asr_confidence is not None else None
@@ -126,6 +138,7 @@ class SpeechMindPipeline:
             "fusion_weights": fused["fusion_weights"],
             "processing_time_sec": timings["total"],
             "timings_sec": timings,
+            "translator_provider": "local_indictrans2",
             "translator_loaded": self.translator is not None,
             "translator_error": self.translator_error,
         }

@@ -136,7 +136,7 @@ try {
     # 7. Verify imports, CUDA and tests
     Write-Host ""
     Write-Host "[7/7] Verifying imports and GPU..."
-    $VerifyCode = "import sys, torch, torchaudio, transformers, streamlit, librosa, soundfile, sklearn; print('Python:', sys.version); print('PyTorch:', torch.__version__); print('TorchAudio:', torchaudio.__version__); print('Transformers:', transformers.__version__); print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU mode'); print('Core imports: OK')"
+    $VerifyCode = "import sys, torch, torchaudio, transformers, streamlit, librosa, soundfile, sklearn, onnx, onnxruntime; print('Python:', sys.version); print('PyTorch:', torch.__version__); print('TorchAudio:', torchaudio.__version__); print('Transformers:', transformers.__version__); print('ONNX:', onnx.__version__); print('ONNX Runtime:', onnxruntime.__version__); print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU mode'); print('Core imports: OK')"
     & $VenvPython -c $VerifyCode
     if ($LASTEXITCODE -ne 0) { throw "Core Python imports or PyTorch verification failed." }
 
