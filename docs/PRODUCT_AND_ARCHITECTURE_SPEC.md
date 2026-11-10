@@ -76,7 +76,9 @@ Translation and emotion analysis must not replace or mutate the original transcr
 - Prefer segment/span-level language identification over assigning one language to an entire recording.
 - Retain timestamps, decoder metadata, and honest quality indicators.
 - Never describe an uncalibrated heuristic as probability that a transcript is correct.
-- Benchmark candidates on the same held-out audio before choosing a default. Indic-Transcribe Core/Flex, Whisper, and other suitable models are candidates, not assumed winners.
+- Use language-appropriate specialist candidates behind one automatic interface: IndicConformer is the current Hindi baseline; Whisper remains an English candidate; Srota is the leading Hinglish candidate identified for validation. Do not treat a single primary-language guess as sufficient for code-switched speech.
+- Do not require a language selector in the user interface.
+- Benchmark candidates on held-out data before production routing; do not repeatedly re-run a completed benchmark without a new model or hypothesis.
 
 ### 5.3 Original transcript
 - Preserve actual spoken content and natural language mixture.
