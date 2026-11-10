@@ -45,6 +45,9 @@ class SpeechMindPipeline:
         if not transcript or not transcript.strip():
             self.translation_provider = "none"
             return transcript
+        if language == "en":
+            self.translation_provider = "identity_english"
+            return transcript
         if not self.translator_enabled:
             self.translation_provider = "disabled"
             return transcript
