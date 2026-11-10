@@ -219,7 +219,7 @@ def _speaker_metadata_map(extract_root: Path) -> dict[str, str]:
                     )
                     if speaker_id and audio_value:
                         match = re.search(
-                            r"[^\\\\/\\s,;]+\\.wav",
+                            r"[^\\/\s,;]+\.wav",
                             audio_value,
                             flags=re.IGNORECASE,
                         )
