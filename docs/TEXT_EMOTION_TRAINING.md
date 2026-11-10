@@ -1,88 +1,61 @@
-# Text-emotion branch setup
+# HinEmo-9 text-emotion baseline
 
-SpeechMind deliberately does not load base MuRIL as though it were an emotion
-classifier. A classification head must be trained for the seven labels used by
-the fusion layer. For English transcripts, the application can use the
-pretrained English-only fallback `j-hartmann/emotion-english-distilroberta-base`.
-That fallback does not support Hindi or other Indic languages.
+The primary first text-emotion model for SpeechMind is a CPU-friendly classifier trained on HinEmo-9. It is a research baseline for English, Devanagari Hindi and Romanized Hinglish text.
 
-## 1. Prepare a labeled CSV
+## Dataset structure and label provenance
 
-Create `data/text_emotion/text_emotion.csv` with these columns:
+Source: https://github.com/im-rakeshsahani/hinemo9
 
-```csv
-text,emotion,language
-"I am excited about the result",joy,en
-"I am worried about tomorrow",fear,en
-"मुझे यह सुनकर बहुत खुशी हुई",joy,hi
-"मैं परीक्षा को लेकर चिंतित हूँ",fear,hi
-```
+The dataset card reports:
+- 30,436 YouTube comments in English, Devanagari Hindi and Romanized Hinglish.
+- 3,363 human-gold samples independently labeled by three annotators.
+- 27,073 model-derived samples with reported 78.4% agreement to gold; agreement varies substantially by emotion (including lower values for Joy and Love).
+- The training split contains both sources. Dev/test are human-gold only.
+- Nine labels: Love, Joy, Anger, Sadness, Fear, Surprise, Nostalgia, Devotion and Neutral.
 
-Each row must have one primary, human-checked emotion label. Supported labels
-are: `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust`, and
-`neutral`. A few common synonyms are normalized by the training script.
-Multi-label rows must be reviewed and converted to a single primary label
-before training; the script intentionally rejects unknown or ambiguous labels.
+The authors' CC BY 4.0 license covers annotations and curation, not underlying third-party YouTube text. The downloader is for local research/training only. Do not redistribute the downloaded comment text. Review the source dataset card and platform terms.
 
-Include a `language` column with Whisper language codes (for example `en`,
-`hi`, `bn`, `ta`, `te`, `mr`, `gu`, `pa`, `ml`, `kn`, or `ur`).
-If the column is absent, the checkpoint is marked English-only. Do not claim
-Hindi or multilingual support unless those languages are represented in the
-training data and independently evaluated.
+## Download
 
-Do not use RAVDESS or CREMA-D audio emotion labels as ground-truth text
-emotion labels. Those labels describe the acted vocal emotion and do not
-necessarily describe the literal meaning of the sentence.
-
-## 2. Potential data sources
-
-- [GoEmotions](https://huggingface.co/datasets/mrm8488/goemotions) is an
-  English Reddit-comment corpus with 27 emotion labels plus neutral. It is
-  multi-label and its domain is online comments, so it requires careful
-  label mapping and is not a direct proxy for spoken conversation.
-- [EmoInHindi](https://www.iitp.ac.in/~ai-nlp-ml/resources.html) is a Hindi
-  dialogue emotion resource with multi-label emotion and intensity annotation.
-  Its resource page states research-purpose use; review the terms and paper
-  before redistribution or other use.
-- [HinEmo-9](https://github.com/im-rakeshsahani/hinemo9) covers English,
-  Devanagari Hindi, and romanized Hinglish comments. It distinguishes a
-  human-annotated gold tier from a larger model-derived tier. Keep the
-  human-annotated tier for held-out evaluation and review its label taxonomy
-  and license before mapping it to SpeechMind's seven classes.
-
-These datasets differ in domain, label taxonomy, and annotation process. Do not
-merge their labels mechanically. Keep a held-out evaluation set separate from
-training and report results by language.
-
-## 3. Train MuRIL
-
-The trainer uses a stratified 80/10/10 train/validation/test split. To keep
-training more practical on a CPU-only computer, it updates the final two
-MuRIL encoder layers and classification head.
-
-From the SpeechMind project folder, run:
+Run from the SpeechMind project root:
 
 ```powershell
-python -m scripts.train_text_emotion --csv data/text_emotion/text_emotion.csv
+.\DOWNLOAD_HINEMO9_DATA.bat
 ```
 
-Optional arguments include `--epochs`, `--batch-size`, `--max-length`,
-`--text-column`, and `--label-column`. The default checkpoint output is
-`checkpoints/text_emotion_muril`.
+It installs the selected files under `data/hinemo9/data`:
+- `train.jsonl`
+- `dev.jsonl`
+- `test.jsonl`
+- `gold.jsonl`
+- `checksums.txt`
 
-The training script writes `speechmind_metadata.json` and
-`text_emotion_metrics.json` alongside the checkpoint. Review test macro-F1
-and per-class results before using the model. The checkpoint records which
-language codes were present in the CSV; inference refuses to use the MuRIL
-checkpoint for a language that was not listed.
+## Training method
 
-## 4. Verify
+Run:
 
-Restart Streamlit after training. For English-only testing, the English
-fallback can be loaded automatically on the first English request. For Hindi
-or another Indic language, the fine-tuned MuRIL checkpoint must include that
-language in its metadata.
+```powershell
+.\TRAIN_HINEMO9_TEXT_EMOTION.bat
+```
 
-Neither model's softmax score is a calibrated probability of correctness.
-Evaluate on representative, human-labeled spoken-language transcripts before
-treating outputs as reliable.
+The training script uses character n-grams (2–6) and word n-grams (1–2), TF-IDF and a class-balanced LinearSVC. This is intentionally CPU-friendly and character features help with spelling variation in Romanized Hindi.
+
+Human-gold training records have weight 1.0. Model-derived records receive a lower class-specific weight based on the dataset's reported agreement. Dev/test reject non-gold examples. The dev set selects the regularization parameter; the test set is used once for final reporting.
+
+## Outputs
+
+- Checkpoint: `checkpoints/text_emotion_hinemo9`
+- Metadata: `checkpoints/text_emotion_hinemo9/speechmind_metadata.json`
+- Metrics: `training_outputs/hinemo9_text_emotion/test_metrics.json`
+
+The report includes overall and per-language accuracy/macro-F1, per-class precision/recall/F1 and a confusion matrix.
+
+## Interpretation and limits
+
+- This is text emotion, not voice emotion.
+- YouTube comments are not natural speech transcripts.
+- Model-derived training labels are noisy and especially weak for some emotions.
+- The published gold test set is useful for a baseline but has known class-composition and domain limitations.
+- Validate on a separate human-labeled set of SpeechMind-generated speech transcripts before claiming spoken Hinglish text-emotion accuracy.
+- Its nine labels differ from the current seven-label WavLM voice model. Fusion preserves text-only Love, Nostalgia and Devotion; it does not invent those emotions in the voice branch.
+- LinearSVC decision scores converted to a softmax-like distribution are uncalibrated. They are not probabilities of correctness.
