@@ -6,7 +6,7 @@ Optional:
   language,split,speaker_id
 
 Paths may be absolute or relative to the SpeechMind project directory.
-WER and CER are computed over the complete reference/prediction corpus.
+WER/CER are corpus-level metrics, and all hypotheses are saved for review.
 """
 from __future__ import annotations
 
@@ -14,12 +14,10 @@ import argparse
 import csv
 import json
 import re
+import time
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
-
-from models.asr import SpeechRecognizer
-from utils.audio_utils import preprocess
 
 
 def normalize_text(text: str) -> str:
@@ -67,15 +65,28 @@ def aggregate(rows: list[dict]) -> dict:
     reference_words = sum(row["reference_words"] for row in rows)
     char_errors = sum(row["character_errors"] for row in rows)
     reference_characters = sum(row["reference_characters"] for row in rows)
+    durations = [float(row["latency_sec"]) for row in rows]
     return {
         "clips": len(rows),
         "wer": word_errors / max(1, reference_words),
         "cer": char_errors / max(1, reference_characters),
+        "mean_latency_sec": (
+            sum(durations) / len(durations) if durations else None
+        ),
+        "total_latency_sec": sum(durations),
         "word_errors": word_errors,
         "reference_words": reference_words,
         "character_errors": char_errors,
         "reference_characters": reference_characters,
     }
+
+
+def grouped_metrics(rows: list[dict], key: str) -> dict:
+    groups = defaultdict(list)
+    for row in rows:
+        value = str(row.get(key, "") or "unspecified").strip().lower()
+        groups[value].append(row)
+    return {name: aggregate(items) for name, items in sorted(groups.items())}
 
 
 def main():
@@ -93,12 +104,20 @@ def main():
         missing = required - set(reader.fieldnames or [])
         if missing:
             raise ValueError(f"Manifest is missing columns: {sorted(missing)}")
-        records = [row for row in reader if row.get("audio_path") and row.get("reference")]
+        records = [
+            row for row in reader
+            if row.get("audio_path") and row.get("reference")
+        ]
 
     if args.limit > 0:
         records = records[:args.limit]
     if not records:
         raise ValueError("The manifest contains no audio_path/reference rows.")
+
+    # Heavy model imports happen only in the CLI, so text-normalization and
+    # WER/CER helper functions can be tested in lightweight CI.
+    from models.asr import SpeechRecognizer
+    from utils.audio_utils import preprocess
 
     project_root = Path.cwd()
     backends = ["whisper", "bodhan"] if args.backend == "all" else [args.backend]
@@ -130,26 +149,36 @@ def main():
                 )
 
             audio = preprocess(str(audio_path))
+            start = time.perf_counter()
             result = recognizer.transcribe(audio)
+            latency = time.perf_counter() - start
             transcript = result.get("transcript", "")
             metrics = score_pair(item["reference"], transcript)
             row = {
                 "backend": backend,
+                "asr_model": result.get("asr_model"),
                 "audio_path": str(audio_path),
                 "language": item.get("language", ""),
                 "split": item.get("split", ""),
                 "speaker_id": item.get("speaker_id", ""),
                 "reference": item["reference"],
                 "prediction": transcript,
+                "latency_sec": round(latency, 3),
                 **metrics,
             }
             rows.append(row)
             predictions.append(row)
             print(
                 f"[{backend}] {index}/{len(records)} "
-                f"WER={metrics['wer']:.3f} CER={metrics['cer']:.3f}"
+                f"WER={metrics['wer']:.3f} CER={metrics['cer']:.3f} "
+                f"time={latency:.2f}s"
             )
-        summary[backend] = aggregate(rows)
+
+        summary[backend] = {
+            "overall": aggregate(rows),
+            "by_language": grouped_metrics(rows, "language"),
+            "by_split": grouped_metrics(rows, "split"),
+        }
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
