@@ -128,3 +128,25 @@ Then run `BENCHMARK_INDICVOICES_HINDI.bat` to evaluate SpeechMind's current loca
 The benchmark can also be run manually with `--model whisper` or `--model indicconformer` to compare the individual local decoders. The automatic route remains the first benchmark because it reflects the current SpeechMind local ASR logic.
 
 Metrics are calculated on a small, shuffled sample from the Hindi validation split. They are a first diagnostic, not a publishable benchmark and not evidence of Hinglish performance. This dataset has speech transcripts but no emotion ground-truth labels in the inspected records, so it is for ASR evaluation only.
+
+
+## First Hindi baseline results (100-record sample)
+
+The first completed automatic-route benchmark on the 100-record, 100-speaker sample produced:
+- Normalized-reference WER: 26.72% (357 word errors / 1,336 reference words).
+- Normalized-reference CER: 16.08% (962 character errors / 5,983 reference characters).
+- Verbatim-reference WER: 29.85%.
+- Verbatim-reference CER: 16.94%.
+- Scenario WER: Extempore 21.80%, Conversation 41.90%, Read 16.93%.
+- 62 clips were routed to IndicConformer and 38 to Whisper Small.
+- On the clips routed to IndicConformer, recomputing corpus-level counts from `predictions.csv` gives WER 16.30% and CER 7.95%.
+- On the clips routed to Whisper Small, the corresponding corpus-level WER is 98.24% and CER 75.24%.
+
+This exposes a major weakness in the current whole-clip language router: many Hindi conversational clips, especially short clips, were sent to Whisper and transcribed as English, Urdu, Japanese, Korean, or other non-Devanagari output. The aggregate `fallback_count=0` only means IndicConformer did not fail and fall back; it does not mean every clip used IndicConformer.
+
+The result does **not** establish that IndicConformer will achieve 16.3% WER over the entire Hindi split, because it was only used on the 62 clips chosen by the router. A forced-IndicConformer run over all 100 clips is required for a fair same-sample comparison. Use:
+`BENCHMARK_INDICVOICES_HINDI_INDICCONFORMER.bat`.
+
+The evaluator now initializes IndicConformer before per-clip timing and reports model initialization separately. The first original run attributed about 604 seconds of first-use model initialization to a single audio clip, which distorted the latency summary. The next benchmark will report steady per-clip timing separately from initialization.
+
+These are diagnostic results from a bounded 100-record sample, not a publication-grade benchmark. The recordings are Hindi, not Hinglish, and this dataset contains no emotion labels.
