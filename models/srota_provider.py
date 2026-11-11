@@ -43,10 +43,16 @@ class SrotaASRProvider:
         project_root: str | Path | None = None,
         startup_timeout: float = 300.0,
         request_timeout: float = 180.0,
+        python_executable: str | Path | None = None,
+        worker_script: str | Path | None = None,
     ) -> None:
         self.project_root = Path(project_root or Path(__file__).resolve().parents[1])
-        self.worker_script = self.project_root / "scripts" / "srota_asr_worker.py"
-        if os.name == "nt":
+        self.worker_script = Path(
+            worker_script or self.project_root / "scripts" / "srota_asr_worker.py"
+        )
+        if python_executable is not None:
+            self.python_executable = Path(python_executable)
+        elif os.name == "nt":
             self.python_executable = (
                 self.project_root / ".venv_srota" / "Scripts" / "python.exe"
             )
