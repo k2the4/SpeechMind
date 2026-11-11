@@ -53,8 +53,6 @@ if audio_source is not None:
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
-                # Always use automatic language identification. The UI must not
-                # force users to label naturally code-mixed speech.
                 result = pipeline.run(tmp_path)
                 result["model_init_time_sec"] = model_init_time
         except Exception as error:
@@ -102,14 +100,19 @@ if audio_source is not None:
                 st.caption("ASR quality information is unavailable for this decoder.")
 
             if result.get("low_confidence_warning"):
+                reasons = result.get("uncertainty_reasons") or []
                 st.info(
-                    "Transcription quality is uncertain. SpeechMind has reduced "
-                    "the influence of the text branch where possible."
+                    "Interpretation needs caution. "
+                    + ("; ".join(reasons) if reasons else
+                       "One or more model signals are uncertain or unavailable.")
                 )
 
             st.divider()
             st.subheader("Text analysis")
-            st.metric("Semantic emotion", str(result.get("text_emotion", "unavailable")).title())
+            st.metric(
+                "Semantic emotion",
+                str(result.get("text_emotion", "unavailable")).title()
+            )
             secondary_text_emotions = result.get("text_emotion_secondary") or []
             if secondary_text_emotions:
                 st.caption(
@@ -123,15 +126,34 @@ if audio_source is not None:
                 )
 
             st.subheader("Voice analysis")
-            voice_col, arousal_col = st.columns(2)
-            with voice_col:
-                st.metric("Vocal emotion", str(result.get("voice_emotion", "unavailable")).title())
-            with arousal_col:
-                st.metric("Arousal", str(result.get("arousal", "unknown")))
+            st.metric(
+                "Vocal emotion",
+                str(result.get("voice_emotion", "unavailable")).title()
+            )
+            st.caption(
+                "Arousal: not assessed. SpeechMind does not yet have a separately "
+                "validated acoustic arousal estimator."
+            )
 
             st.divider()
             st.subheader("Combined interpretation")
-            st.write(result.get("overall_interpretation", "Combined interpretation unavailable."))
+            st.write(
+                result.get(
+                    "overall_interpretation",
+                    "Combined interpretation unavailable."
+                )
+            )
+
+            if result.get("branch_disagreement"):
+                st.warning(
+                    "Text and voice signals disagree. "
+                    + str(result.get("branch_comparison") or "")
+                )
+            elif result.get("branch_agreement") is True:
+                st.info(str(result.get("branch_comparison") or "Text and voice signals agree."))
+            else:
+                st.caption(str(result.get("branch_comparison") or ""))
+
             st.caption(
                 "The fusion score is an uncalibrated model score, not a probability "
                 "of correctness. Predictions remain experimental until validated on "
@@ -176,6 +198,13 @@ if audio_source is not None:
                     "voice_inference_windows": result.get("voice_inference_windows"),
                     "voice_validation_macro_f1": result.get("voice_validation_macro_f1"),
                     "fusion_weights": result.get("fusion_weights"),
+                    "branch_agreement": result.get("branch_agreement"),
+                    "branch_disagreement": result.get("branch_disagreement"),
+                    "branch_comparison": result.get("branch_comparison"),
+                    "interpretation_status": result.get("interpretation_status"),
+                    "uncertainty_reasons": result.get("uncertainty_reasons"),
+                    "confidence_margin": result.get("confidence_margin"),
+                    "arousal_available": result.get("arousal_available"),
                     "meaning_en_available": result.get("meaning_en_available"),
                     "meaning_en_source": result.get("meaning_en_source"),
                     "translator_provider": result.get("translator_provider"),
