@@ -215,3 +215,16 @@ IndicTrans2 now runs through the existing isolated model-worker protocol rather 
 - Installer and one-text smoke test: INSTALL_INDIC_TRANS_TRANSLATION.bat.
 
 Operational caveat: IndicTransToolkit 1.1.1 documents Python 3.10+ and states that Windows is not currently a platform it builds/tests. Installation is deliberately isolated and must be validated on the Windows PC before treating translation as available. This does not alter the working ASR routes.
+
+
+## Current local app validation and translation dependency (2026-11-11)
+
+The Windows integration smoke test passed: the known Hinglish clip selected Srota and set `code_switch_detected=true`. The website checks showed the current pure-Hindi route still selects IndicConformer and the English route uses Whisper plus the English text-emotion fallback.
+
+Remaining runtime gaps observed in the local app:
+- English meaning for Indic speech is unavailable because `IndicTransToolkit` is not installed in `.venv_srota`. The isolated worker already implements a lazy IndicTrans2 translation action; the missing toolkit import prevents it from loading.
+- The upstream IndicTransToolkit PyPI documentation says the package is intended/tested for Linux/macOS, not Windows. `SETUP_INDIC_TRANSLATION.bat` therefore performs an isolated, no-dependency-change install/import check in `.venv_srota`; it does not alter the main `.venv`. If the Windows import fails, do not repeatedly reinstall. Revisit the translation runtime (e.g. a supported Linux/WSL worker or a separately validated alternative).
+- Hindi/Hinglish text emotion remains unavailable because the fine-tuned multilingual MuRIL checkpoint is not present. The English-only fallback must not be applied to Hindi/Hinglish. This requires a trained/evaluated multilingual checkpoint, not a package install.
+- Voice emotion currently runs, but its acted-speech baseline and the combined score remain experimental and uncalibrated.
+
+The original transcript is preserved when translation fails; the UI explicitly warns that the displayed fallback text is not an English translation.
