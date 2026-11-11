@@ -81,8 +81,31 @@ class EmotionDataset(Dataset):
         return item
 
 
-def masked_weighted_bce(logits, labels, label_mask, source_weight):
-    element_loss = F.binary_cross_entropy_with_logits(logits, labels, reduction="none")
+def build_positive_weights(rows):
+    labels = torch.tensor([row["labels"] for row in rows], dtype=torch.float32)
+    masks = torch.tensor([row["label_mask"] for row in rows], dtype=torch.float32)
+    source = torch.tensor([row["source_weight"] for row in rows], dtype=torch.float32).unsqueeze(1)
+    weights = masks * source
+    positives = (labels * weights).sum(dim=0)
+    known = weights.sum(dim=0)
+    negatives = (known - positives).clamp_min(0.0)
+    # Prevent the all-negative solution while bounding rare-label amplification.
+    pos_weight = (negatives / positives.clamp_min(1.0)).clamp(min=1.0, max=10.0)
+    stats = {
+        label: {
+            "weighted_positives": round(float(positives[i]), 2),
+            "weighted_negatives": round(float(negatives[i]), 2),
+            "positive_weight": round(float(pos_weight[i]), 3),
+        }
+        for i, label in enumerate(LABELS)
+    }
+    return pos_weight, stats
+
+
+def masked_weighted_bce(logits, labels, label_mask, source_weight, pos_weight):
+    element_loss = F.binary_cross_entropy_with_logits(
+        logits, labels, reduction="none", pos_weight=pos_weight
+    )
     weights = label_mask * source_weight.unsqueeze(1)
     return (element_loss * weights).sum() / weights.sum().clamp_min(1.0)
 
@@ -107,9 +130,9 @@ def build_model():
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, threshold=0.5):
+def collect_predictions(model, loader, device, pos_weight):
     model.eval()
-    truth_rows, pred_rows, mask_rows = [], [], []
+    truth_rows, probability_rows, mask_rows = [], [], []
     total_loss, batches = 0.0, 0
     for batch in loader:
         labels = batch.pop("labels").to(device)
@@ -117,30 +140,82 @@ def evaluate(model, loader, device, threshold=0.5):
         weights = batch.pop("source_weight").to(device)
         inputs = {key: value.to(device) for key, value in batch.items()}
         logits = model(**inputs).logits
-        total_loss += float(masked_weighted_bce(logits, labels, masks, weights).cpu())
+        total_loss += float(
+            masked_weighted_bce(logits, labels, masks, weights, pos_weight).cpu()
+        )
         batches += 1
         truth_rows.extend(labels.cpu().numpy())
-        pred_rows.extend((torch.sigmoid(logits) >= threshold).cpu().numpy())
+        probability_rows.extend(torch.sigmoid(logits).cpu().numpy())
         mask_rows.extend(masks.cpu().numpy())
+    return (
+        np.asarray(truth_rows, dtype=np.int32),
+        np.asarray(probability_rows, dtype=np.float32),
+        np.asarray(mask_rows, dtype=np.int32),
+        total_loss / max(1, batches),
+    )
 
-    truth = np.asarray(truth_rows, dtype=np.int32)
-    predicted = np.asarray(pred_rows, dtype=np.int32)
-    known = np.asarray(mask_rows, dtype=np.int32)
-    per_label, f1_values = {}, []
+
+def calibrate_thresholds(truth, probabilities, known):
+    """Choose per-label F1 thresholds on validation only, never on the test set."""
+    thresholds = {}
     for index, label in enumerate(LABELS):
         selected = known[:, index] > 0
-        y_true, y_pred = truth[selected, index], predicted[selected, index]
+        y_true = truth[selected, index]
+        y_prob = probabilities[selected, index]
+        if not len(y_true) or len(np.unique(y_true)) < 2:
+            thresholds[label] = 0.5
+            continue
+        best_score, best_threshold = -1.0, 0.5
+        for threshold in np.linspace(0.05, 0.95, 91):
+            score = float(
+                f1_score(y_true, (y_prob >= threshold).astype(np.int32), zero_division=0)
+            )
+            # Prefer the higher threshold on ties to avoid unnecessary positives.
+            if score > best_score + 1e-12 or (
+                abs(score - best_score) <= 1e-12 and threshold > best_threshold
+            ):
+                best_score, best_threshold = score, float(threshold)
+        thresholds[label] = round(best_threshold, 3)
+    return thresholds
+
+
+def metrics_from_arrays(truth, probabilities, known, loss, thresholds):
+    predicted = np.zeros_like(truth, dtype=np.int32)
+    per_label, diagnostics, f1_values = {}, {}, []
+    for index, label in enumerate(LABELS):
+        threshold = float(thresholds.get(label, 0.5))
+        predicted[:, index] = (probabilities[:, index] >= threshold).astype(np.int32)
+        selected = known[:, index] > 0
+        y_true = truth[selected, index]
+        y_pred = predicted[selected, index]
+        y_prob = probabilities[selected, index]
         score = float(f1_score(y_true, y_pred, zero_division=0))
         per_label[label] = score
         if len(np.unique(y_true)) > 1:
             f1_values.append(score)
+        diagnostics[label] = {
+            "known_rows": int(len(y_true)),
+            "actual_positive_rate": round(float(y_true.mean()), 4) if len(y_true) else 0.0,
+            "predicted_positive_rate": round(float(y_pred.mean()), 4) if len(y_pred) else 0.0,
+            "mean_probability": round(float(y_prob.mean()), 4) if len(y_prob) else 0.0,
+            "max_probability": round(float(y_prob.max()), 4) if len(y_prob) else 0.0,
+            "threshold": threshold,
+        }
     return {
-        "loss": total_loss / max(1, batches),
+        "loss": float(loss),
         "macro_f1": float(np.mean(f1_values)) if f1_values else 0.0,
         "per_label_f1": per_label,
-        "evaluated_rows": len(truth),
-        "threshold": threshold,
+        "class_diagnostics": diagnostics,
+        "evaluated_rows": int(len(truth)),
+        "thresholds": {label: float(thresholds.get(label, 0.5)) for label in LABELS},
     }
+
+
+def evaluate(model, loader, device, pos_weight, thresholds):
+    truth, probabilities, known, loss = collect_predictions(
+        model, loader, device, pos_weight
+    )
+    return metrics_from_arrays(truth, probabilities, known, loss, thresholds)
 
 
 def load_source_split(data_dir, brighter_name, hinemo_name, hinemo_limit, seed):
@@ -191,10 +266,13 @@ def main():
         flush=True,
     )
     print(
-        f"[TextEmotion] Device={device}; frozen MuRIL encoder; classifier head only; "
+        f"[TextEmotion] Device={device}; frozen MuRIL encoder; weighted classifier head; "
         f"batch={args.batch_size}; max_length={args.max_length}; epochs={args.epochs}",
         flush=True,
     )
+    pos_weight, class_stats = build_positive_weights(train_rows)
+    pos_weight = pos_weight.to(device)
+    print("[TextEmotion] Training label balance: " + json.dumps(class_stats), flush=True)
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     train_loader = DataLoader(
@@ -218,6 +296,7 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     best_f1 = -1.0
+    best_thresholds = {label: 0.5 for label in LABELS}
 
     for epoch in range(args.epochs):
         model.train()
@@ -232,7 +311,7 @@ def main():
             inputs = {key: value.to(device) for key, value in batch.items()}
             optimizer.zero_grad(set_to_none=True)
             logits = model(**inputs).logits
-            loss = masked_weighted_bce(logits, labels, masks, weights)
+            loss = masked_weighted_bce(logits, labels, masks, weights, pos_weight)
             loss.backward()
             optimizer.step()
             running_loss += float(loss.detach().cpu())
@@ -247,16 +326,36 @@ def main():
                     flush=True,
                 )
 
-        validation = evaluate(model, val_loader, device)
-        print("[TextEmotion] Validation: " + json.dumps(validation), flush=True)
+        val_truth, val_probabilities, val_known, val_loss = collect_predictions(
+            model, val_loader, device, pos_weight
+        )
+        default_validation = metrics_from_arrays(
+            val_truth, val_probabilities, val_known, val_loss,
+            {label: 0.5 for label in LABELS},
+        )
+        epoch_thresholds = calibrate_thresholds(
+            val_truth, val_probabilities, val_known
+        )
+        validation = metrics_from_arrays(
+            val_truth, val_probabilities, val_known, val_loss, epoch_thresholds
+        )
+        print(
+            "[TextEmotion] Validation at fixed 0.50: "
+            + json.dumps(default_validation), flush=True
+        )
+        print(
+            "[TextEmotion] Validation with calibrated thresholds: "
+            + json.dumps(validation), flush=True
+        )
         if validation["macro_f1"] > best_f1:
             best_f1 = validation["macro_f1"]
+            best_thresholds = epoch_thresholds
             model.save_pretrained(output_dir)
             tokenizer.save_pretrained(output_dir)
             print(f"[TextEmotion] Best checkpoint saved to {output_dir}", flush=True)
 
     best_model = AutoModelForSequenceClassification.from_pretrained(str(output_dir)).to(device)
-    test_metrics = evaluate(best_model, test_loader, device)
+    test_metrics = evaluate(best_model, test_loader, device, pos_weight, best_thresholds)
     metadata = {
         "model_type": "muril_text_emotion_sequence_classifier",
         "task_type": "multilabel_six_plus_neutral",
@@ -265,12 +364,15 @@ def main():
         "class_order": LABELS,
         "languages": ["hi", "hinglish"],
         "max_length": args.max_length,
-        "training_method": "frozen_muril_encoder_classifier_head_baseline",
+        "training_method": "frozen_muril_encoder_class_weighted_classifier_head_baseline",
         "training_sources": ["BRIGHTER-Hindi", "HinEmo"],
         "hinemo_labels_are_gpt_generated": True,
         "neutral_policy": "neutral is selected only when no non-neutral threshold is met",
-        "thresholds": {label: 0.5 for label in LABELS},
+        "thresholds": best_thresholds,
+        "threshold_calibration": "per_label_f1_sweep_on_validation_only_0.05_to_0.95",
+        "training_positive_weights": class_stats,
         "best_validation_macro_f1": best_f1,
+        "validation_metrics_at_calibrated_thresholds": validation,
         "test_metrics": test_metrics,
         "train_rows": len(train_rows),
         "validation_rows": len(val_rows),
