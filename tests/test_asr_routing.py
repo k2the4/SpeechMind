@@ -3,6 +3,7 @@ from pathlib import Path
 
 from models.asr_routing import (
     audio_language_suggests_hindi,
+    srota_candidate_valid_for_route,
     srota_supports_duration,
     srota_transcript_supports_hindi,
     whisper_transcript_suggests_hinglish,
@@ -88,6 +89,39 @@ class AsrRoutingSignalTests(unittest.TestCase):
         self.assertFalse(
             srota_transcript_supports_hindi(
                 "That is why the floor looks wet", "en"
+            )
+        )
+
+
+    def test_pure_hindi_srota_candidate_does_not_replace_hindi_primary_route(self):
+        self.assertFalse(
+            srota_candidate_valid_for_route(
+                "चिंटू और राजू।", "hi", probe_source="whisper_detection"
+            )
+        )
+
+    def test_hinglish_srota_candidate_can_replace_hindi_primary_route(self):
+        self.assertTrue(
+            srota_candidate_valid_for_route(
+                "मेरा favourite festival Diwali है",
+                "hi",
+                probe_source="whisper_detection",
+            )
+        )
+
+    def test_romanized_hindi_candidate_can_replace_hindi_primary_route(self):
+        self.assertTrue(
+            srota_candidate_valid_for_route(
+                "main ghar ja raha hoon",
+                "hi",
+                probe_source="whisper_detection",
+            )
+        )
+
+    def test_short_hindi_candidate_is_accepted_on_english_audio_probe(self):
+        self.assertTrue(
+            srota_candidate_valid_for_route(
+                "चिंटू और राजू।", "en", probe_source="audio_language"
             )
         )
 
