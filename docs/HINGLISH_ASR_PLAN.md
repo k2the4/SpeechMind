@@ -116,3 +116,16 @@ Interpretation and caveats:
 - The benchmark uses SpeechMind's NFKC/lowercase/punctuation normalization. Preserve the raw predictions and summary alongside any future comparable runs.
 
 Next decision: run the existing SpeechMind Hindi ASR baseline on the exact same 20 audio files only if a compatible, isolated benchmark path can be established without altering the main `.venv`. Compare per-clip outputs and identical normalization. Do not integrate Srota into production routing on the basis of this smoke test alone.
+
+
+## Same-clip IndicConformer diagnostic
+
+A diagnostic comparator is now available:
+- Launcher: `BENCHMARK_HIACC_INDICCONFORMER.bat`
+- Script: `scripts/compare_hiacc_indicconformer.py`
+- Input: the existing `data/hiacc/benchmarks/srota/predictions.csv`
+- Output: `data/hiacc/benchmarks/indicconformer/summary.json` and `predictions.csv`
+
+It reuses the exact 20 audio paths and reference transcripts from the completed Srota run, forces Hindi decoding through the current IndicConformer model, and uses the same SpeechMind WER/CER normalization utility. It deliberately does not use Whisper fallback: if IndicConformer cannot initialize or infer, the diagnostic stops rather than silently measuring a different model. This is a cross-language stress diagnostic, not a fair contest between two Hinglish specialists, because IndicConformer is the current Hindi baseline and is not designed as the Hinglish specialist.
+
+Run this launcher only after pulling the latest feature branch. It uses the existing `.venv`; it does not install packages or rerun dataset preparation/Srota setup. Review its output before deciding whether a larger controlled Hinglish evaluation is worthwhile.
