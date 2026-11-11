@@ -284,8 +284,8 @@ class SpeechRecognizer:
         indic_language = WHISPER_TO_INDIC.get(detected_language)
 
         # Probe Hindi-dominant speech with the isolated Hinglish specialist.
-        # Only accept it when the transcript contains both Devanagari and Latin
-        # script; pure-Hindi output stays on the existing IndicConformer route.
+        # Accept mixed-script or sufficiently strong Romanized-Hindi evidence;
+        # pure-Hindi output stays on the existing IndicConformer route.
         if indic_language == "hi" and language_score >= MIN_INDIC_ROUTE_SCORE:
             srota_result = self._try_srota_code_switch(
                 audio_numpy, language_score=language_score,
