@@ -93,3 +93,8 @@ treating outputs as reliable.
 For the prepared JSONL files produced by `PREPARE_TEXT_EMOTION_DATA.bat`, use `TRAIN_TEXT_EMOTION.bat`. It invokes `scripts/train_text_emotion_multilabel.py`, not the legacy CSV trainer. The multi-label trainer preserves the released train/dev/test splits, masks unknown HinEmo categories from both loss and validation metrics, down-weights GPT-generated HinEmo labels, and writes the six-label checkpoint format consumed by `models/text_emotion.py`. Neutral is derived only when no non-neutral signal crosses its threshold. The held-out test metrics are written to `checkpoints/text_emotion_muril/text_emotion_metrics.json`.
 
 The default launcher uses batch size 2, max length 96, and two epochs for CPU memory constraints. Training may still take several hours on a CPU. Do not enable the checkpoint in product claims until held-out per-label results have been reviewed.
+
+
+### CPU baseline configuration
+
+The default launcher performs a bounded baseline run: all 2,556 BRIGHTER-Hindi training examples plus a deterministic 1,200-row HinEmo subset; one epoch; batch size 8; maximum sequence length 64; frozen MuRIL encoder with only the classification head trained. Validation uses all 200 BRIGHTER dev rows plus a deterministic 500-row HinEmo subset. Test evaluation uses all 2,020 BRIGHTER test rows plus a deterministic 500-row HinEmo subset. The trainer prints progress and ETA every 25 batches. This is a first-pass baseline, not full MuRIL fine-tuning; metrics must be reviewed before making product accuracy claims.
