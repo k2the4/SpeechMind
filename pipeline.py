@@ -5,6 +5,7 @@ The original transcript, English meaning, text analysis, voice analysis, and
 combined interpretation remain distinct outputs.
 """
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from utils.audio_utils import preprocess
