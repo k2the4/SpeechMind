@@ -107,6 +107,21 @@ class BenchmarkEntrypointTests(unittest.TestCase):
         self.assertIn('language = "hi" if model == "whisper-hi" else None', source)
         self.assertIn('"benchmark_whisper_forced_hindi"', source)
 
+    def test_hiacc_auto_benchmark_compares_saved_previous_route(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "scripts" / "benchmark_hiacc_speechmind_auto.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("read_previous_predictions", source)
+        self.assertIn("previous_route_overall", source)
+        self.assertIn("route_metric_change", source)
+        self.assertIn("by_age_group", source)
+        self.assertIn("previous_hypothesis", source)
+        self.assertLess(
+            source.index("previous_predictions = read_previous_predictions"),
+            source.index("with predictions_path.open"),
+        )
+
     def test_forced_hindi_whisper_launcher_exists(self):
         root = Path(__file__).resolve().parents[1]
         launcher = root / "BENCHMARK_INDICVOICES_HINDI_WHISPER_FORCED_HI.bat"
