@@ -14,6 +14,10 @@ from transformers import AutoModel
 from models.asr_quality import estimate_whisper_quality
 from models.srota_provider import SrotaASRProvider
 from models.language_spans import annotate_language_spans
+from models.asr_routing import (
+    srota_supports_duration,
+    whisper_transcript_suggests_hinglish,
+)
 
 WHISPER_MODEL = "small"
 INDIC_CONFORMER_MODEL = "ai4bharat/indic-conformer-600m-multilingual"
@@ -154,6 +158,12 @@ class SpeechRecognizer:
         """Probe Srota for mixed-script Hinglish and fully Romanized Hindi."""
         if self.srota_provider_error is not None:
             return None
+        if not srota_supports_duration(int(audio_numpy.size), sample_rate=16000):
+            print(
+                "[ASR] Skipping Srota for this clip only: current worker limit "
+                "is 30 seconds. Existing specialist routing will handle it."
+            )
+            return None
         try:
             if self.srota_provider is None:
                 self.srota_provider = SrotaASRProvider()
@@ -203,10 +213,12 @@ class SpeechRecognizer:
                 ),
             })
         except Exception as error:
-            self.srota_provider_error = f"{type(error).__name__}: {error}"
+            # A single request failure must not disable Srota for every later
+            # clip in this long-lived app session. Only a missing installation
+            # is cached above; transient/model errors are logged per request.
             print(
-                "[ASR] Srota code-switch probe unavailable; retaining the "
-                f"existing route: {self.srota_provider_error}"
+                "[ASR] Srota probe failed for this clip; retaining the "
+                f"existing route: {type(error).__name__}: {error}"
             )
             return None
 
@@ -271,19 +283,47 @@ class SpeechRecognizer:
             if srota_result is not None:
                 return srota_result
 
-        # Whisper can classify a code-switched utterance as English. Probe only
-        # uncertain English detections to avoid loading/running Srota on clear
-        # English-only speech.
-        if (
-            detected_language in ("en", "english")
-            and language_score < MIN_SROTA_PROBE_ENGLISH_SCORE
-        ):
-            srota_result = self._try_srota_code_switch(
-                audio_numpy, language_score=language_score,
-                primary_language=detected_language,
+        # Low-confidence English detections get a direct specialist probe.
+        # For high-confidence English, decode Whisper first (this decode is
+        # needed anyway), then probe only when its transcript contains Hindi /
+        # Hinglish evidence. This catches confidently mislabelled Romanized
+        # Hindi without paying the Srota cost for clear English speech.
+        if detected_language in ("en", "english"):
+            srota_already_probed = False
+            if language_score < MIN_SROTA_PROBE_ENGLISH_SCORE:
+                srota_result = self._try_srota_code_switch(
+                    audio_numpy, language_score=language_score,
+                    primary_language=detected_language,
+                )
+                srota_already_probed = True
+                if srota_result is not None:
+                    return srota_result
+
+            decode_language = (
+                detected_language
+                if language_score >= MIN_WHISPER_LANGUAGE_LOCK_SCORE
+                else None
             )
-            if srota_result is not None:
-                return srota_result
+            whisper_result = self._whisper_result(
+                self._decode_with_whisper(audio_numpy, language=decode_language),
+                language_fallback=detected_language,
+                language_detection_score=language_score,
+                language_source="whisper_detection_and_decode",
+            )
+            if (
+                not srota_already_probed
+                and whisper_transcript_suggests_hinglish(
+                    whisper_result.get("transcript", ""),
+                    whisper_result.get("language") or detected_language,
+                )
+            ):
+                srota_result = self._try_srota_code_switch(
+                    audio_numpy, language_score=language_score,
+                    primary_language=detected_language,
+                )
+                if srota_result is not None:
+                    return srota_result
+            return whisper_result
 
         if indic_language in INDIC_LANGUAGES and language_score >= MIN_INDIC_ROUTE_SCORE:
             print(f"[ASR] Detected {INDIC_LANGUAGES[indic_language]}; using IndicConformer.")
