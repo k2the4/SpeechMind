@@ -285,7 +285,7 @@ def main():
         flush=True,
     )
     print(
-        f"[TextEmotion] Device={device}; frozen MuRIL encoder; weighted classifier head; "
+        f"[TextEmotion] Device={device}; final two MuRIL encoder layers fine-tuned; weighted classifier head; "
         f"batch={args.batch_size}; max_length={args.max_length}; epochs={args.epochs}",
         flush=True,
     )
