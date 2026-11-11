@@ -8,8 +8,15 @@ from contextlib import redirect_stdout
 from io import StringIO
 
 
+# This process communicates over pipes, not a Windows console. Force UTF-8
+# for input and diagnostics, and emit ASCII-escaped JSON on the protocol pipe.
+for stream in (sys.stdin, sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def emit(payload: dict) -> None:
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    sys.stdout.write(json.dumps(payload, ensure_ascii=True) + "\n")
     sys.stdout.flush()
 
 
