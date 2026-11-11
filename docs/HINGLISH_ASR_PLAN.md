@@ -161,3 +161,26 @@ It reads the same saved 20-clip Srota prediction CSV and runs the current `Speec
 Run after pulling the latest feature branch. It uses the existing `.venv`, installs nothing, and does not change production code or routing. The first clip routed to IndicConformer may include lazy model initialization in its timing. Results are saved to `data/hiacc/benchmarks/speechmind_auto/`.
 
 This is the most useful next check: it measures the system users currently have, rather than only comparing isolated candidate models. Once complete, compare its per-clip output and routing against Srota. If the automatic route underperforms on Hinglish, the next engineering task is a language-span/code-switch-aware routing strategy—not simply replacing every utterance with Srota.
+
+
+## Current automatic SpeechMind route comparison (2026-11-11)
+
+The current automatic ASR route was run on the exact same 20 HiACC clips used by the Srota smoke test. It uses Whisper primary-language detection, then routes confidently detected Indic speech to IndicConformer and other speech to Whisper Small.
+
+| Measure | SpeechMind automatic | Srota |
+|---|---:|---:|
+| Samples | 20 | 20 |
+| Micro WER | 27.68% | 16.96% |
+| Micro CER | 22.88% | 10.04% |
+| Mean clip inference | 3.40 s | 6.10 s |
+
+SpeechMind selected IndicConformer for 14 clips and Whisper Small for 6. Whisper detected Hindi on 15 clips, English on 4, and Bengali on 1. At clip level, Srota had lower WER on 11 clips, SpeechMind automatic on 4, and 5 tied; Srota had lower CER on 13, SpeechMind automatic on 4, and 3 tied.
+
+Interpretation and decision:
+- The existing primary-language routing is not adequate for Hinglish. A Hindi language guess routes a mixed Hindi-English utterance to IndicConformer, which does not preserve code-switching as well as the Hinglish-specialized candidate on this sample.
+- Srota is now the leading Hinglish ASR candidate based on the available same-clip evidence. This is still a small diagnostic, not production validation.
+- Do not replace the pure-Hindi IndicConformer baseline solely from this Hinglish test. Keep language-specialist routing as a goal, but distinguish mixed Hindi-English from pure Hindi automatically.
+- Srota's inference environment must remain isolated: its qwen-asr dependency requires Transformers 4.57.6, while the main application pins Transformers 4.46.3. Do not install Srota dependencies into the main .venv.
+- Next implementation phase: add an isolated Srota inference provider behind the existing ASR interface, preserving the main environment. Add automatic mixed-speech routing and explicit model/fallback metadata. Evaluate pure Hindi and English separately before finalizing specialist selection. Do not repeat the completed 20-clip smoke test unless the model, routing hypothesis, or evaluation set changes.
+
+Caveats: the 20-clip HiACC test sample is diagnostic only; it does not establish production accuracy or unseen-speaker generalization. The results are not evidence for Bengali or other regional-language support.
