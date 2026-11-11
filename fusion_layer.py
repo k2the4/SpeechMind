@@ -1,12 +1,14 @@
 """
-SpeechMind late-fusion layer.
+SpeechMind reliability-aware late fusion.
 
-Unavailable or untrained branches are excluded rather than treated as
-neutral predictions. The returned top score is an uncalibrated model score,
-not a probability that the prediction is correct.
+The fusion score is an uncalibrated combination of model distributions.
+Branch disagreement is preserved as an explicit output; a weighted winner
+must not hide contradictory text and vocal evidence.
 """
 
-UNIFIED_EMOTIONS = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]
+UNIFIED_EMOTIONS = [
+    "joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"
+]
 DEFAULT_TEXT_WEIGHT = 0.60
 DEFAULT_VOICE_WEIGHT = 0.40
 UNKNOWN_ASR_TEXT_WEIGHT = 0.30
@@ -41,6 +43,15 @@ VALENCE_MAP = {
     "fear": "Negative", "surprise": "Neutral", "disgust": "Negative",
     "neutral": "Neutral",
 }
+INTERPRETATIONS = {
+    "joy": "Positive and celebratory emotional expression",
+    "sadness": "Sad or subdued emotional expression",
+    "anger": "Angry or frustrated emotional expression",
+    "fear": "Concerned, nervous, or fear-like emotional expression",
+    "surprise": "Surprised or unexpected emotional expression",
+    "disgust": "Disapproving or disgust-like emotional expression",
+    "neutral": "Neutral or emotionally subdued expression",
+}
 
 
 def _normalize_distribution(distribution):
@@ -52,7 +63,9 @@ def _normalize_distribution(distribution):
             value = max(0.0, float(probability))
         except (TypeError, ValueError):
             continue
-        cleaned[str(label).lower()] = value
+        if value > 0:
+            key = str(label).lower().strip()
+            cleaned[key] = cleaned.get(key, 0.0) + value
     total = sum(cleaned.values())
     return {label: value / total for label, value in cleaned.items()} if total > 0 else {}
 
@@ -82,15 +95,15 @@ def _map_distribution(distribution, mapping):
 
 
 def _top_emotion(distribution):
-    return max(distribution, key=distribution.get) if distribution else "neutral"
+    return max(distribution, key=distribution.get) if distribution else None
 
 
 def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
-    """Fuse the text/voice distributions using ASR token-quality as a weight hint.
+    """Fuse available semantic and vocal distributions.
 
-    asr_confidence is retained as a compatibility name. For Whisper it is an
-    uncalibrated token-quality heuristic, not transcript correctness. If the
-    decoder exposes no quality score, text receives a conservative 0.30 weight.
+    asr_confidence is a compatibility name for an uncalibrated ASR quality
+    indicator. The resulting weights are heuristics until learned/validated
+    on representative paired speech-emotion data.
     """
     quality_available = asr_confidence is not None
     if quality_available:
@@ -101,15 +114,19 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
     if quality_available:
         asr_confidence = max(0.0, min(1.0, asr_confidence))
 
-    text_available = bool(text_result.get("available", True))
-    voice_available = bool(voice_result.get("available", True))
-    text_distribution = _map_distribution(_get_distribution(text_result), TEXT_TO_UNIFIED)
-    voice_distribution = _map_distribution(_get_distribution(voice_result), VOICE_TO_UNIFIED)
+    text_distribution = _map_distribution(
+        _get_distribution(text_result), TEXT_TO_UNIFIED
+    )
+    voice_distribution = _map_distribution(
+        _get_distribution(voice_result), VOICE_TO_UNIFIED
+    )
+    text_available = bool(text_distribution)
+    voice_available = bool(voice_distribution)
 
-    text_available = text_available and bool(text_distribution)
-    voice_available = voice_available and bool(voice_distribution)
     if not text_available and not voice_available:
-        raise ValueError("Fusion cannot run: both emotion branches are unavailable or returned unmapped labels.")
+        raise ValueError(
+            "Fusion cannot run: both emotion branches are unavailable or returned unmapped labels."
+        )
 
     if text_available and voice_available:
         if not quality_available:
@@ -131,29 +148,76 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         for label in UNIFIED_EMOTIONS
     }
     overall_emotion = _top_emotion(fused_scores)
-    interpretation = {
-        "joy": "Positive and celebratory emotional expression",
-        "sadness": "Sad or subdued emotional expression",
-        "anger": "Angry or frustrated emotional expression",
-        "fear": "Concerned, nervous, or fear-like emotional expression",
-        "surprise": "Surprised or unexpected emotional expression",
-        "disgust": "Disapproving or disgust-like emotional expression",
-        "neutral": "Neutral or emotionally subdued expression",
-    }
+    second_score = sorted(fused_scores.values(), reverse=True)[1]
+    confidence_margin = max(0.0, fused_scores[overall_emotion] - second_score)
+
+    text_emotion = _top_emotion(text_distribution)
+    voice_emotion = _top_emotion(voice_distribution)
+    both_available = text_available and voice_available
+    branch_agreement = (
+        text_emotion == voice_emotion if both_available else None
+    )
+    branch_disagreement = branch_agreement is False
+
+    uncertainty_reasons = []
+    if not quality_available:
+        uncertainty_reasons.append("ASR quality indicator unavailable")
+    elif asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD:
+        uncertainty_reasons.append("ASR quality indicator is low")
+    if not text_available:
+        uncertainty_reasons.append("Text-emotion branch unavailable")
+    if not voice_available:
+        uncertainty_reasons.append("Voice-emotion branch unavailable")
+    if branch_disagreement:
+        uncertainty_reasons.append("Text and voice branches disagree")
+    if confidence_margin < 0.15:
+        uncertainty_reasons.append("Combined distribution has a narrow top-score margin")
+
+    if branch_disagreement:
+        interpretation_status = "branch_disagreement"
+        branch_comparison = (
+            f"Text signals {text_emotion}; vocal signals {voice_emotion}. "
+            "These are different observations, so the combined label should be "
+            "treated cautiously rather than as a resolved emotional state."
+        )
+    elif branch_agreement is True:
+        interpretation_status = "branch_agreement"
+        branch_comparison = (
+            f"Text and voice both signal {text_emotion}. Agreement is not proof "
+            "that the interpretation is correct."
+        )
+    elif text_available or voice_available:
+        interpretation_status = "single_branch"
+        available_branch = "text" if text_available else "voice"
+        branch_comparison = (
+            f"Only the {available_branch} branch contributed to this interpretation."
+        )
+    else:
+        interpretation_status = "insufficient_evidence"
+        branch_comparison = "Neither analysis branch returned usable evidence."
+
     return {
-        "text_emotion": text_result.get("emotion", "unavailable"),
-        "voice_emotion": voice_result.get("emotion", "unavailable"),
-        "valence": VALENCE_MAP.get(overall_emotion, "Neutral"),
-        "arousal": voice_result.get("arousal", "Unknown"),
+        "text_emotion": text_result.get("emotion", "unavailable") if text_available else "unavailable",
+        "voice_emotion": voice_result.get("emotion", "unavailable") if voice_available else "unavailable",
+        "valence": VALENCE_MAP.get(overall_emotion, "Unknown"),
+        # No independently validated acoustic arousal estimator is implemented.
+        "arousal": "Not assessed",
         "confidence": round(fused_scores[overall_emotion], 3),
+        "confidence_margin": round(confidence_margin, 3),
         "confidence_is_calibrated": False,
-        "overall_interpretation": interpretation.get(overall_emotion, "Neutral emotional expression"),
-        "low_confidence_warning": (
-            not quality_available or asr_confidence < ASR_CONFIDENCE_LOW_THRESHOLD
-        ),
+        "overall_interpretation": INTERPRETATIONS.get(overall_emotion, "Interpretation unavailable"),
+        "low_confidence_warning": bool(uncertainty_reasons),
         "overall_emotion": overall_emotion,
         "fusion_weights": {"text": round(text_weight, 3), "voice": round(voice_weight, 3)},
         "text_distribution": text_distribution,
         "voice_distribution": voice_distribution,
         "fused_distribution": fused_scores,
+        "text_branch_available": text_available,
+        "voice_branch_available": voice_available,
+        "branch_agreement": branch_agreement,
+        "branch_disagreement": branch_disagreement,
+        "branch_comparison": branch_comparison,
+        "interpretation_status": interpretation_status,
+        "uncertainty_reasons": uncertainty_reasons,
+        "arousal_available": False,
     }
