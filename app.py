@@ -178,6 +178,7 @@ if audio_source is not None:
                     "fusion_weights": result.get("fusion_weights"),
                     "meaning_en_available": result.get("meaning_en_available"),
                     "meaning_en_source": result.get("meaning_en_source"),
+                    "translator_provider": result.get("translator_provider"),
                     "translator_loaded": result.get("translator_loaded"),
                     "translator_inference_seconds": result.get(
                         "translator_inference_seconds"
