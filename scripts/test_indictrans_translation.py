@@ -11,6 +11,11 @@ if str(PROJECT_ROOT) not in sys.path:
 from models.translation import Translator
 
 
+MODEL_ACCESS_URL = (
+    "https://huggingface.co/ai4bharat/indictrans2-indic-en-dist-200M"
+)
+
+
 def main() -> int:
     original = "इस image के बारे में हमारा ये thought है"
     try:
@@ -20,7 +25,14 @@ def main() -> int:
         print(original)
         translated = translator.to_english(original, "hi")
     except Exception as error:
-        print(f"\n[Translation smoke] FAILED: {type(error).__name__}: {error}")
+        details = f"{type(error).__name__}: {error}"
+        print(f"\n[Translation smoke] FAILED: {details}")
+        if "gated repo" in details.lower() or "401 client error" in details.lower():
+            print("\n[Translation smoke] Hugging Face access is required.")
+            print(f"1. Open {MODEL_ACCESS_URL}")
+            print("2. Sign in and accept/request access to the model repository.")
+            print("3. Authenticate inside WSL using: hf auth login")
+            print("   Run it in the IndicTrans WSL environment, not Windows.")
         return 1
 
     print("\n[Translation smoke] English meaning:")
