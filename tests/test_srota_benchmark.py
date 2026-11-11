@@ -1,9 +1,16 @@
 import unittest
 
-from scripts.benchmark_srota_hiacc import select_records, script_label
+from scripts.benchmark_srota_hiacc import DATA_ROOT, resolve_audio_path, select_records, script_label
 
 
 class SrotaBenchmarkTests(unittest.TestCase):
+    def test_manifest_audio_path_resolves_under_hiacc_data_root(self):
+        row = {"audio_path": "raw/Corpus/adult/audio/test_split/AD63063.wav"}
+        self.assertEqual(
+            resolve_audio_path(row),
+            DATA_ROOT / "raw/Corpus/adult/audio/test_split/AD63063.wav",
+        )
+
     def test_sample_is_balanced_across_adult_and_children(self):
         rows = []
         for group in ("adult", "children"):
