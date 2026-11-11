@@ -18,8 +18,8 @@ from models.srota_provider import SrotaASRProvider
 from models.language_spans import annotate_language_spans
 from models.asr_routing import (
     audio_language_suggests_hindi,
+    srota_candidate_valid_for_route,
     srota_supports_duration,
-    srota_transcript_supports_hindi,
     whisper_transcript_suggests_hinglish,
 )
 
@@ -197,8 +197,10 @@ class SpeechRecognizer:
             )
             transcript = str(result.get("transcript") or "").strip()
             annotation = annotate_language_spans(transcript, primary_language)
-            use_srota = srota_transcript_supports_hindi(
-                transcript, primary_language or "unknown"
+            use_srota = srota_candidate_valid_for_route(
+                transcript,
+                primary_language or "unknown",
+                probe_source=probe_source,
             )
             if not use_srota:
                 return None
