@@ -1,3 +1,6 @@
-# Optional IndicTrans2 translation runtime, installed only in .venv_srota.
-# The main SpeechMind .venv remains on Transformers 4.46.3.
+# Optional IndicTrans2 translation runtime in .venv_srota only.
+# Pin the same Transformers build required by qwen-asr; do not let the
+# unbounded toolkit dependency upgrade it to Transformers 5.x.
+qwen-asr==0.0.6
+transformers==4.57.6
 indictranstoolkit==1.1.1
