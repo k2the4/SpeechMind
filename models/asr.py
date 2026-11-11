@@ -137,9 +137,18 @@ class SpeechRecognizer:
 
     def _try_srota_code_switch(self, audio_numpy, language_score=None):
         """Use Srota only when its output visibly preserves Hindi-English mixing."""
+        if self.srota_provider_error is not None:
+            return None
         try:
             if self.srota_provider is None:
                 self.srota_provider = SrotaASRProvider()
+            if not self.srota_provider.available:
+                self.srota_provider_error = (
+                    "Srota environment is not installed; run "
+                    "SETUP_HINGLISH_ASR_ENV.bat once."
+                )
+                print(f"[ASR] {self.srota_provider_error}")
+                return None
             result = self.srota_provider.transcribe_audio(
                 audio_numpy, sample_rate=16000
             )
