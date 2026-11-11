@@ -82,6 +82,30 @@ def audio_language_suggests_hindi(
     return hindi_score >= primary_score * min_hindi_to_primary_ratio
 
 
+
+def srota_candidate_valid_for_route(
+    transcript: str,
+    primary_language: str = "en",
+    probe_source: str = "whisper_detection",
+) -> bool:
+    """Apply route-specific acceptance to a Srota candidate.
+
+    When Hindi is already the primary detected language, Srota must show
+    mixed-script or Romanized-Hindi evidence before replacing IndicConformer.
+    For an English/uncertain primary route, a Devanagari-only candidate is
+    acceptable because it may recover a short Hindi utterance missed by
+    Whisper's primary-language decision.
+    """
+    aliases = {"english": "en", "hindi": "hi"}
+    primary = aliases.get(
+        str(primary_language or "").lower().strip(),
+        str(primary_language or "").lower().strip(),
+    )
+    if primary == "hi" and probe_source == "whisper_detection":
+        return whisper_transcript_suggests_hinglish(transcript, primary)
+    return srota_transcript_supports_hindi(transcript, primary)
+
+
 def srota_transcript_supports_hindi(
     transcript: str,
     primary_language: str = "en",
