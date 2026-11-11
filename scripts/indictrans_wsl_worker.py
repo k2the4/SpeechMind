@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+import traceback
 from contextlib import redirect_stdout
 from io import StringIO
 
@@ -37,7 +38,10 @@ def get_torch():
 def get_components():
     global _components
     if _components is None:
-        torch = get_torch()
+        get_torch()
+        # Keep third-party/model initialization messages off the JSONL stdout
+        # channel. AI4Bharat's Transformers example uses eager attention when
+        # Flash Attention 2 is not installed; this CPU worker does the same.
         with redirect_stdout(StringIO()):
             try:
                 from IndicTransToolkit.processor import IndicProcessor
@@ -49,7 +53,9 @@ def get_components():
                 MODEL_NAME, trust_remote_code=True
             )
             model = AutoModelForSeq2SeqLM.from_pretrained(
-                MODEL_NAME, trust_remote_code=True
+                MODEL_NAME,
+                trust_remote_code=True,
+                attn_implementation="eager",
             ).to("cpu")
             model.eval()
             processor = IndicProcessor(inference=True)
@@ -58,39 +64,74 @@ def get_components():
 
 
 def translate_to_english(text: str, src_lang: str) -> str:
-    if not text.strip():
-        raise ValueError("Translation input is empty.")
-    if not src_lang.strip():
-        raise ValueError("Translation source language is missing.")
-    torch = get_torch()
-    tokenizer, model, processor = get_components()
-    prepared = processor.preprocess_batch(
-        [text], src_lang=src_lang, tgt_lang="eng_Latn"
-    )
-    inputs = tokenizer(
-        prepared,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=256,
-    ).to("cpu")
-    with torch.inference_mode():
-        generated = model.generate(
-            **inputs,
-            max_length=256,
-            num_beams=4,
-            num_return_sequences=1,
+    stage = "input validation"
+    try:
+        if not text.strip():
+            raise ValueError("Translation input is empty.")
+        if not src_lang.strip():
+            raise ValueError("Translation source language is missing.")
+
+        stage = "loading IndicTrans2 model/tokenizer"
+        torch = get_torch()
+        tokenizer, model, processor = get_components()
+
+        stage = "IndicProcessor preprocessing"
+        prepared = processor.preprocess_batch(
+            [text], src_lang=src_lang, tgt_lang="eng_Latn"
         )
-    decoded = tokenizer.batch_decode(
-        generated,
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=True,
-    )
-    translated = processor.postprocess_batch(decoded, lang="eng_Latn")
-    result = str(translated[0]).strip() if translated else ""
-    if not result:
-        raise RuntimeError("IndicTrans2 returned an empty English translation.")
-    return result
+        if not prepared or not str(prepared[0]).strip():
+            raise RuntimeError("IndicProcessor returned an empty prepared sentence.")
+
+        stage = "tokenization"
+        inputs = tokenizer(
+            prepared,
+            return_tensors="pt",
+            padding="longest",
+            truncation=True,
+            max_length=256,
+            return_attention_mask=True,
+        )
+        if "input_ids" not in inputs or inputs["input_ids"] is None:
+            raise RuntimeError("Tokenizer did not return input_ids.")
+        if "attention_mask" not in inputs or inputs["attention_mask"] is None:
+            raise RuntimeError("Tokenizer did not return attention_mask.")
+        inputs = inputs.to("cpu")
+
+        stage = "sequence generation"
+        # Disable KV caching on this CPU compatibility path. The model is a
+        # short-input translation worker; correctness takes priority over the
+        # cache speedup until generation compatibility is confirmed.
+        with torch.inference_mode():
+            generated = model.generate(
+                **inputs,
+                use_cache=False,
+                min_length=0,
+                max_length=256,
+                num_beams=4,
+                num_return_sequences=1,
+            )
+
+        stage = "token decoding"
+        decoded = tokenizer.batch_decode(
+            generated,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=True,
+        )
+        if not decoded:
+            raise RuntimeError("Tokenizer decoded no generated sequences.")
+
+        stage = "IndicProcessor postprocessing"
+        translated = processor.postprocess_batch(decoded, lang="eng_Latn")
+        result = str(translated[0]).strip() if translated else ""
+        if not result:
+            raise RuntimeError("IndicTrans2 returned an empty English translation.")
+        return result
+    except Exception as error:
+        detail = traceback.format_exc()
+        raise RuntimeError(
+            f"IndicTrans2 stage '{stage}' failed: "
+            f"{type(error).__name__}: {error}\n{detail}"
+        ) from error
 
 
 def main() -> int:
