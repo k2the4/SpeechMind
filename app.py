@@ -110,6 +110,12 @@ if audio_source is not None:
             st.divider()
             st.subheader("Text analysis")
             st.metric("Semantic emotion", str(result.get("text_emotion", "unavailable")).title())
+            secondary_text_emotions = result.get("text_emotion_secondary") or []
+            if secondary_text_emotions:
+                st.caption(
+                    "Additional text signals: "
+                    + ", ".join(str(label).title() for label in secondary_text_emotions)
+                )
             if not result.get("text_emotion_available", False):
                 st.warning(
                     "Text-emotion analysis is unavailable. "
@@ -160,6 +166,11 @@ if audio_source is not None:
                     "text_emotion_model_source": result.get("text_emotion_model_source"),
                     "text_emotion_available": result.get("text_emotion_available"),
                     "text_emotion_reason": result.get("text_emotion_reason"),
+                    "text_emotion_secondary": result.get("text_emotion_secondary"),
+                    "text_emotion_multi_label_scores": result.get(
+                        "text_emotion_multi_label_scores"
+                    ),
+                    "text_emotion_task_type": result.get("text_emotion_task_type"),
                     "voice_model_source": result.get("voice_model_source"),
                     "voice_inference_device": result.get("voice_inference_device"),
                     "voice_inference_windows": result.get("voice_inference_windows"),
