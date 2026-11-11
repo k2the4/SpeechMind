@@ -80,6 +80,11 @@ if audio_source is not None:
                 + str(result.get("language", "unknown")).upper()
                 + ". Mixed-language span detection is still being developed."
             )
+            if result.get("code_switch_detected"):
+                st.caption(
+                    "Automatic Hindi-English code-switch route: "
+                    + str(result.get("asr_model", "Srota"))
+                )
 
             quality = result.get("asr_quality_score")
             if quality is not None:
@@ -134,6 +139,11 @@ if audio_source is not None:
                 st.json({
                     "stage_timings_sec": result.get("timings_sec", {}),
                     "asr_model": result.get("asr_model"),
+                    "code_switch_detected": result.get("code_switch_detected"),
+                    "asr_candidate_model": result.get("asr_candidate_model"),
+                    "asr_candidate_inference_seconds": result.get(
+                        "asr_candidate_inference_seconds"
+                    ),
                     "language_source": result.get("language_source"),
                     "language_detection_score": result.get("language_detection_score"),
                     "asr_quality_score": result.get("asr_quality_score"),
