@@ -197,3 +197,8 @@ The main ASR interface now has an isolated Srota probe for automatic code-switch
 - The worker remains loaded between requests, avoiding repeated model initialization for each clip.
 
 This is an initial automatic routing heuristic, not a validated language-span detector. Srota script output is used as a code-switch signal; Romanized Hindi that Srota emits entirely in Latin script may not be detected by this first version. The English language-score threshold is provisional and is not a calibrated probability. The next user-side action is a one-clip integration smoke test before running the full application.
+
+
+### Srota integration check
+
+Run `CHECK_SPEECHMIND_SROTA.bat` after pulling the integration commits. It runs the isolated-provider protocol unit tests and one known mixed Hindi-English HiACC clip (`CH21075.wav`) through the real automatic SpeechMind ASR path. It does not download the dataset, reinstall packages, train models, or repeat the 20-clip benchmark.
