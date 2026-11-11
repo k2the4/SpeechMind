@@ -1,18 +1,14 @@
 """Small, dependency-light routing signals for the ASR cascade."""
 from __future__ import annotations
 
-from models.language_spans import annotate_language_spans
+from models.language_spans import (
+    annotate_language_spans,
+    STRONG_ROMANIZED_HINDI_WORDS,
+)
 
 
 # These words are specific enough to justify a second pass even when they are
 # the only Romanized-Hindi token in a short transcript.
-STRONG_ROMANIZED_HINDI_WORDS = {
-    "aapko", "batao", "chahiye", "hain", "hoon", "hun", "kyunki",
-    "mujhe", "mujhko", "mujhse", "nahi", "nahin", "nhi", "raha",
-    "rahe", "rahi", "samajh", "tumhe", "tujhe",
-}
-
-
 def srota_supports_duration(sample_count: int, sample_rate: int = 16000,
                             max_seconds: float = 30.0) -> bool:
     """Return whether a waveform fits the current Srota worker clip limit."""
