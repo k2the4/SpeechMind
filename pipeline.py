@@ -60,12 +60,10 @@ class SpeechMindPipeline:
                 print("[Pipeline] Initializing isolated IndicTrans2 translator...")
                 from models.translation import Translator
 
-                shared_provider = getattr(self.asr, "srota_provider", None)
-                if getattr(self.asr, "srota_provider_error", None):
-                    shared_provider = None
-                self.translator = Translator(provider=shared_provider)
-                # Reuse one worker process for ASR and translation when possible.
-                self.asr.srota_provider = self.translator.provider
+                # Translation runs in its own isolated worker. On Windows,
+                # this routes to WSL so native Linux-only IndicTransToolkit
+                # dependencies never enter the Srota ASR environment.
+                self.translator = Translator()
 
             translated = self.translator.to_english(transcript, language)
             self.translation_available = True
@@ -172,7 +170,10 @@ class SpeechMindPipeline:
             "fusion_weights": fused["fusion_weights"],
             "processing_time_sec": timings["total"],
             "timings_sec": timings,
-            "translator_provider": "local_indictrans2",
+            "translator_provider": (
+                self.translator.provider_name if self.translator is not None
+                else "not_initialized"
+            ),
             "translator_loaded": bool(
                 self.translator is not None and self.translator.loaded
             ),
