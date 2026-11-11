@@ -12,11 +12,15 @@ import whisper
 from transformers import AutoModel
 
 from models.asr_quality import estimate_whisper_quality
+from models.srota_provider import SrotaASRProvider, has_mixed_devanagari_latin
 
 WHISPER_MODEL = "small"
 INDIC_CONFORMER_MODEL = "ai4bharat/indic-conformer-600m-multilingual"
 MIN_INDIC_ROUTE_SCORE = 0.65
 MIN_WHISPER_LANGUAGE_LOCK_SCORE = 0.70
+# Srota probing is limited to Hindi-dominant or uncertain English utterances.
+# The detector score is a routing heuristic, not a calibrated probability.
+MIN_SROTA_PROBE_ENGLISH_SCORE = 0.90
 
 INDIC_LANGUAGES = {
     "as": "Assamese", "bn": "Bengali", "brx": "Bodo", "doi": "Dogri",
@@ -55,6 +59,8 @@ class SpeechRecognizer:
         self.whisper = whisper.load_model(WHISPER_MODEL, device=str(self.device))
         self.indic_model = None
         self.indic_model_error = None
+        self.srota_provider = None
+        self.srota_provider_error = None
         print(
             f"[ASR] Whisper loaded on {self.device}; "
             "IndicConformer remains lazy-loaded."
@@ -129,6 +135,43 @@ class SpeechRecognizer:
             result["asr_requested_model"] = "indic-conformer-600m"
             return result
 
+    def _try_srota_code_switch(self, audio_numpy, language_score=None):
+        """Use Srota only when its output visibly preserves Hindi-English mixing."""
+        try:
+            if self.srota_provider is None:
+                self.srota_provider = SrotaASRProvider()
+            result = self.srota_provider.transcribe_audio(
+                audio_numpy, sample_rate=16000
+            )
+            transcript = str(result.get("transcript") or "").strip()
+            if not has_mixed_devanagari_latin(transcript):
+                return None
+            return {
+                "transcript": transcript,
+                "language": "hi",
+                "confidence": None,
+                "quality_score": None,
+                "quality_method": "unavailable_for_srota",
+                "language_detection_score": (
+                    round(float(language_score), 3)
+                    if language_score is not None else None
+                ),
+                "language_source": "whisper_detection_srota_code_switch_probe",
+                "asr_model": result.get("asr_model", "qwen3-asr-0.6b-hinglish"),
+                "asr_fallback": False,
+                "asr_fallback_reason": None,
+                "asr_candidate_model": "qwen3-asr-0.6b-hinglish",
+                "asr_candidate_inference_seconds": result.get("inference_seconds"),
+                "code_switch_detected": True,
+            }
+        except Exception as error:
+            self.srota_provider_error = f"{type(error).__name__}: {error}"
+            print(
+                "[ASR] Srota code-switch probe unavailable; retaining the "
+                f"existing route: {self.srota_provider_error}"
+            )
+            return None
+
     def _decode_with_whisper(self, audio_numpy, language=None):
         return self.whisper.transcribe(
             audio_numpy,
@@ -178,6 +221,30 @@ class SpeechRecognizer:
             )
 
         indic_language = WHISPER_TO_INDIC.get(detected_language)
+
+        # Probe Hindi-dominant speech with the isolated Hinglish specialist.
+        # Only accept it when the transcript contains both Devanagari and Latin
+        # script; pure-Hindi output stays on the existing IndicConformer route.
+        if indic_language == "hi" and language_score >= MIN_INDIC_ROUTE_SCORE:
+            srota_result = self._try_srota_code_switch(
+                audio_numpy, language_score=language_score
+            )
+            if srota_result is not None:
+                return srota_result
+
+        # Whisper can classify a code-switched utterance as English. Probe only
+        # uncertain English detections to avoid loading/running Srota on clear
+        # English-only speech.
+        if (
+            detected_language in ("en", "english")
+            and language_score < MIN_SROTA_PROBE_ENGLISH_SCORE
+        ):
+            srota_result = self._try_srota_code_switch(
+                audio_numpy, language_score=language_score
+            )
+            if srota_result is not None:
+                return srota_result
+
         if indic_language in INDIC_LANGUAGES and language_score >= MIN_INDIC_ROUTE_SCORE:
             print(f"[ASR] Detected {INDIC_LANGUAGES[indic_language]}; using IndicConformer.")
             return self._indic_result_with_whisper_fallback(
