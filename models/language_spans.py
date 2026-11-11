@@ -98,7 +98,12 @@ def _primary_language(value: str | None) -> str:
     return language if language in SUPPORTED_LANGUAGES or language == "en" else "unknown"
 
 
-def _classify_token(token: str, script: str, primary_language: str) -> tuple[str, float, str]:
+def _classify_token(
+    token: str,
+    script: str,
+    primary_language: str,
+    allow_primary_hint: bool = True,
+) -> tuple[str, float, str]:
     normalized = token.casefold().replace("’", "'")
     if script == "Devanagari":
         language = primary_language if primary_language in SUPPORTED_LANGUAGES else "hi"
@@ -109,7 +114,7 @@ def _classify_token(token: str, script: str, primary_language: str) -> tuple[str
             return "hi", 0.90, "romanized_hindi_lexicon"
         if normalized in ENGLISH_WORDS:
             return "en", 0.86, "common_english_lexicon"
-        if primary_language == "en":
+        if primary_language == "en" and allow_primary_hint:
             return "en", 0.62, "primary_language_hint"
         return "und", 0.25, "ambiguous_latin_token"
 
@@ -128,11 +133,22 @@ def annotate_language_spans(text: str, primary_language: str | None = None) -> d
     """Return conservative transcript language spans with character offsets."""
     original = str(text or "")
     primary = _primary_language(primary_language)
+    matches = list(_WORD_RE.finditer(original))
+    romanized_hindi_evidence = any(
+        _script_for_token(match.group(0)) == "Latin"
+        and match.group(0).casefold().replace("’", "'") in ROMANIZED_HINDI_WORDS
+        for match in matches
+    )
     tokens = []
-    for match in _WORD_RE.finditer(original):
+    for match in matches:
         token = match.group(0)
         script = _script_for_token(token)
-        language, confidence, method = _classify_token(token, script, primary)
+        language, confidence, method = _classify_token(
+            token,
+            script,
+            primary,
+            allow_primary_hint=not romanized_hindi_evidence,
+        )
         tokens.append({
             "text": token,
             "char_start": match.start(),
