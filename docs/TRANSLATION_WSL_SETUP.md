@@ -41,12 +41,45 @@ whose default Python is newer. The runtime lives at
 
 It installs CPU PyTorch, NumPy 2.1-2.2, Transformers 4.57.6,
 IndicTransToolkit 1.1.1, and SentencePiece into that WSL-only environment. It
-does not modify the Windows `.venv` or `.venv_srota`.
+does not modify the Windows `.venv` or `.venv_srota`. After initial creation,
+the installer reuses this environment on subsequent runs instead of clearing
+and downloading PyTorch again.
 
-After dependency setup, the launcher runs the real translation smoke test. The
-first test downloads `ai4bharat/indictrans2-indic-en-dist-200M` into the WSL
-Hugging Face cache. This is a one-time model download; later translations reuse
-the cached model and persistent worker.
+## Hugging Face model access (required once)
+
+The model repository
+[`ai4bharat/indictrans2-indic-en-dist-200M`](https://huggingface.co/ai4bharat/indictrans2-indic-en-dist-200M)
+is gated. Installing the Python packages does not grant access to its weights.
+Before running the smoke test:
+
+1. Sign in to Hugging Face in a browser.
+2. Open the model page above and accept the repository conditions / request
+   access as shown on that page. Access may be granted immediately or require
+   publisher approval.
+3. Create a Hugging Face read token in
+   [Access Tokens](https://huggingface.co/settings/tokens). Do not share the
+   token in source files, logs, or chat.
+4. From the SpeechMind PowerShell terminal, authenticate the WSL environment:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "source ~/.venvs/speechmind-indictrans/bin/activate && hf auth login"
+```
+
+Paste the token into the terminal's secure prompt. The token is stored in the
+Linux user's Hugging Face cache, not in the SpeechMind repository or Windows
+project files.
+
+Then rerun:
+
+```powershell
+.\SETUP_INDIC_TRANS_WSL.bat
+```
+
+The launcher runs the real translation smoke test. The first successful test
+downloads the model into the WSL Hugging Face cache. Later translations reuse
+the cached model and persistent worker. A 401 / gated-repository error means
+the browser account has not accepted access, the access request is still
+pending, or the WSL token belongs to a different Hugging Face account.
 
 ## App behavior
 
@@ -71,7 +104,8 @@ before claiming full Hinglish meaning preservation.
 - Python or package installation errors: inspect the first pip/uv error in the
   setup output; the bootstrap and model environments are separate and can be
   rebuilt independently.
-- Model download errors: check network access from Ubuntu and rerun
-  `SETUP_INDIC_TRANS_WSL.bat`; the Hugging Face cache is retained.
+- `401 Client Error` / `gated repo`: accept access to the model in the browser,
+  run `hf auth login` inside the WSL IndicTrans environment, then rerun the
+  launcher.
 - To validate translation without audio inference, rerun
   `SETUP_INDIC_TRANS_WSL.bat`; it reuses the environment and model cache.
