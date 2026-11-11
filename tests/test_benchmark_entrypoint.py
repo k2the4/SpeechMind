@@ -113,6 +113,18 @@ class BenchmarkEntrypointTests(unittest.TestCase):
         self.assertTrue(launcher.is_file())
         self.assertIn("--model whisper-hi", launcher.read_text(encoding="utf-8"))
 
+    def test_saved_route_metrics_can_be_recomputed_without_asr_inference(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "scripts" / "check_hinglish_english_route.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"--metrics-only"', source)
+        self.assertIn("_recompute_saved_metrics", source)
+        self.assertLess(
+            source.index("if args.metrics_only:"),
+            source.index("recognizer = SpeechRecognizer()"),
+        )
+
     def test_english_hinglish_targeted_route_check_launcher_exists(self):
         root = Path(__file__).resolve().parents[1]
         launcher = root / "CHECK_SPEECHMIND_ENGLISH_HINGLISH_ROUTE.bat"
