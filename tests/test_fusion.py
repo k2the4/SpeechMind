@@ -47,13 +47,15 @@ class FusionTests(unittest.TestCase):
         self.assertTrue(result["low_confidence_warning"])
         self.assertIn("ASR quality indicator unavailable", result["uncertainty_reasons"])
 
-    def test_unknown_voice_label_is_not_silently_neutral(self):
-        with self.assertRaises(ValueError):
-            fuse(
-                text_result={"emotion": "unavailable", "available": False, "distribution": {}},
-                voice_result={"emotion": "made_up_label", "distribution": {"made_up_label": 1.0}},
-                asr_confidence=0.9,
-            )
+    def test_unknown_voice_label_becomes_insufficient_evidence_not_neutral(self):
+        result = fuse(
+            text_result={"emotion": "unavailable", "available": False, "distribution": {}},
+            voice_result={"emotion": "made_up_label", "distribution": {"made_up_label": 1.0}},
+            asr_confidence=0.9,
+        )
+        self.assertEqual(result["interpretation_status"], "insufficient_evidence")
+        self.assertEqual(result["overall_emotion"], "unavailable")
+        self.assertNotEqual(result["overall_emotion"], "neutral")
 
     def test_confidence_is_explicitly_uncalibrated(self):
         result = fuse(
@@ -83,13 +85,16 @@ class FusionTests(unittest.TestCase):
         self.assertTrue(result["branch_disagreement"])
         self.assertIn("Text signals joy; vocal signals sadness", result["branch_comparison"])
 
-    def test_both_branches_unavailable_raises(self):
-        with self.assertRaises(ValueError):
-            fuse(
-                text_result={"emotion": "unavailable", "available": False},
-                voice_result={"emotion": "unavailable", "available": False},
-                asr_confidence=None,
-            )
+    def test_both_branches_unavailable_returns_insufficient_evidence(self):
+        result = fuse(
+            text_result={"emotion": "unavailable", "available": False},
+            voice_result={"emotion": "unavailable", "available": False},
+            asr_confidence=None,
+        )
+        self.assertEqual(result["interpretation_status"], "insufficient_evidence")
+        self.assertEqual(result["overall_emotion"], "unavailable")
+        self.assertEqual(result["fusion_weights"], {"text": 0.0, "voice": 0.0})
+        self.assertEqual(result["fused_distribution"], {})
 
 
 if __name__ == "__main__":
