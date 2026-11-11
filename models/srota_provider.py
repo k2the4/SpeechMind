@@ -111,6 +111,9 @@ class SrotaASRProvider:
 
         self._responses = queue.Queue()
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        worker_env = os.environ.copy()
+        worker_env["PYTHONIOENCODING"] = "utf-8:backslashreplace"
+        worker_env["PYTHONUTF8"] = "1"
         self._process = subprocess.Popen(
             [str(self.python_executable), str(self.worker_script)],
             cwd=str(self.project_root),
@@ -119,8 +122,10 @@ class SrotaASRProvider:
             stderr=subprocess.DEVNULL,
             text=True,
             encoding="utf-8",
+            errors="replace",
             bufsize=1,
             creationflags=creation_flags,
+            env=worker_env,
         )
         response_queue = self._responses
         threading.Thread(
