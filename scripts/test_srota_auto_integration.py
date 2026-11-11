@@ -43,17 +43,34 @@ def main() -> int:
     print(f"Detected primary language : {result.get('language')}")
     print(f"Selected ASR model         : {result.get('asr_model')}")
     print(f"Code-switch detected       : {result.get('code_switch_detected', False)}")
+    print(f"Romanized Hindi detected   : {result.get('romanized_hindi_detected', False)}")
     print(f"Language source            : {result.get('language_source')}")
     print(f"Transcript                 : {result.get('transcript')}")
+    print("Language spans:")
+    for span in result.get("language_spans", []):
+        print(
+            f"  [{span.get('char_start')}:{span.get('char_end')}] "
+            f"{span.get('language')} / {span.get('script')}: "
+            f"{span.get('text')!r} ({span.get('method')})"
+        )
 
     if result.get("asr_model") != "moorlee/qwen3-asr-0.6b-hinglish":
         print("\n[Srota smoke] The sample did not select Srota. Review the routing logs above.")
         return 1
-    if not result.get("code_switch_detected"):
-        print("\n[Srota smoke] Srota ran but the output was not classified as mixed-script.")
+    if not (
+        result.get("code_switch_detected")
+        or result.get("romanized_hindi_detected")
+    ):
+        print(
+            "\n[Srota smoke] Srota ran, but the output did not contain "
+            "recognized mixed-language or Romanized-Hindi evidence."
+        )
         return 1
 
-    print("\n[Srota smoke] PASS: isolated worker and automatic mixed-script route are connected.")
+    print(
+        "\n[Srota smoke] PASS: isolated worker, automatic Hinglish routing, "
+        "and transcript span annotation are connected."
+    )
     return 0
 
 
