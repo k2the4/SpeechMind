@@ -194,6 +194,7 @@ class SrotaASRProvider:
                 "model", "ai4bharat/indictrans2-indic-en-dist-200M"
             ),
             "inference_seconds": response.get("inference_seconds"),
+            "worker_response": response,
         }
 
     def transcribe_audio(
