@@ -70,6 +70,29 @@ if audio_source is not None:
             st.subheader("Transcript (original speech)")
             st.write(result.get("transcript") or "No transcript was produced.")
 
+            with st.expander("Detected language spans (beta)"):
+                spans = result.get("language_spans") or []
+                st.caption(
+                    "These are transcript character offsets, not audio timestamps. "
+                    "Romanized-Hindi and English labels use conservative word-list "
+                    "evidence; ambiguous Latin words remain unclassified."
+                )
+                if spans:
+                    st.table([
+                        {
+                            "Text": span.get("text", ""),
+                            "Language": span.get("language", "und"),
+                            "Script": span.get("script", "Other"),
+                            "Character range": (
+                                f"{span.get('char_start', 0)}–{span.get('char_end', 0)}"
+                            ),
+                            "Evidence": span.get("method", ""),
+                        }
+                        for span in spans
+                    ])
+                else:
+                    st.caption("No language-bearing transcript spans were detected.")
+
             st.subheader("Meaning (English)")
             st.write(result.get("meaning_en") or "English meaning is unavailable.")
             if not result.get("meaning_en_available", False):
@@ -82,7 +105,7 @@ if audio_source is not None:
             st.caption(
                 "Detected primary language: "
                 + str(result.get("language", "unknown")).upper()
-                + ". Mixed-language span detection is still being developed."
+                + ". Language labels below are conservative transcript-level estimates."
             )
             if result.get("code_switch_detected"):
                 st.caption(
@@ -174,6 +197,15 @@ if audio_source is not None:
                     "stage_timings_sec": result.get("timings_sec", {}),
                     "asr_model": result.get("asr_model"),
                     "code_switch_detected": result.get("code_switch_detected"),
+                    "language_spans": result.get("language_spans"),
+                    "language_evidence": result.get("language_evidence"),
+                    "script_evidence": result.get("script_evidence"),
+                    "languages_present": result.get("languages_present"),
+                    "scripts_present": result.get("scripts_present"),
+                    "mixed_script_detected": result.get("mixed_script_detected"),
+                    "romanized_hindi_detected": result.get("romanized_hindi_detected"),
+                    "language_span_unit": result.get("language_span_unit"),
+                    "audio_timestamps_available": result.get("audio_timestamps_available"),
                     "asr_candidate_model": result.get("asr_candidate_model"),
                     "asr_candidate_inference_seconds": result.get(
                         "asr_candidate_inference_seconds"
