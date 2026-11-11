@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from models.asr_routing import (
     srota_supports_duration,
@@ -44,3 +45,40 @@ class AsrRoutingSignalTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class AsrRouterIntegrationPolicyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        root = Path(__file__).resolve().parents[1]
+        cls.source = (root / "models" / "asr.py").read_text(encoding="utf-8")
+
+    def test_confident_english_decodes_before_transcript_triggered_probe(self):
+        branch_start = self.source.index('if detected_language in ("en", "english"):')
+        branch_end = self.source.index(
+            'if indic_language in INDIC_LANGUAGES and language_score >= MIN_INDIC_ROUTE_SCORE:',
+            branch_start,
+        )
+        branch = self.source[branch_start:branch_end]
+        self.assertLess(
+            branch.index('self._decode_with_whisper('),
+            branch.index('whisper_transcript_suggests_hinglish('),
+        )
+        self.assertIn('probe_source="whisper_transcript"', branch)
+
+    def test_long_clip_is_skipped_before_calling_srota_provider(self):
+        method_start = self.source.index('def _try_srota_code_switch(')
+        method_end = self.source.index('def _decode_with_whisper(', method_start)
+        method = self.source[method_start:method_end]
+        self.assertLess(
+            method.index('srota_supports_duration('),
+            method.index('self.srota_provider.transcribe_audio('),
+        )
+
+    def test_transient_srota_error_does_not_disable_provider_for_session(self):
+        method_start = self.source.index('def _try_srota_code_switch(')
+        method_end = self.source.index('def _decode_with_whisper(', method_start)
+        method = self.source[method_start:method_end]
+        handler = method[method.index('except Exception as error:'):]
+        self.assertNotIn('self.srota_provider_error =', handler)
+
+
