@@ -2,7 +2,8 @@
 SpeechMind end-to-end local inference pipeline.
 
 The original transcript, English meaning, text analysis, voice analysis, and
-combined interpretation remain distinct outputs.
+combined interpretation remain distinct outputs. Optional analysis branches
+fail independently so one model failure does not discard other valid results.
 """
 import time
 import threading
@@ -19,19 +20,45 @@ TRANSLATABLE_LANGUAGES = {
 }
 
 
+def _unavailable_branch(reason: str) -> dict:
+    return {
+        "emotion": "unavailable",
+        "confidence": 0.0,
+        "distribution": {},
+        "secondary_emotions": [],
+        "available": False,
+        "reason": reason,
+        "model_source": None,
+    }
+
+
 class SpeechMindPipeline:
     def __init__(self, load_translator: bool = True):
         print("[Pipeline] Initializing SpeechMind models...")
-        self.asr = SpeechRecognizer()
-        self.text_emotion = TextEmotionClassifier()
-        self.voice_emotion = VoiceEmotionRecognizer()
+        self.component_errors = {}
+        self.asr = self._initialize_component("asr", SpeechRecognizer)
+        self.text_emotion = self._initialize_component(
+            "text_emotion", TextEmotionClassifier
+        )
+        self.voice_emotion = self._initialize_component(
+            "voice_emotion", VoiceEmotionRecognizer
+        )
         self.translator = None
         self.translator_enabled = load_translator
         self._translator_lock = threading.Lock()
         print(
-            "[Pipeline] Core local models initialized. "
-            "No hosted or metered inference service is configured."
+            "[Pipeline] Model initialization complete. "
+            "Unavailable components will be reported independently."
         )
+
+    def _initialize_component(self, name, factory):
+        try:
+            return factory()
+        except Exception as error:
+            reason = f"{type(error).__name__}: {error}"
+            self.component_errors[name] = reason
+            print(f"[Pipeline] {name} initialization unavailable: {reason}")
+            return None
 
     def _get_translator(self):
         # Streamlit can serve repeated requests through one cached pipeline.
@@ -81,6 +108,46 @@ class SpeechMindPipeline:
         result["duration_sec"] = round(time.perf_counter() - started, 3)
         return result
 
+    def _predict_text_emotion(self, transcript: str, language: str) -> dict:
+        if not transcript.strip():
+            return _unavailable_branch(
+                "Text analysis skipped because no original transcript is available."
+            )
+        if self.text_emotion is None:
+            return _unavailable_branch(
+                self.component_errors.get(
+                    "text_emotion", "Text-emotion model is unavailable."
+                )
+            )
+        try:
+            # Deliberately use the original transcript, never the English meaning.
+            result = self.text_emotion.predict(transcript, language)
+            return result if isinstance(result, dict) else _unavailable_branch(
+                "Text-emotion model returned an invalid result."
+            )
+        except Exception as error:
+            reason = f"{type(error).__name__}: {error}"
+            print(f"[Pipeline] Text-emotion analysis unavailable: {reason}")
+            return _unavailable_branch(reason)
+
+    def _predict_voice_emotion(self, audio) -> dict:
+        if self.voice_emotion is None:
+            return _unavailable_branch(
+                self.component_errors.get(
+                    "voice_emotion", "Voice-emotion model is unavailable."
+                )
+            )
+        try:
+            # This branch receives the prepared waveform directly, independent of ASR.
+            result = self.voice_emotion.predict(audio)
+            return result if isinstance(result, dict) else _unavailable_branch(
+                "Voice-emotion model returned an invalid result."
+            )
+        except Exception as error:
+            reason = f"{type(error).__name__}: {error}"
+            print(f"[Pipeline] Voice-emotion analysis unavailable: {reason}")
+            return _unavailable_branch(reason)
+
     def run(self, audio_path: str, language_hint: str = None) -> dict:
         total_start = time.perf_counter()
         timings = {}
@@ -90,11 +157,27 @@ class SpeechMindPipeline:
         timings["preprocessing"] = round(time.perf_counter() - stage_start, 3)
 
         stage_start = time.perf_counter()
-        asr_result = self.asr.transcribe(audio, language_hint=language_hint)
+        asr_error = None
+        if self.asr is None:
+            asr_error = self.component_errors.get(
+                "asr", "Speech-recognition model is unavailable."
+            )
+            asr_result = {}
+        else:
+            try:
+                asr_result = self.asr.transcribe(
+                    audio, language_hint=language_hint
+                )
+                if not isinstance(asr_result, dict):
+                    raise TypeError("ASR returned an invalid result.")
+            except Exception as error:
+                asr_error = f"{type(error).__name__}: {error}"
+                print(f"[Pipeline] ASR unavailable for this clip: {asr_error}")
+                asr_result = {}
         timings["asr"] = round(time.perf_counter() - stage_start, 3)
 
-        transcript = asr_result.get("transcript", "")
-        language = asr_result.get("language", "unknown")
+        transcript = str(asr_result.get("transcript") or "").strip()
+        language = str(asr_result.get("language") or "unknown").lower().strip()
         quality_value = asr_result.get("quality_score", asr_result.get("confidence"))
         try:
             asr_confidence = (
@@ -107,9 +190,9 @@ class SpeechMindPipeline:
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=3) as executor:
             text_future = executor.submit(
-                self.text_emotion.predict, transcript, language
+                self._predict_text_emotion, transcript, language
             )
-            voice_future = executor.submit(self.voice_emotion.predict, audio)
+            voice_future = executor.submit(self._predict_voice_emotion, audio)
             translation_future = executor.submit(
                 self._translate, transcript, language
             )
@@ -137,8 +220,9 @@ class SpeechMindPipeline:
             "language_detection_score": asr_result.get("language_detection_score"),
             "language_source": asr_result.get("language_source"),
             "transcript": transcript,
-            "asr_model": asr_result.get("asr_model", "unknown"),
+            "asr_model": asr_result.get("asr_model", "unavailable"),
             "asr_provider": "local",
+            "asr_error": asr_error,
             "asr_fallback": bool(asr_result.get("asr_fallback", False)),
             "asr_fallback_reason": asr_result.get("asr_fallback_reason"),
             "asr_requested_model": asr_result.get("asr_requested_model"),
@@ -168,14 +252,18 @@ class SpeechMindPipeline:
             "meaning_en_available": translation_result["available"],
             "meaning_en_source": translation_result["source"],
             "text_emotion": fused["text_emotion"],
-            "text_emotion_available": bool(text_result.get("available", True)),
+            "text_emotion_available": bool(text_result.get("available", False)),
             "text_emotion_reason": text_result.get("reason"),
             "text_emotion_model_source": text_result.get("model_source"),
             "text_emotion_secondary": text_result.get("secondary_emotions", []),
             "text_emotion_multi_label_scores": text_result.get("multi_label_scores"),
             "text_emotion_task_type": text_result.get("task_type"),
-            "text_emotion_languages": sorted(self.text_emotion.supported_languages),
+            "text_emotion_languages": sorted(
+                getattr(self.text_emotion, "supported_languages", []) or []
+            ),
             "voice_emotion": fused["voice_emotion"],
+            "voice_emotion_available": bool(voice_result.get("available", True)),
+            "voice_emotion_reason": voice_result.get("reason"),
             "voice_model_source": voice_result.get("model_source"),
             "voice_inference_device": voice_result.get("inference_device"),
             "voice_inference_windows": voice_result.get("inference_windows"),
@@ -203,14 +291,15 @@ class SpeechMindPipeline:
             "processing_time_sec": timings["total"],
             "timings_sec": timings,
             "translator_provider": (
-                self.translator.provider_name if self.translator is not None
+                getattr(self.translator, "provider_name", "unknown")
+                if self.translator is not None
                 else ("disabled" if not self.translator_enabled else "not_initialized")
             ),
             "translator_loaded": bool(
-                self.translator is not None and self.translator.loaded
+                self.translator is not None and getattr(self.translator, "loaded", False)
             ),
             "translator_inference_seconds": (
-                self.translator.last_inference_seconds
+                getattr(self.translator, "last_inference_seconds", None)
                 if self.translator is not None else None
             ),
             "translator_error": translation_result["error"],
