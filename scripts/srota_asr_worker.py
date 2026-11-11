@@ -5,6 +5,7 @@ import json
 import sys
 import time
 from contextlib import redirect_stdout
+from io import StringIO
 
 
 def emit(payload: dict) -> None:
@@ -28,7 +29,7 @@ def main() -> int:
     try:
         # qwen-asr writes progress messages to stdout; keep those out of the
         # machine-readable worker protocol.
-        with redirect_stdout(sys.stderr):
+        with redirect_stdout(StringIO()):
             import torch
             from qwen_asr import Qwen3ASRModel
 
@@ -56,7 +57,7 @@ def main() -> int:
             if not audio_path:
                 raise ValueError("Request is missing audio_path.")
             started = time.perf_counter()
-            with redirect_stdout(sys.stderr):
+            with redirect_stdout(StringIO()):
                 result = model.transcribe(audio=str(audio_path), language=None)
             transcript = extract_text(result)
             if not transcript:
