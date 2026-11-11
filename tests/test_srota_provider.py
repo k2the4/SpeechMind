@@ -1,4 +1,3 @@
-import os
 import sys
 import tempfile
 import unittest
@@ -22,16 +21,6 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
     def test_worker_is_persistent_and_uses_jsonl_protocol(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            if os.name == "nt":
-                python_path = root / ".venv_srota" / "Scripts" / "python.exe"
-            else:
-                python_path = root / ".venv_srota" / "bin" / "python"
-            python_path.parent.mkdir(parents=True)
-            try:
-                python_path.symlink_to(Path(sys.executable))
-            except OSError:
-                python_path.write_bytes(Path(sys.executable).read_bytes())
-                python_path.chmod(0o755)
             script = root / "scripts" / "srota_asr_worker.py"
             script.parent.mkdir(parents=True)
             script.write_text(
@@ -46,7 +35,13 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
             )
             audio = root / "sample.wav"
             audio.write_bytes(b"placeholder")
-            provider = SrotaASRProvider(root, startup_timeout=5, request_timeout=5)
+            provider = SrotaASRProvider(
+                root,
+                startup_timeout=5,
+                request_timeout=5,
+                python_executable=sys.executable,
+                worker_script=script,
+            )
             try:
                 first = provider.transcribe_file(audio)
                 second = provider.transcribe_file(audio)
