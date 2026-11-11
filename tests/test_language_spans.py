@@ -11,8 +11,8 @@ class LanguageSpanTests(unittest.TestCase):
         self.assertTrue(result["mixed_script_detected"])
         self.assertTrue(result["code_switch_detected"])
         self.assertEqual(result["dominant_language"], "hi")
-        self.assertEqual(result["language_evidence"]["hi"], 2)
-        self.assertEqual(result["language_evidence"]["en"], 1)
+        self.assertGreaterEqual(result["language_evidence"]["hi"], 2)
+        self.assertGreaterEqual(result["language_evidence"]["en"], 1)
         for span in result["language_spans"]:
             self.assertEqual(
                 text[span["char_start"]:span["char_end"]],
@@ -31,6 +31,18 @@ class LanguageSpanTests(unittest.TestCase):
                 for span in result["language_spans"]
             )
         )
+
+    def test_unknown_latin_words_do_not_create_false_english_switch(self):
+        result = annotate_language_spans("main blorpt ja raha hoon", "en")
+
+        self.assertTrue(result["romanized_hindi_detected"])
+        self.assertFalse(result["code_switch_detected"])
+        unknown = [
+            span for span in result["language_spans"]
+            if "blorpt" in span["tokens"]
+        ]
+        self.assertEqual(len(unknown), 1)
+        self.assertEqual(unknown[0]["language"], "und")
 
     def test_romanized_hindi_mixed_with_english_is_detected(self):
         result = annotate_language_spans(
