@@ -121,12 +121,30 @@ def build_model():
     )
     for parameter in model.parameters():
         parameter.requires_grad = False
+
+    encoder_layers = getattr(getattr(model.base_model, "encoder", None), "layer", None)
+    if encoder_layers is None or len(encoder_layers) < 2:
+        raise RuntimeError("MuRIL encoder layers were not found; expected a BERT-style encoder.")
+
+    trainable_encoder_layers = list(encoder_layers[-2:])
+    for layer in trainable_encoder_layers:
+        for parameter in layer.parameters():
+            parameter.requires_grad = True
+
     classifier = getattr(model, "classifier", None)
     if classifier is None:
         raise RuntimeError("MuRIL classifier head was not found.")
     for parameter in classifier.parameters():
         parameter.requires_grad = True
-    return model
+
+    encoder_parameters = [
+        parameter for layer in trainable_encoder_layers
+        for parameter in layer.parameters() if parameter.requires_grad
+    ]
+    classifier_parameters = [
+        parameter for parameter in classifier.parameters() if parameter.requires_grad
+    ]
+    return model, encoder_parameters, classifier_parameters, trainable_encoder_layers
 
 
 @torch.no_grad()
@@ -234,6 +252,7 @@ def main():
     parser.add_argument("--max-hinemo-train", type=int, default=1200)
     parser.add_argument("--max-hinemo-eval", type=int, default=500)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--encoder-learning-rate", type=float, default=2e-5)
     parser.add_argument("--cpu-threads", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
@@ -288,10 +307,23 @@ def main():
         batch_size=args.batch_size * 2, shuffle=False, num_workers=0,
     )
 
-    model = build_model().to(device)
+    model, encoder_parameters, classifier_parameters, trainable_encoder_layers = build_model()
+    model = model.to(device)
     optimizer = torch.optim.AdamW(
-        [p for p in model.parameters() if p.requires_grad],
-        lr=args.learning_rate,
+        [
+            {"params": encoder_parameters, "lr": args.encoder_learning_rate},
+            {"params": classifier_parameters, "lr": args.learning_rate},
+        ],
+        weight_decay=0.01,
+    )
+    trainable_parameter_count = sum(
+        parameter.numel() for parameter in model.parameters() if parameter.requires_grad
+    )
+    print(
+        f"[TextEmotion] Trainable parameters={trainable_parameter_count:,}; "
+        f"unfrozen encoder layers={len(trainable_encoder_layers)}; "
+        f"encoder_lr={args.encoder_learning_rate:g}; head_lr={args.learning_rate:g}",
+        flush=True,
     )
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -300,7 +332,10 @@ def main():
 
     for epoch in range(args.epochs):
         model.train()
-        model.base_model.eval()  # Keep frozen encoder dropout disabled.
+        # Keep the frozen lower encoder stable; train dropout only in the two unfrozen layers.
+        model.base_model.eval()
+        for layer in trainable_encoder_layers:
+            layer.train()
         running_loss, started = 0.0, time.perf_counter()
         total_batches = len(train_loader)
         print(f"[TextEmotion] Epoch {epoch + 1}/{args.epochs} started ({total_batches} batches).", flush=True)
@@ -364,7 +399,7 @@ def main():
         "class_order": LABELS,
         "languages": ["hi", "hinglish"],
         "max_length": args.max_length,
-        "training_method": "frozen_muril_encoder_class_weighted_classifier_head_baseline",
+        "training_method": "last_two_muril_encoder_layers_plus_weighted_classifier_head",
         "training_sources": ["BRIGHTER-Hindi", "HinEmo"],
         "hinemo_labels_are_gpt_generated": True,
         "neutral_policy": "neutral is selected only when no non-neutral threshold is met",
@@ -378,7 +413,10 @@ def main():
         "validation_rows": len(val_rows),
         "test_rows": len(test_rows),
         "seed": args.seed,
-        "training_note": "CPU-practical baseline; encoder frozen, classifier head trained only.",
+        "trainable_encoder_layers": 2,
+        "encoder_learning_rate": args.encoder_learning_rate,
+        "classifier_learning_rate": args.learning_rate,
+        "training_note": "CPU-practical partial fine-tuning; final two MuRIL encoder layers and classifier head trained.",
     }
     (output_dir / "speechmind_metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
