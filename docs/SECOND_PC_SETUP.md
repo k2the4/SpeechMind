@@ -81,3 +81,18 @@ Full WavLM fine-tuning is compute-intensive. CPU mode may take many hours. CUDA 
 ## What is not transferred from the old PC
 
 Do not copy the old PC's `.venv` or model cache. They are machine-specific and should be recreated. RAVDESS audio must be copied separately. The Hugging Face WavLM weights download automatically on the new PC.
+
+
+## Optional: IndicTrans2 English meaning
+
+Hindi-to-English and other supported Indic-to-English translation uses a
+separate WSL Linux environment. The native Windows IndicTransToolkit install is
+not supported. With WSL2 and Ubuntu initialized, run:
+
+```powershell
+.\SETUP_INDIC_TRANS_WSL.bat
+```
+
+This installs the isolated translation environment and runs an end-to-end
+Hinglish translation smoke test. Detailed behavior and troubleshooting are in
+`docs/TRANSLATION_WSL_SETUP.md`.
