@@ -37,6 +37,8 @@ class HiACCPreparationTests(unittest.TestCase):
 
     def test_speaker_id_is_extracted_when_present(self):
         self.assertEqual(_speaker_from_name("speaker_ABC123_utt01.wav"), "ABC123")
+        self.assertEqual(_speaker_from_name("AD63012.wav"), "AD63")
+        self.assertEqual(_speaker_from_name("CH03004.wav"), "CH03")
         self.assertEqual(_speaker_from_name("ordinary_clip.wav"), "")
 
     def test_csv_transcripts_preserve_commas_and_mixed_scripts(self):
