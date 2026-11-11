@@ -291,3 +291,20 @@ Hinglish, unknown Latin tokens, the Srota duration boundary, transcript-first
 probing, and per-clip failure handling. CI success does not establish audio
 accuracy or latency. Re-evaluate on held-out English and Romanized-Hindi audio
 before treating this routing change as production-validated.
+
+
+## Targeted English-primary Hinglish routing check
+
+Use `CHECK_SPEECHMIND_ENGLISH_HINGLISH_ROUTE.bat` after pulling the routing
+hardening commits. It reads the saved
+`data/hiacc/benchmarks/speechmind_auto/predictions.csv`, selects only clips
+whose previous Whisper detection was English, and reruns those clips through
+the updated automatic route. This reuses the previous references and audio
+paths and does not repeat the complete 20-clip benchmark. It reports old/new
+WER and CER per selected clip, the selected specialist, transcript language
+evidence, and inference time.
+
+The result is a narrow routing regression check, not a representative accuracy
+benchmark. It is useful for verifying whether confidently English-labelled
+Hinglish samples now reach Srota; it does not measure missed Hinglish outside
+the selected subset or establish pure-English accuracy.
