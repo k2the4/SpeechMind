@@ -40,7 +40,7 @@ def get_components():
         torch = get_torch()
         with redirect_stdout(StringIO()):
             try:
-                from IndicTransToolkit.processor import IndicProcessor
+                    from IndicTransToolkit.processor import IndicProcessor
             except ImportError:
                 from IndicTransToolkit import IndicProcessor
             from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
