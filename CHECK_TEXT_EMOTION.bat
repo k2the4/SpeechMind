@@ -28,7 +28,7 @@ if not exist "%CHECKPOINT%\model.safetensors" if not exist "%CHECKPOINT%\pytorch
 )
 
 echo Checking the locally trained Hindi/Hinglish text-emotion model...
-"%PYTHON_EXE%" "%~dp0scripts\check_text_emotion.py"
+"%PYTHON_EXE%" -m scripts.check_text_emotion
 if errorlevel 1 (
     echo.
     echo Text-emotion checkpoint check FAILED.
