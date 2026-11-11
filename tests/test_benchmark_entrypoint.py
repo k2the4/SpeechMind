@@ -113,10 +113,6 @@ class BenchmarkEntrypointTests(unittest.TestCase):
         self.assertTrue(launcher.is_file())
         self.assertIn("--model whisper-hi", launcher.read_text(encoding="utf-8"))
 
-if __name__ == "__main__":
-    unittest.main()
-
-
     def test_english_hinglish_targeted_route_check_launcher_exists(self):
         root = Path(__file__).resolve().parents[1]
         launcher = root / "CHECK_SPEECHMIND_ENGLISH_HINGLISH_ROUTE.bat"
@@ -128,3 +124,7 @@ if __name__ == "__main__":
         self.assertIn('in {"en", "english"}', source)
         self.assertIn("DEFAULT_INPUT", source)
         self.assertIn('"previous_automatic_route"', source)
+
+if __name__ == "__main__":
+    unittest.main()
+
