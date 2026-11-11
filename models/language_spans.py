@@ -6,11 +6,42 @@ when supported by small high-precision lexicons; ambiguous words stay unknown.
 """
 from __future__ import annotations
 
-import re
 import unicodedata
 from collections import Counter
 
-_WORD_RE = re.compile(r"[^\W_]+(?:['’][^\W_]+)*", flags=re.UNICODE)
+def _is_letter_number_or_mark(character: str) -> bool:
+    """Include Unicode combining marks, including Devanagari matras."""
+    return unicodedata.category(character)[0] in {"L", "N", "M"}
+
+
+def _iter_word_spans(text: str):
+    """Yield exact [start, end) word offsets without dropping combining marks."""
+    index = 0
+    length = len(text)
+    while index < length:
+        if unicodedata.category(text[index])[0] not in {"L", "N"}:
+            index += 1
+            continue
+
+        start = index
+        index += 1
+        while index < length:
+            character = text[index]
+            if _is_letter_number_or_mark(character):
+                index += 1
+                continue
+            if (
+                character in {"'", "’", "\u200c", "\u200d"}
+                and index + 1 < length
+                and unicodedata.category(text[index + 1])[0] in {"L", "N"}
+            ):
+                index += 1
+                continue
+            break
+
+        yield start, index
+
+
 
 SUPPORTED_LANGUAGES = {
     "as", "bn", "gu", "hi", "kn", "ml", "mr", "ne", "or", "pa", "ta", "te", "ur"
@@ -56,7 +87,7 @@ ENGLISH_WORDS = {
     "off", "on", "one", "only", "or", "other", "our", "out", "over", "people",
     "please", "project", "really", "say", "see", "she", "should", "so", "some",
     "something", "story", "take", "than", "that", "the", "their", "them", "then",
-    "there", "these", "they", "thing", "think", "this", "those", "time", "to",
+    "there", "these", "they", "thing", "think", "this", "those", "thought", "time", "to",
     "today", "too", "up", "us", "use", "very", "was", "we", "were", "what",
     "when", "where", "which", "who", "will", "with", "work", "would", "yeah",
     "yes", "you", "your"
@@ -133,15 +164,15 @@ def annotate_language_spans(text: str, primary_language: str | None = None) -> d
     """Return conservative transcript language spans with character offsets."""
     original = str(text or "")
     primary = _primary_language(primary_language)
-    matches = list(_WORD_RE.finditer(original))
+    matches = list(_iter_word_spans(original))
     romanized_hindi_evidence = any(
-        _script_for_token(match.group(0)) == "Latin"
-        and match.group(0).casefold().replace("’", "'") in ROMANIZED_HINDI_WORDS
-        for match in matches
+        _script_for_token(original[start:end]) == "Latin"
+        and original[start:end].casefold().replace("’", "'") in ROMANIZED_HINDI_WORDS
+        for start, end in matches
     )
     tokens = []
-    for match in matches:
-        token = match.group(0)
+    for start, end in matches:
+        token = original[start:end]
         script = _script_for_token(token)
         language, confidence, method = _classify_token(
             token,
@@ -151,8 +182,8 @@ def annotate_language_spans(text: str, primary_language: str | None = None) -> d
         )
         tokens.append({
             "text": token,
-            "char_start": match.start(),
-            "char_end": match.end(),
+            "char_start": start,
+            "char_end": end,
             "script": script,
             "language": language,
             "confidence": confidence,
