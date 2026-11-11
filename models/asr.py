@@ -187,10 +187,8 @@ class SpeechRecognizer:
             )
             transcript = str(result.get("transcript") or "").strip()
             annotation = annotate_language_spans(transcript, primary_language)
-            use_srota = (
-                annotation["code_switch_detected"]
-                or annotation["mixed_script_detected"]
-                or annotation["romanized_hindi_detected"]
+            use_srota = whisper_transcript_suggests_hinglish(
+                transcript, primary_language or "unknown"
             )
             if not use_srota:
                 return None
