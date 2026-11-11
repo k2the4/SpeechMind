@@ -129,3 +129,24 @@ A diagnostic comparator is now available:
 It reuses the exact 20 audio paths and reference transcripts from the completed Srota run, forces Hindi decoding through the current IndicConformer model, and uses the same SpeechMind WER/CER normalization utility. It deliberately does not use Whisper fallback: if IndicConformer cannot initialize or infer, the diagnostic stops rather than silently measuring a different model. This is a cross-language stress diagnostic, not a fair contest between two Hinglish specialists, because IndicConformer is the current Hindi baseline and is not designed as the Hinglish specialist.
 
 Run this launcher only after pulling the latest feature branch. It uses the existing `.venv`; it does not install packages or rerun dataset preparation/Srota setup. Review its output before deciding whether a larger controlled Hinglish evaluation is worthwhile.
+
+
+## First same-clip diagnostic comparison (2026-11-11)
+
+The initial Srota smoke-test outputs and the forced-Hindi IndicConformer diagnostic were compared by `audio_path`; all 20 rows matched exactly.
+
+| Measure | Srota | IndicConformer (forced Hindi) |
+|---|---:|---:|
+| Samples | 20 | 20 |
+| Micro WER | 16.96% | 36.61% |
+| Micro CER | 10.04% | 32.82% |
+| Mean clip inference | 6.10 s | 0.43 s |
+| Median clip inference | 5.763 s | 0.373 s |
+
+At clip level, Srota had lower WER on 12 clips, IndicConformer on 3, with 5 ties. Srota had lower CER on 13, IndicConformer on 3, with 4 ties.
+
+Interpretation:
+- Srota is the stronger current Hinglish candidate on this small diagnostic sample.
+- IndicConformer is much faster on CPU, but forced-Hindi decoding often renders English speech as Devanagari phonetics. This is expected to be a poor fit for mixed-language speech and is not a valid reason to replace the Hinglish specialist.
+- This comparison does not establish production accuracy. It is only 20 utterances from one corpus, and the two models have different intended language scopes.
+- The next useful measurement is SpeechMind's actual automatic ASR route on these same 20 clips. That path uses Whisper language detection, IndicConformer for confidently detected Indic languages, and Whisper for other routes. Measure it without changing routing or the application environment.
