@@ -124,9 +124,44 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
     voice_available = bool(voice_distribution)
 
     if not text_available and not voice_available:
-        raise ValueError(
-            "Fusion cannot run: both emotion branches are unavailable or returned unmapped labels."
-        )
+        # Insufficient evidence is a valid product outcome. Never manufacture a
+        # neutral label when neither independent branch returned usable output.
+        uncertainty_reasons = [
+            "Text-emotion branch unavailable",
+            "Voice-emotion branch unavailable",
+        ]
+        if not quality_available:
+            uncertainty_reasons.append("ASR quality indicator unavailable")
+        return {
+            "text_emotion": "unavailable",
+            "voice_emotion": "unavailable",
+            "valence": "Unknown",
+            "arousal": "Not assessed",
+            "confidence": 0.0,
+            "confidence_margin": 0.0,
+            "confidence_is_calibrated": False,
+            "overall_interpretation": (
+                "Insufficient evidence: neither the text nor voice branch "
+                "returned a usable analysis."
+            ),
+            "low_confidence_warning": True,
+            "overall_emotion": "unavailable",
+            "fusion_weights": {"text": 0.0, "voice": 0.0},
+            "text_distribution": {},
+            "voice_distribution": {},
+            "fused_distribution": {},
+            "text_branch_available": False,
+            "voice_branch_available": False,
+            "branch_agreement": None,
+            "branch_disagreement": False,
+            "branch_comparison": (
+                "Neither analysis branch returned usable evidence; no combined "
+                "emotion has been assigned."
+            ),
+            "interpretation_status": "insufficient_evidence",
+            "uncertainty_reasons": uncertainty_reasons,
+            "arousal_available": False,
+        }
 
     if text_available and voice_available:
         if not quality_available:
