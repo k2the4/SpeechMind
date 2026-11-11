@@ -81,9 +81,13 @@ class FusionTests(unittest.TestCase):
             voice_result={"emotion": "sad", "distribution": {"sad": 1.0}},
             asr_confidence=0.95,
         )
-        self.assertEqual(result["overall_emotion"], "joy")
+        self.assertEqual(result["overall_emotion"], "unresolved")
+        self.assertIsNone(result["confidence"])
+        self.assertEqual(result["valence"], "Unknown")
         self.assertTrue(result["branch_disagreement"])
+        self.assertEqual(result["interpretation_status"], "branch_disagreement")
         self.assertIn("Text signals joy; vocal signals sadness", result["branch_comparison"])
+        self.assertIn("No combined emotion has been assigned", result["overall_interpretation"])
 
     def test_both_branches_unavailable_returns_insufficient_evidence(self):
         result = fuse(
