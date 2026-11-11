@@ -202,3 +202,16 @@ This is an initial automatic routing heuristic, not a validated language-span de
 ### Srota integration check
 
 Run `CHECK_SPEECHMIND_SROTA.bat` after pulling the integration commits. It runs the isolated-provider protocol unit tests and one known mixed Hindi-English HiACC clip (`CH21075.wav`) through the real automatic SpeechMind ASR path. It does not download the dataset, reinstall packages, train models, or repeat the 20-clip benchmark.
+
+
+## English-meaning translation integration (2026-11-11)
+
+IndicTrans2 now runs through the existing isolated model-worker protocol rather than importing Transformers in the main application environment:
+- Main .venv remains pinned to Transformers 4.46.3.
+- The isolated .venv_srota retains qwen-asr 0.0.6 and Transformers 4.57.6; requirements_indic_translation.txt pins those versions alongside IndicTransToolkit 1.1.1 to prevent dependency drift.
+- Srota and IndicTrans2 are lazy-loaded in the same persistent worker. A Hindi-only recording loads IndicTrans2 without loading Qwen; a Hinglish recording can reuse the worker already holding Qwen.
+- The original transcript remains separate. English is shown unchanged as the English meaning; supported Indic language transcripts are translated to English. When translation is unavailable, the UI explicitly identifies the displayed text as the original transcript, not a translation.
+- Translation model: ai4bharat/indictrans2-indic-en-dist-200M. First use may require accepting the Hugging Face model access conditions and authenticating in the isolated environment.
+- Installer and one-text smoke test: INSTALL_INDIC_TRANS_TRANSLATION.bat.
+
+Operational caveat: IndicTransToolkit 1.1.1 documents Python 3.10+ and states that Windows is not currently a platform it builds/tests. Installation is deliberately isolated and must be validated on the Windows PC before treating translation as available. This does not alter the working ASR routes.
