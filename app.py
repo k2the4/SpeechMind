@@ -69,6 +69,11 @@ if audio_source is not None:
         if result is not None:
             st.subheader("Transcript (original speech)")
             st.write(result.get("transcript") or "No transcript was produced.")
+            if result.get("asr_error"):
+                st.warning(
+                    "Speech recognition is unavailable for this clip. "
+                    + str(result.get("asr_error"))
+                )
 
             with st.expander("Detected language spans (beta)"):
                 spans = result.get("language_spans") or []
@@ -157,6 +162,11 @@ if audio_source is not None:
                 "Arousal: not assessed. SpeechMind does not yet have a separately "
                 "validated acoustic arousal estimator."
             )
+            if not result.get("voice_branch_available", False):
+                st.warning(
+                    "Voice-emotion analysis is unavailable. "
+                    + str(result.get("voice_emotion_reason") or "")
+                )
 
             st.divider()
             st.subheader("Combined interpretation")
@@ -182,10 +192,16 @@ if audio_source is not None:
                 "of correctness. Predictions remain experimental until validated on "
                 "representative held-out Indian speech."
             )
-            st.metric(
-                "Combined model score (uncalibrated)",
-                f"{float(result.get('confidence', 0.0)) * 100:.1f}%",
-            )
+            if result.get("interpretation_status") == "insufficient_evidence":
+                st.warning(
+                    "No combined emotion was assigned because neither analysis "
+                    "branch returned usable evidence."
+                )
+            else:
+                st.metric(
+                    "Combined model score (uncalibrated)",
+                    f"{float(result.get('confidence', 0.0)) * 100:.1f}%",
+                )
             st.metric("Valence", str(result.get("valence", "unknown")))
 
             with st.expander("Performance timings and diagnostics"):
@@ -196,6 +212,7 @@ if audio_source is not None:
                 st.json({
                     "stage_timings_sec": result.get("timings_sec", {}),
                     "asr_model": result.get("asr_model"),
+                    "asr_error": result.get("asr_error"),
                     "code_switch_detected": result.get("code_switch_detected"),
                     "language_spans": result.get("language_spans"),
                     "language_evidence": result.get("language_evidence"),
@@ -226,6 +243,8 @@ if audio_source is not None:
                     ),
                     "text_emotion_task_type": result.get("text_emotion_task_type"),
                     "voice_model_source": result.get("voice_model_source"),
+                    "voice_emotion_available": result.get("voice_emotion_available"),
+                    "voice_emotion_reason": result.get("voice_emotion_reason"),
                     "voice_inference_device": result.get("voice_inference_device"),
                     "voice_inference_windows": result.get("voice_inference_windows"),
                     "voice_validation_macro_f1": result.get("voice_validation_macro_f1"),
