@@ -139,22 +139,31 @@ class SrotaASRProvider:
         if not ready.get("ready"):
             raise RuntimeError(ready.get("error") or "Srota worker did not become ready.")
 
+    def _request(self, payload: dict, timeout: float | None = None) -> dict:
+        with self._lock:
+            self._start()
+            process = self._process
+            if process is None or process.stdin is None:
+                raise RuntimeError("Isolated model worker stdin is unavailable.")
+            process.stdin.write(
+                json.dumps(payload, ensure_ascii=True) + "\n"
+            )
+            process.stdin.flush()
+            response = self._receive(timeout or self.request_timeout)
+
+        if not response.get("ok"):
+            raise RuntimeError(response.get("error") or "Isolated model worker request failed.")
+        return response
+
     def transcribe_file(self, audio_path: str | Path) -> dict:
         path = Path(audio_path).resolve()
         if not path.is_file():
             raise FileNotFoundError(f"Audio file not found: {path}")
 
-        with self._lock:
-            self._start()
-            process = self._process
-            if process is None or process.stdin is None:
-                raise RuntimeError("Srota worker stdin is unavailable.")
-            process.stdin.write(json.dumps({"audio_path": str(path)}, ensure_ascii=False) + "\n")
-            process.stdin.flush()
-            response = self._receive(self.request_timeout)
-
-        if not response.get("ok"):
-            raise RuntimeError(response.get("error") or "Srota inference failed.")
+        response = self._request({
+            "action": "transcribe",
+            "audio_path": str(path),
+        })
         transcript = str(response.get("transcript") or "").strip()
         if not transcript:
             raise RuntimeError("Srota returned an empty transcript.")
@@ -163,6 +172,28 @@ class SrotaASRProvider:
             "asr_model": self.MODEL_NAME,
             "inference_seconds": response.get("inference_seconds"),
             "worker_response": response,
+        }
+
+    def translate_to_english(self, text: str, src_lang: str) -> dict:
+        """Translate text using the lazily loaded IndicTrans2 model."""
+        if not text or not text.strip():
+            raise ValueError("Translation input is empty.")
+        if not src_lang or not src_lang.strip():
+            raise ValueError("Translation source language is missing.")
+        response = self._request({
+            "action": "translate",
+            "text": text,
+            "src_lang": src_lang,
+        }, timeout=max(self.request_timeout, 600.0))
+        translated = str(response.get("translated_text") or "").strip()
+        if not translated:
+            raise RuntimeError("IndicTrans2 returned an empty translation.")
+        return {
+            "translated_text": translated,
+            "model": response.get(
+                "model", "ai4bharat/indictrans2-indic-en-dist-200M"
+            ),
+            "inference_seconds": response.get("inference_seconds"),
         }
 
     def transcribe_audio(
