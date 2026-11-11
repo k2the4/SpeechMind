@@ -23,7 +23,7 @@ if str(PROJECT_ROOT) not in sys.path:
 os.environ["SPEECHMIND_ASR_PROVIDER"] = "local"
 
 from models.asr import SpeechRecognizer
-from scripts.asr_metrics import aggregate_error_counts, error_counts
+from scripts.asr_metrics import aggregate_error_counts, error_counts_multi_reference
 from utils.audio_utils import load_audio
 
 DATA_ROOT = PROJECT_ROOT / "data" / "hiacc"
@@ -97,7 +97,7 @@ def main() -> int:
 
             hypothesis = str(result.get("transcript") or "")
             reference = str(record.get("reference") or "")
-            metrics = error_counts(reference, hypothesis)
+            metrics = error_counts_multi_reference(reference, hypothesis)
             metric_rows.append(metrics)
             inference_times.append(inference_seconds)
 
