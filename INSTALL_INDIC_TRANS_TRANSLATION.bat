@@ -14,8 +14,7 @@ echo.
 echo Before the first model download, accept access to:
 echo https://huggingface.co/ai4bharat/indictrans2-indic-en-dist-200M
 echo If the repository requests authentication, run:
-echo "%WORKER_PY%" -m pip install --upgrade huggingface_hub
-echo "%WORKER_PY%" -m huggingface_hub.commands.huggingface_cli login
+echo "%~dp0.venv_srota\Scripts\hf.exe" auth login
 echo.
 
 if not exist "%WORKER_PY%" (
