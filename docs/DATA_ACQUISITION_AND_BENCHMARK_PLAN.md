@@ -78,3 +78,13 @@ A suitable, openly licensed, human-annotated Hinglish speech-transcript emotion 
 - Clearly distinguish model-card results from SpeechMind's own results.
 - Do not compare WER values across papers unless normalization and test splits match.
 - For any future model training, keep speakers disjoint across train/validation/test whenever source metadata permits.
+
+## HiACC references with multiple accepted transcriptions
+
+Some HiACC transcript rows contain alternative accepted spellings in one field,
+separated by three or more spaces. Dataset preparation preserves the original
+field. ASR evaluation splits these alternatives only for scoring and selects the
+best matching reference independently for WER and CER. The per-row output
+records the selected alternative index. Do not concatenate alternatives into
+one reference sentence: doing so incorrectly counts an exact match to one
+accepted spelling as insertions/deletions against another.
