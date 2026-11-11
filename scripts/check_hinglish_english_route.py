@@ -12,6 +12,7 @@ import os
 import statistics
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -55,14 +56,103 @@ def read_english_records(path: Path) -> list[dict]:
     return selected
 
 
+def _recompute_saved_metrics(output_dir: Path, input_path: Path) -> int:
+    """Refresh scores in an existing predictions CSV without running ASR."""
+    predictions_path = output_dir / "predictions.csv"
+    if not predictions_path.is_file():
+        raise FileNotFoundError(
+            f"Saved predictions CSV not found: {predictions_path}. "
+            "Run the normal route check once before using --metrics-only."
+        )
+
+    with predictions_path.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError(f"No saved predictions found in {predictions_path}")
+
+    previous_metrics = []
+    updated_metrics = []
+    inference_times = []
+    routes = Counter()
+    for row in rows:
+        old = error_counts_multi_reference(
+            row.get("reference", ""), row.get("previous_hypothesis", "")
+        )
+        new = error_counts_multi_reference(
+            row.get("reference", ""), row.get("updated_hypothesis", "")
+        )
+        previous_metrics.append(old)
+        updated_metrics.append(new)
+        row.update({
+            "reference_alternatives": new["reference_alternatives"],
+            "previous_wer": old["wer"],
+            "previous_cer": old["cer"],
+            "updated_wer": new["wer"],
+            "updated_cer": new["cer"],
+            "previous_wer_reference_index": old["wer_reference_index"],
+            "previous_cer_reference_index": old["cer_reference_index"],
+            "updated_wer_reference_index": new["wer_reference_index"],
+            "updated_cer_reference_index": new["cer_reference_index"],
+        })
+        routes[str(row.get("updated_model") or "unknown")] += 1
+        try:
+            inference_times.append(float(row.get("inference_seconds") or 0.0))
+        except (TypeError, ValueError):
+            pass
+
+    fields = list(rows[0])
+    with predictions_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    summary = {
+        "dataset": "HiACC",
+        "split": "test",
+        "samples": len(rows),
+        "selected_from": str(input_path.resolve()),
+        "selection": "Saved predictions from previously English-detected clips",
+        "evaluation_method": "best matching HiACC reference alternative; WER and CER selected independently",
+        "previous_automatic_route": aggregate_error_counts(previous_metrics),
+        "updated_automatic_route": aggregate_error_counts(updated_metrics),
+        "updated_model_routes": dict(routes),
+        "mean_inference_seconds": round(statistics.mean(inference_times), 3) if inference_times else None,
+        "median_inference_seconds": round(statistics.median(inference_times), 3) if inference_times else None,
+        "elapsed_seconds": 0.0,
+        "predictions_csv": str(predictions_path.resolve()),
+        "notes": [
+            "Metrics were recalculated from saved hypotheses; no audio model inference was run.",
+            "Reference alternatives separated by three spaces, tabs, or || are evaluated separately.",
+            "WER and CER select the best matching alternative independently.",
+            "This is a targeted regression check, not a representative benchmark.",
+            "A small sample cannot establish production accuracy or recall.",
+        ],
+    }
+    summary_path = output_dir / "summary.json"
+    summary_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print("[English/Hinglish route check] Recalculated saved hypotheses; ASR was not run.")
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--metrics-only",
+        action="store_true",
+        help="Recalculate metrics from the existing predictions CSV without ASR inference.",
+    )
     args = parser.parse_args()
 
     started = time.perf_counter()
     try:
+        if args.metrics_only:
+            return _recompute_saved_metrics(args.output_dir, args.input)
+
         records = read_english_records(args.input)
         print(
             f"[English/Hinglish route check] Rechecking {len(records)} "
