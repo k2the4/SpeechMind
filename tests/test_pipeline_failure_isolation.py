@@ -1,9 +1,29 @@
+import importlib
+import sys
+import types
 import unittest
 from unittest.mock import patch
 
-import numpy as np
 
-from pipeline import SpeechMindPipeline
+# The lightweight CI job intentionally omits librosa, torch, and Transformers.
+# Stub only pipeline dependencies at import time; each test replaces the model
+# factories with deterministic fakes and exercises the real orchestration code.
+_audio_module = types.ModuleType("utils.audio_utils")
+_audio_module.preprocess = lambda _path: [0.1, 0.2, 0.1]
+_asr_module = types.ModuleType("models.asr")
+_asr_module.SpeechRecognizer = object
+_text_module = types.ModuleType("models.text_emotion")
+_text_module.TextEmotionClassifier = object
+_voice_module = types.ModuleType("models.voice_emotion")
+_voice_module.VoiceEmotionRecognizer = object
+
+with patch.dict(sys.modules, {
+    "utils.audio_utils": _audio_module,
+    "models.asr": _asr_module,
+    "models.text_emotion": _text_module,
+    "models.voice_emotion": _voice_module,
+}):
+    pipeline_module = importlib.import_module("pipeline")
 
 
 class FakeASR:
@@ -46,12 +66,15 @@ class PipelineFailureIsolationTests(unittest.TestCase):
         voice_factory=FakeVoiceEmotion
     ):
         with (
-            patch("pipeline.SpeechRecognizer", asr_factory),
-            patch("pipeline.TextEmotionClassifier", text_factory),
-            patch("pipeline.VoiceEmotionRecognizer", voice_factory),
-            patch("pipeline.preprocess", return_value=np.ones(16000, dtype=np.float32)),
+            patch.object(pipeline_module, "SpeechRecognizer", asr_factory),
+            patch.object(pipeline_module, "TextEmotionClassifier", text_factory),
+            patch.object(pipeline_module, "VoiceEmotionRecognizer", voice_factory),
+            patch.object(
+                pipeline_module, "preprocess",
+                return_value=[0.1, 0.2, 0.1]
+            ),
         ):
-            pipeline = SpeechMindPipeline(load_translator=False)
+            pipeline = pipeline_module.SpeechMindPipeline(load_translator=False)
             return pipeline.run("unused.wav")
 
     def test_voice_branch_survives_asr_initialization_failure(self):
