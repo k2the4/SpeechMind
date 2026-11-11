@@ -41,3 +41,61 @@ def whisper_transcript_suggests_hinglish(transcript: str,
         len(romanized_tokens) >= 2
         or bool(romanized_tokens & STRONG_ROMANIZED_HINDI_WORDS)
     )
+
+
+def audio_language_suggests_hindi(
+    probabilities: dict,
+    primary_language: str,
+    duration_seconds: float,
+    *,
+    max_duration_seconds: float = 6.0,
+    min_hindi_probability: float = 0.12,
+    min_hindi_to_primary_ratio: float = 0.20,
+) -> bool:
+    """Flag short English-detected audio with a meaningful Hindi probability.
+
+    Whisper's language-token scores are relative model scores, not calibrated
+    probabilities. This deliberately conservative secondary signal is only
+    used for short clips and never overrides the primary-language decision by
+    itself; Srota must independently return Hindi transcript evidence.
+    """
+    aliases = {"english": "en", "hindi": "hi"}
+    primary = aliases.get(str(primary_language or "").lower().strip(),
+                          str(primary_language or "").lower().strip())
+    if primary != "en" or duration_seconds < 0:
+        return False
+    if duration_seconds > max_duration_seconds:
+        return False
+    if not isinstance(probabilities, dict):
+        return False
+
+    try:
+        hindi_score = float(probabilities.get("hi", probabilities.get("hindi", 0.0)))
+        primary_score = float(probabilities.get("en", probabilities.get("english", 0.0)))
+    except (TypeError, ValueError):
+        return False
+
+    if not (0.0 <= hindi_score <= 1.0 and 0.0 <= primary_score <= 1.0):
+        return False
+    if hindi_score < min_hindi_probability:
+        return False
+    return hindi_score >= primary_score * min_hindi_to_primary_ratio
+
+
+def srota_transcript_supports_hindi(
+    transcript: str,
+    primary_language: str = "en",
+) -> bool:
+    """Accept Srota only when its output contains recognizable Hindi evidence.
+
+    Devanagari-only output is valid here: short Hindi names/phrases may contain
+    no English tokens and therefore are not Hinglish code-switches.
+    """
+    annotation = annotate_language_spans(transcript, primary_language)
+    has_hindi_script = (
+        annotation["script_evidence"].get("Devanagari", 0) > 0
+        and annotation["language_evidence"].get("hi", 0) > 0
+    )
+    return has_hindi_script or whisper_transcript_suggests_hinglish(
+        transcript, primary_language
+    )
