@@ -2,36 +2,21 @@
 setlocal
 cd /d "%~dp0"
 
-set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
-if not exist "%PYTHON_EXE%" (
-    echo SpeechMind main environment not found. Run SETUP_SECOND_PC.bat first.
-    pause
-    exit /b 1
-)
-
-if not exist "data\text_emotion\prepared\brighter_hi_train.jsonl" (
-    echo Prepared text-emotion data not found. Starting data preparation...
-    call "%~dp0PREPARE_TEXT_EMOTION_DATA.bat"
-    if errorlevel 1 exit /b 1
-)
-
 echo ==========================================================
-echo SpeechMind - Train Hindi/Hinglish text-emotion model
+echo SpeechMind - Hindi/Hinglish text-emotion training
 echo ==========================================================
-echo MuRIL multi-label fine-tuning on CPU/GPU as available.
-echo BRIGHTER Hindi labels are human annotated; HinEmo GPT labels are
-echo down-weighted and masked for emotions that dataset does not provide.
-echo This can take time on CPU. Do not close the console during training.
 echo.
-
-"%PYTHON_EXE%" "%~dp0scripts\train_text_emotion_multilabel.py" --max-hinemo-train 5000 --epochs 2 --batch-size 4 --gradient-accumulation 4 --trainable-layers 2
-if errorlevel 1 (
-    echo Text-emotion training failed. Review the error above.
-    pause
-    exit /b 1
-)
-
+echo STOP: The current data-preparation output is multi-label JSONL
+echo (BRIGHTER + HinEmo), but the existing scripts\train_text_emotion.py
+echo trainer accepts a single-label CSV. They are not compatible.
 echo.
-echo Training completed. Restart SpeechMind to load the new multilingual checkpoint.
+echo The previous launcher referenced a non-existent script:
+echo scripts\train_text_emotion_multilabel.py
+echo and passed unsupported command-line arguments.
+echo.
+echo This launcher is intentionally disabled until the multi-label
+echo trainer is implemented and tested against the prepared JSONL schema.
+echo No training or checkpoint changes have been made.
+echo.
 pause
-exit /b 0
+exit /b 2
