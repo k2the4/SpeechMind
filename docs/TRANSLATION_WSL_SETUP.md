@@ -91,9 +91,28 @@ unavailable, the pipeline retains the original transcript and reports a
 translation warning.
 
 Supported source language codes are Hindi, Bengali, Tamil, Telugu, Marathi,
-Gujarati, Punjabi, Malayalam, Kannada, and Urdu. Hinglish is sent using the
-Hindi FLORES code; code-mixed translation quality must be evaluated separately
-before claiming full Hinglish meaning preservation.
+Gujarati, Punjabi, Malayalam, Kannada, and Urdu.
+
+### Hindi-English mixed transcript routing
+
+SpeechMind uses transcript-level language spans when selecting the translation
+source language. If ASR labels a mixed Devanagari-Hindi + Latin-English
+transcript as English but the spans contain Hindi, the pipeline selects Hindi
+(hin_Deva) for IndicTrans2. This is a best-effort mixed-script path; English
+meaning quality on held-out Hinglish data has not yet been evaluated.
+
+Romanized Hindi is not sent directly to IndicTrans2. When the transcript
+contains Romanized-Hindi spans, the English-meaning field remains unavailable
+and SpeechMind explains that a Hindi transliteration stage is required. This
+avoids presenting an unsupported direct translation as a successful result.
+IndicXlit is the candidate transliteration system, but it is not yet integrated
+into the SpeechMind runtime. Its official project describes Roman-to-native
+transliteration for 21 Indic languages and documents a separate Fairseq-based
+runtime; dependencies and model licensing must be reviewed before integration.
+
+The original transcript is unchanged in every route. English meaning is always
+a separate output. A best-effort mixed-script result must not be described as
+validated Hinglish translation.
 
 ## Troubleshooting
 
