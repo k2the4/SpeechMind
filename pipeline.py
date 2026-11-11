@@ -14,6 +14,7 @@ from models.asr import SpeechRecognizer
 from models.text_emotion import TextEmotionClassifier
 from models.voice_emotion import VoiceEmotionRecognizer
 from models.translation_routing import resolve_translation_route
+from models.text_emotion_routing import resolve_text_emotion_language
 from fusion_layer import fuse
 
 TRANSLATABLE_LANGUAGES = {
@@ -121,7 +122,9 @@ class SpeechMindPipeline:
         result["duration_sec"] = round(time.perf_counter() - started, 3)
         return result
 
-    def _predict_text_emotion(self, transcript: str, language: str) -> dict:
+    def _predict_text_emotion(
+        self, transcript: str, language: str, asr_result: dict = None
+    ) -> dict:
         if not transcript.strip():
             return _unavailable_branch(
                 "Text analysis skipped because no original transcript is available."
@@ -132,16 +135,42 @@ class SpeechMindPipeline:
                     "text_emotion", "Text-emotion model is unavailable."
                 )
             )
+
+        asr_result = asr_result if isinstance(asr_result, dict) else {}
+        route = resolve_text_emotion_language(
+            detected_language=language,
+            languages_present=asr_result.get("languages_present"),
+            code_switch_detected=bool(asr_result.get("code_switch_detected", False)),
+            mixed_script_detected=bool(asr_result.get("mixed_script_detected", False)),
+            romanized_hindi_detected=bool(
+                asr_result.get("romanized_hindi_detected", False)
+            ),
+            supported_languages=getattr(
+                self.text_emotion, "supported_languages", set()
+            ),
+        )
+        if not route["available"]:
+            result = _unavailable_branch(route["reason"])
+            result["input_language"] = route["language"]
+            result["routing_note"] = route["reason"]
+            return result
+
         try:
             # Deliberately use the original transcript, never the English meaning.
-            result = self.text_emotion.predict(transcript, language)
-            return result if isinstance(result, dict) else _unavailable_branch(
-                "Text-emotion model returned an invalid result."
-            )
+            result = self.text_emotion.predict(transcript, route["language"])
+            if not isinstance(result, dict):
+                result = _unavailable_branch(
+                    "Text-emotion model returned an invalid result."
+                )
+            result["input_language"] = route["language"]
+            result["routing_note"] = route["reason"]
+            return result
         except Exception as error:
             reason = f"{type(error).__name__}: {error}"
             print(f"[Pipeline] Text-emotion analysis unavailable: {reason}")
-            return _unavailable_branch(reason)
+            result = _unavailable_branch(reason)
+            result["input_language"] = route["language"]
+            return result
 
     def _predict_voice_emotion(self, audio) -> dict:
         if self.voice_emotion is None:
@@ -203,7 +232,7 @@ class SpeechMindPipeline:
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=3) as executor:
             text_future = executor.submit(
-                self._predict_text_emotion, transcript, language
+                self._predict_text_emotion, transcript, language, asr_result
             )
             voice_future = executor.submit(self._predict_voice_emotion, audio)
             translation_future = executor.submit(
@@ -271,6 +300,8 @@ class SpeechMindPipeline:
             "text_emotion_available": bool(text_result.get("available", False)),
             "text_emotion_reason": text_result.get("reason"),
             "text_emotion_model_source": text_result.get("model_source"),
+            "text_emotion_input_language": text_result.get("input_language"),
+            "text_emotion_routing_note": text_result.get("routing_note"),
             "text_emotion_secondary": text_result.get("secondary_emotions", []),
             "text_emotion_multi_label_scores": text_result.get("multi_label_scores"),
             "text_emotion_task_type": text_result.get("task_type"),
