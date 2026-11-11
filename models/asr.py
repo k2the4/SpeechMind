@@ -12,7 +12,8 @@ import whisper
 from transformers import AutoModel
 
 from models.asr_quality import estimate_whisper_quality
-from models.srota_provider import SrotaASRProvider, has_mixed_devanagari_latin
+from models.srota_provider import SrotaASRProvider
+from models.language_spans import annotate_language_spans
 
 WHISPER_MODEL = "small"
 INDIC_CONFORMER_MODEL = "ai4bharat/indic-conformer-600m-multilingual"
@@ -49,6 +50,18 @@ LANGUAGE_ALIASES = {
     "odia": "or", "punjabi": "pa", "tamil": "ta", "telugu": "te",
     "urdu": "ur",
 }
+
+
+def _attach_language_spans(result: dict) -> dict:
+    """Attach conservative transcript offsets without inventing audio timing."""
+    annotation = annotate_language_spans(
+        result.get("transcript", ""), result.get("language")
+    )
+    result.update(annotation)
+    result["code_switch_detected"] = bool(
+        annotation["code_switch_detected"] or annotation["mixed_script_detected"]
+    )
+    return result
 
 
 class SpeechRecognizer:
@@ -100,7 +113,7 @@ class SpeechRecognizer:
         """Prefer IndicConformer; fall back to Whisper instead of aborting ASR."""
         try:
             transcript = self._indic_transcribe(audio_numpy, language_code)
-            return {
+            return _attach_language_spans({
                 "transcript": transcript,
                 "language": language_code,
                 "confidence": None,
@@ -114,7 +127,7 @@ class SpeechRecognizer:
                 "asr_model": "indic-conformer-600m",
                 "asr_fallback": False,
                 "asr_fallback_reason": None,
-            }
+            })
         except Exception as error:
             reason = f"{type(error).__name__}: {error}"
             print(
@@ -135,8 +148,10 @@ class SpeechRecognizer:
             result["asr_requested_model"] = "indic-conformer-600m"
             return result
 
-    def _try_srota_code_switch(self, audio_numpy, language_score=None):
-        """Use Srota only when its output visibly preserves Hindi-English mixing."""
+    def _try_srota_code_switch(
+        self, audio_numpy, language_score=None, primary_language=None
+    ):
+        """Probe Srota for mixed-script Hinglish and fully Romanized Hindi."""
         if self.srota_provider_error is not None:
             return None
         try:
@@ -153,9 +168,21 @@ class SpeechRecognizer:
                 audio_numpy, sample_rate=16000
             )
             transcript = str(result.get("transcript") or "").strip()
-            if not has_mixed_devanagari_latin(transcript):
+            annotation = annotate_language_spans(transcript, primary_language)
+            use_srota = (
+                annotation["code_switch_detected"]
+                or annotation["mixed_script_detected"]
+                or annotation["romanized_hindi_detected"]
+            )
+            if not use_srota:
                 return None
-            return {
+            source = (
+                "whisper_detection_srota_romanized_hindi"
+                if annotation["romanized_hindi_detected"]
+                and not annotation["mixed_script_detected"]
+                else "whisper_detection_srota_code_switch_probe"
+            )
+            return _attach_language_spans({
                 "transcript": transcript,
                 "language": "hi",
                 "confidence": None,
@@ -165,14 +192,16 @@ class SpeechRecognizer:
                     round(float(language_score), 3)
                     if language_score is not None else None
                 ),
-                "language_source": "whisper_detection_srota_code_switch_probe",
+                "language_source": source,
                 "asr_model": result.get("asr_model", "qwen3-asr-0.6b-hinglish"),
                 "asr_fallback": False,
                 "asr_fallback_reason": None,
                 "asr_candidate_model": "qwen3-asr-0.6b-hinglish",
                 "asr_candidate_inference_seconds": result.get("inference_seconds"),
-                "code_switch_detected": True,
-            }
+                "code_switch_detected": bool(
+                    annotation["code_switch_detected"] or annotation["mixed_script_detected"]
+                ),
+            })
         except Exception as error:
             self.srota_provider_error = f"{type(error).__name__}: {error}"
             print(
@@ -236,7 +265,8 @@ class SpeechRecognizer:
         # script; pure-Hindi output stays on the existing IndicConformer route.
         if indic_language == "hi" and language_score >= MIN_INDIC_ROUTE_SCORE:
             srota_result = self._try_srota_code_switch(
-                audio_numpy, language_score=language_score
+                audio_numpy, language_score=language_score,
+                primary_language=indic_language,
             )
             if srota_result is not None:
                 return srota_result
@@ -249,7 +279,8 @@ class SpeechRecognizer:
             and language_score < MIN_SROTA_PROBE_ENGLISH_SCORE
         ):
             srota_result = self._try_srota_code_switch(
-                audio_numpy, language_score=language_score
+                audio_numpy, language_score=language_score,
+                primary_language=detected_language,
             )
             if srota_result is not None:
                 return srota_result
@@ -306,7 +337,7 @@ class SpeechRecognizer:
             result["language_detection_score"] = round(
                 float(language_detection_score), 3
             )
-        return result
+        return _attach_language_spans(result)
 
     def _indic_transcribe(self, audio, language_code):
         model = self._load_indic_model()
