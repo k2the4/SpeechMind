@@ -32,11 +32,12 @@ echo SpeechMind - Train multilingual MuRIL text-emotion model
 echo ==========================================================
 echo Uses BRIGHTER Hindi and HinEmo prepared JSONL.
 echo Preserves official train/dev/test splits and masks unknown labels.
-echo CPU-friendly settings: batch 2, max length 96, 2 epochs.
-echo Training may take several hours on CPU. Do not close this window.
+echo CPU baseline: one epoch, batch 8, max length 64, frozen MuRIL encoder.
+echo Uses all 2,556 BRIGHTER rows plus 1,200 sampled HinEmo rows.
+echo Prints live progress and ETA every 25 batches.
 echo.
 
-"%PYTHON_EXE%" "%~dp0scripts\train_text_emotion_multilabel.py" --data-dir "%DATA_DIR%" --epochs 2 --batch-size 2 --gradient-accumulation 8 --max-length 96 --cpu-threads 4
+"%PYTHON_EXE%" "%~dp0scripts\train_text_emotion_multilabel.py" --data-dir "%DATA_DIR%" --epochs 1 --batch-size 8 --max-length 64 --max-hinemo-train 1200 --max-hinemo-eval 500 --learning-rate 1e-3 --cpu-threads 4
 if errorlevel 1 (
     echo.
     echo Text-emotion training failed. No new checkpoint should be used.
