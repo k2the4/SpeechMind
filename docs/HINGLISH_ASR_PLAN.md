@@ -84,3 +84,35 @@ Review:
 - Any failures, empty outputs or out-of-memory errors.
 
 Only after this review should Srota be integrated into the production ASR layer. The production interface remains automatic; users never choose a language. The eventual routing policy must distinguish pure Hindi, pure English and mixed Hindi-English speech without requiring a user setting, and must be tested on all three groups.
+
+
+## Initial Srota smoke-benchmark result (2026-11-11)
+
+The first local run completed successfully on the target Windows PC. This is a diagnostic smoke test, not a full corpus evaluation.
+
+| Measure | Result |
+|---|---:|
+| Dataset / split | HiACC test |
+| Samples | 20 (10 adult, 10 children) |
+| Sampling | At most one clip per speaker |
+| Model | `moorlee/qwen3-asr-0.6b-hinglish` |
+| Runtime | CPU, float32 |
+| Overall WER | 16.96% |
+| Overall CER | 10.04% |
+| Adult WER / CER | 20.87% / 13.32% |
+| Children WER / CER | 12.84% / 6.76% |
+| Mean clip inference | 6.10 s |
+| Median clip inference | 5.763 s |
+| Model initialization | 6.588 s (weights already cached) |
+| Total elapsed | 138.368 s |
+
+There were 8 Devanagari-only, 2 Latin-only, and 10 mixed Devanagari+Latin hypotheses. This is an initial indication that the model emits mixed-script output; it is not yet a measured script-preservation accuracy score.
+
+Interpretation and caveats:
+- The 20-clip sample is too small to establish production accuracy or compare adult and child performance reliably.
+- HiACC speakers overlap across train/validation/test in the published corpus; this smoke test does not establish unseen-speaker generalization.
+- One reference contains a duplicated utterance, which inflates its error score. Romanized names versus Devanagari reference spellings and tokenization differences also affect WER/CER.
+- HiACC evaluates Hinglish ASR/code-switching only. It does not evaluate emotion recognition, translation quality, or other Indian languages.
+- The benchmark uses SpeechMind's NFKC/lowercase/punctuation normalization. Preserve the raw predictions and summary alongside any future comparable runs.
+
+Next decision: run the existing SpeechMind Hindi ASR baseline on the exact same 20 audio files only if a compatible, isolated benchmark path can be established without altering the main `.venv`. Compare per-clip outputs and identical normalization. Do not integrate Srota into production routing on the basis of this smoke test alone.
