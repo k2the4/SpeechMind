@@ -40,6 +40,12 @@ class ASRMetricTests(unittest.TestCase):
             ["this is a normal sentence"],
         )
 
+    def test_tab_and_double_pipe_reference_separators_are_supported(self):
+        self.assertEqual(
+            split_reference_alternatives("पहला वाक्य\tदूसरा वाक्य || तीसरा वाक्य"),
+            ["पहला वाक्य", "दूसरा वाक्य", "तीसरा वाक्य"],
+        )
+
     def test_multi_reference_metrics_accept_exact_match_to_one_alternative(self):
         result = error_counts_multi_reference(
             "चिंटू और राजू।   चिन्टु और राजु।",
