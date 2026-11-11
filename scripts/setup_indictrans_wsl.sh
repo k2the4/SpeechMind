@@ -23,7 +23,14 @@ fi
 UV="$UV_BOOTSTRAP/bin/uv"
 
 "$UV" python install 3.11
-"$UV" venv --clear --python 3.11 "$VENV"
+
+# Reuse the completed runtime on retries (for example, after Hugging Face
+# access is granted). Only rebuild it if it is missing or not Python 3.11.
+if [[ ! -x "$VENV/bin/python" ]] || ! "$VENV/bin/python" -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 11) else 1)'; then
+  "$UV" venv --clear --python 3.11 "$VENV"
+else
+  echo "[SpeechMind] Reusing existing Python 3.11 translation environment."
+fi
 
 # Keep the CPU-only PyTorch wheel separate from the public PyPI packages.
 "$UV" pip install --python "$VENV/bin/python" \
