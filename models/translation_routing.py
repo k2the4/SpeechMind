@@ -39,9 +39,13 @@ def resolve_translation_route(
     )
 
     source_language = detected
+    # Romanized-Hindi evidence must take precedence over an English primary
+    # label; otherwise the identity route would return untranslated Hindi.
+    if romanized_hindi and detected in {"en", "unknown"}:
+        source_language = "hi"
     # A primary English label must not hide clear Hindi spans in a mixed
     # transcript. Hindi is the IndicTrans2 source language for this route.
-    if "hi" in languages and detected in {"en", "unknown"}:
+    elif "hi" in languages and detected in {"en", "unknown"}:
         source_language = "hi"
     elif source_language == "unknown" and "hi" in languages:
         source_language = "hi"
