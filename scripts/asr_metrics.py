@@ -1,6 +1,7 @@
 """Small dependency-free ASR text normalization and error-rate metrics."""
 from __future__ import annotations
 
+import re
 import unicodedata
 
 
@@ -44,6 +45,57 @@ def error_counts(reference: str, hypothesis: str) -> dict:
         "reference_characters": len(ref),
         "wer": word_errors / max(1, len(ref_words)),
         "cer": char_errors / max(1, len(ref)),
+    }
+
+
+
+def split_reference_alternatives(reference: str) -> list[str]:
+    """Split HiACC alternatives marked by three spaces, tabs, or explicit ||.
+
+    Ordinary one/two-space word separators remain untouched. The original
+    reference field is preserved by callers; this helper only creates metric
+    candidates.
+    """
+    text = str(reference or "").strip()
+    if not text:
+        return [""]
+    alternatives = [
+        item.strip()
+        for item in re.split(r"(?: {3,}|\\t+|\\s*\\|\\|\\s*)", text)
+        if item.strip()
+    ]
+    return alternatives or [text]
+
+
+def error_counts_multi_reference(reference: str, hypothesis: str) -> dict:
+    """Score against the best valid reference alternative for each metric."""
+    alternatives = split_reference_alternatives(reference)
+    candidates = [error_counts(item, hypothesis) for item in alternatives]
+
+    wer_index, wer_result = min(
+        enumerate(candidates),
+        key=lambda item: (
+            item[1]["wer"], item[1]["word_errors"],
+            -item[1]["reference_words"],
+        ),
+    )
+    cer_index, cer_result = min(
+        enumerate(candidates),
+        key=lambda item: (
+            item[1]["cer"], item[1]["character_errors"],
+            -item[1]["reference_characters"],
+        ),
+    )
+    return {
+        "word_errors": wer_result["word_errors"],
+        "reference_words": wer_result["reference_words"],
+        "character_errors": cer_result["character_errors"],
+        "reference_characters": cer_result["reference_characters"],
+        "wer": wer_result["wer"],
+        "cer": cer_result["cer"],
+        "reference_alternatives": len(alternatives),
+        "wer_reference_index": wer_index + 1,
+        "cer_reference_index": cer_index + 1,
     }
 
 
