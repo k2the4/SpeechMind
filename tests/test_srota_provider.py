@@ -30,7 +30,11 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 "for line in sys.stdin:\n"
                 " request = json.loads(line)\n"
                 " count += 1\n"
-                " print(json.dumps({'ok': True, 'transcript': 'मेरा image है', 'count': count}, ensure_ascii=True), flush=True)\n",
+                " if request.get('action') == 'translate':\n"
+                "  response = {'ok': True, 'translated_text': 'This is our thought about this image.', 'count': count}\n"
+                " else:\n"
+                "  response = {'ok': True, 'transcript': 'मेरा image है', 'count': count}\n"
+                " print(json.dumps(response, ensure_ascii=True), flush=True)\n",
                 encoding="utf-8",
             )
             audio = root / "sample.wav"
@@ -48,6 +52,14 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 self.assertEqual(first["transcript"], "मेरा image है")
                 self.assertEqual(second["transcript"], "मेरा image है")
                 self.assertEqual(second["worker_response"]["count"], 2)
+                translation = provider.translate_to_english(
+                    "इस image के बारे में हमारा ये thought है", "hin_Deva"
+                )
+                self.assertEqual(
+                    translation["translated_text"],
+                    "This is our thought about this image.",
+                )
+                self.assertEqual(translation["worker_response"] if "worker_response" in translation else translation["translated_text"], "This is our thought about this image." if "worker_response" not in translation else translation["worker_response"])
             finally:
                 provider.close()
 
