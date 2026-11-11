@@ -19,7 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from models.asr import SpeechRecognizer
-from scripts.asr_metrics import aggregate_error_counts, error_counts
+from scripts.asr_metrics import aggregate_error_counts, error_counts_multi_reference
 from utils.audio_utils import load_audio
 
 DATA_ROOT = PROJECT_ROOT / "data" / "hiacc"
@@ -84,7 +84,7 @@ def main() -> int:
             inference_seconds = time.perf_counter() - clip_started
 
             reference = str(record.get("reference") or "")
-            metrics = error_counts(reference, hypothesis)
+            metrics = error_counts_multi_reference(reference, hypothesis)
             metric_rows.append(metrics)
             inference_times.append(inference_seconds)
             rows.append({
