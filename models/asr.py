@@ -1,10 +1,10 @@
 """
-SpeechMind local ASR and primary-language identification.
+SpeechMind local ASR with automatic Hindi-English code-switch probing.
 
-Hindi currently uses IndicConformer when Whisper's primary-language detector
-recognizes Hindi. English and other routes retain Whisper Small. This is an
-interim local baseline; code-mixed Hindi-English recognition is being evaluated
-separately with Srota rather than routing mixed speech by a single language ID.
+Whisper supplies a primary-language estimate. Hindi-dominant and uncertain
+English utterances may be checked by the isolated Srota provider; Srota is
+selected only when its output visibly contains both Devanagari and Latin text.
+Pure-Hindi and clear-English routes retain their existing specialist models.
 """
 
 import torch
