@@ -63,6 +63,21 @@ class LanguageSpanTests(unittest.TestCase):
         self.assertFalse(result["code_switch_detected"])
         self.assertFalse(result["romanized_hindi_detected"])
 
+    def test_ambiguous_english_words_the_and_main_are_not_hindi_evidence(self):
+        result = annotate_language_spans(
+            "This is the main image for our project", "en"
+        )
+
+        self.assertEqual(result["dominant_language"], "en")
+        self.assertFalse(result["romanized_hindi_detected"])
+        self.assertFalse(result["code_switch_detected"])
+        self.assertTrue(
+            all(
+                span["language"] == "en"
+                for span in result["language_spans"]
+            )
+        )
+
     def test_pure_hindi_remains_hindi(self):
         result = annotate_language_spans("यह मेरी किताब है", "hi")
 
