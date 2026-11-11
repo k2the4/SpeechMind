@@ -74,6 +74,12 @@ if audio_source is not None:
 
             st.subheader("Meaning (English)")
             st.write(result.get("meaning_en") or "English meaning is unavailable.")
+            if not result.get("meaning_en_available", False):
+                st.warning(
+                    "An English translation could not be produced. The text above "
+                    "is the original transcript, not an English translation. "
+                    + str(result.get("translator_error") or "")
+                )
 
             st.caption(
                 "Detected primary language: "
@@ -159,7 +165,12 @@ if audio_source is not None:
                     "voice_inference_windows": result.get("voice_inference_windows"),
                     "voice_validation_macro_f1": result.get("voice_validation_macro_f1"),
                     "fusion_weights": result.get("fusion_weights"),
+                    "meaning_en_available": result.get("meaning_en_available"),
+                    "meaning_en_source": result.get("meaning_en_source"),
                     "translator_loaded": result.get("translator_loaded"),
+                    "translator_inference_seconds": result.get(
+                        "translator_inference_seconds"
+                    ),
                     "translator_error": result.get("translator_error"),
                     "full_result": result,
                 })
