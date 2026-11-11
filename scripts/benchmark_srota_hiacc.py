@@ -30,6 +30,11 @@ MODEL_ID = "moorlee/qwen3-asr-0.6b-hinglish"
 MAX_CLIP_SECONDS = 30.0
 
 
+def resolve_audio_path(row: dict) -> Path:
+    """Manifest audio paths are relative to data/hiacc, not the project root."""
+    return DATA_ROOT / row["audio_path"]
+
+
 def read_test_records() -> list[dict]:
     if not MANIFEST.is_file():
         raise FileNotFoundError(
@@ -148,7 +153,7 @@ def main() -> int:
         inference_start = time.perf_counter()
 
         for index, row in enumerate(records, start=1):
-            audio_path = PROJECT_ROOT / row["audio_path"]
+            audio_path = resolve_audio_path(row)
             if not audio_path.is_file():
                 raise FileNotFoundError(f"Missing HiACC audio file: {audio_path}")
             import soundfile as sf
