@@ -33,16 +33,9 @@ echo Installing isolated Linux dependencies. This does not change .venv
 echo or .venv_srota. The model weights are downloaded by the next test.
 echo.
 
-rem Git may have checked out a tracked shell script with CRLF before .gitattributes
-rem was added. Normalize bytes in-place through Linux Python; avoid sed on DrvFS,
-rem because sed may fail while preserving file permissions on /mnt/c.
-wsl.exe --exec python3 -c "import pathlib,sys; p=pathlib.Path(sys.argv[1]); b=p.read_bytes(); p.write_bytes(b.replace(bytes([13,10]),bytes([10])).replace(bytes([13]),bytes([10])))" "%WSL_PROJECT_ROOT%/scripts/setup_indictrans_wsl.sh"
-if errorlevel 1 (
-    echo Failed to normalize the WSL setup script line endings.
-    exit /b 4
-)
-
-wsl.exe --exec bash -lc "bash '%WSL_PROJECT_ROOT%/scripts/setup_indictrans_wsl.sh'"
+rem Stream a CRLF-normalized copy into Bash. Do not rewrite the tracked .sh
+rem file on the Windows-mounted drive; that would leave a local Git modification.
+wsl.exe --exec bash -lc "tr -d '\r' < '%WSL_PROJECT_ROOT%/scripts/setup_indictrans_wsl.sh' | bash"
 if errorlevel 1 (
     echo.
     echo WSL IndicTrans2 dependency setup failed.
