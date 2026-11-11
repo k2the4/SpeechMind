@@ -114,19 +114,14 @@ class VoiceEmotionRecognizer:
                 inputs={k:v.to(self.device) for k,v in inputs.items()}
                 logits=self.model(**inputs).logits[0]
                 probs=torch.softmax(logits,dim=-1).float().cpu().numpy(); ids=self.model.config.id2label
-                distribution={str(ids.get(i,ids.get(str(i),f"label_{i}"))).lower():float(v) for i,v in enumerate(probs)}
+                distribution={str(ids.get(i,ids.get(str(i),f"label_{i}")).lower():float(v) for i,v in enumerate(probs)}
             weight=float(len(chunk))
             for label,prob in distribution.items(): weighted[label]=weighted.get(label,0.)+prob*weight
             total+=weight
         distribution={k:v/max(total,1.) for k,v in weighted.items()}
         emotion=max(distribution,key=distribution.get)
         return {"emotion":emotion,"confidence":round(float(distribution[emotion]),3),
-            "distribution":distribution,"arousal":self._estimate_arousal(distribution),
+            "distribution":distribution,"arousal":"Not assessed",
+            "arousal_available":False,
             "inference_device":str(self.device),"inference_windows":len(chunks),
             "model_source":self.model_source,"validation_macro_f1":self.model_metadata.get("validation_macro_f1") if self.model_metadata else None}
-
-    @staticmethod
-    def _estimate_arousal(distribution):
-        high=sum(distribution.get(k,0.) for k in ("angry","anger","fear","fearful","happy","joy","surprise"))
-        low=sum(distribution.get(k,0.) for k in ("sad","sadness","neutral","calm"))
-        return "High" if high>=.6 else "Low" if low>=.6 else "Moderate"
