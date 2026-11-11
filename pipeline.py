@@ -27,30 +27,54 @@ class SpeechMindPipeline:
         self.translator = None
         self.translator_enabled = load_translator
         self.translator_error = None
+        self.translation_available = False
+        self.translation_source = None
         print(
             "[Pipeline] Core local models initialized. "
             "No hosted or metered inference service is configured."
         )
 
     def _translate(self, transcript: str, language: str) -> str:
+        self.translation_available = False
+        self.translation_source = None
         if not transcript:
             return transcript
         if not self.translator_enabled:
+            self.translator_error = "Translation is disabled."
             return transcript
 
-        # Local IndicTrans2 path. Mixed-language translation will be improved
-        # after the Hinglish ASR output is benchmarked.
-        if language == "en" or language not in TRANSLATABLE_LANGUAGES:
+        if language == "en":
+            self.translation_available = True
+            self.translation_source = "original_english_transcript"
+            self.translator_error = None
             return transcript
+
+        if language not in TRANSLATABLE_LANGUAGES:
+            self.translator_error = (
+                f"English meaning is not configured for detected language: {language}."
+            )
+            return transcript
+
         try:
             if self.translator is None:
-                print("[Pipeline] Loading IndicTrans2 on demand...")
+                print("[Pipeline] Initializing isolated IndicTrans2 translator...")
                 from models.translation import Translator
-                self.translator = Translator()
-            return self.translator.to_english(transcript, language)
+
+                shared_provider = getattr(self.asr, "srota_provider", None)
+                if getattr(self.asr, "srota_provider_error", None):
+                    shared_provider = None
+                self.translator = Translator(provider=shared_provider)
+                # Reuse one worker process for ASR and translation when possible.
+                self.asr.srota_provider = self.translator.provider
+
+            translated = self.translator.to_english(transcript, language)
+            self.translation_available = True
+            self.translation_source = self.translator.model_name
+            self.translator_error = None
+            return translated
         except Exception as error:
-            self.translator_error = str(error)
-            print(f"[Pipeline] Translation unavailable: {error}")
+            self.translator_error = f"{type(error).__name__}: {error}"
+            print(f"[Pipeline] Translation unavailable: {self.translator_error}")
             return transcript
 
     def run(self, audio_path: str, language_hint: str = None) -> dict:
@@ -123,6 +147,8 @@ class SpeechMindPipeline:
             "asr_avg_no_speech_prob": asr_result.get("avg_no_speech_prob"),
             "asr_avg_compression_ratio": asr_result.get("avg_compression_ratio"),
             "meaning_en": english_meaning,
+            "meaning_en_available": self.translation_available,
+            "meaning_en_source": self.translation_source,
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
             "text_emotion_reason": text_result.get("reason"),
@@ -144,7 +170,13 @@ class SpeechMindPipeline:
             "processing_time_sec": timings["total"],
             "timings_sec": timings,
             "translator_provider": "local_indictrans2",
-            "translator_loaded": self.translator is not None,
+            "translator_loaded": bool(
+                self.translator is not None and self.translator.loaded
+            ),
+            "translator_inference_seconds": (
+                self.translator.last_inference_seconds
+                if self.translator is not None else None
+            ),
             "translator_error": self.translator_error,
         }
 
