@@ -65,16 +65,18 @@ class SrotaASRProvider:
     def available(self) -> bool:
         return self.python_executable.is_file() and self.worker_script.is_file()
 
-    def _read_stdout(self) -> None:
-        process = self._process
-        if process is None or process.stdout is None:
-            self._responses.put(None)
+    @staticmethod
+    def _read_stdout(
+        process: subprocess.Popen[str], responses: queue.Queue[str | None]
+    ) -> None:
+        if process.stdout is None:
+            responses.put(None)
             return
         try:
             for line in process.stdout:
-                self._responses.put(line.rstrip("\r\n"))
+                responses.put(line.rstrip("\\r\\n"))
         finally:
-            self._responses.put(None)
+            responses.put(None)
 
     def _receive(self, timeout: float) -> dict:
         try:
