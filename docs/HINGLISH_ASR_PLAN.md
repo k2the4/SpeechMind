@@ -308,3 +308,38 @@ The result is a narrow routing regression check, not a representative accuracy
 benchmark. It is useful for verifying whether confidently English-labelled
 Hinglish samples now reach Srota; it does not measure missed Hinglish outside
 the selected subset or establish pure-English accuracy.
+
+## Updated automatic route comparison and acceptance correction (2026-11-11)
+
+The updated automatic route was evaluated on the same 20 HiACC clips and
+alternative-aware references as the previous saved SpeechMind route.
+
+| Measure | Previous automatic route | Updated automatic route |
+|---|---:|---:|
+| Clips | 20 | 20 |
+| Micro WER | 26.70% | 19.00% |
+| Micro CER | 21.74% | 9.99% |
+| Mean clip inference | — | 8.69 s |
+
+The updated router selected Srota for 16 clips and Whisper Small for 4. The
+sample contained 10 adult and 10 child clips. WER improved on 9 clips, worsened
+on 3, and was unchanged on 8. CER improved on 10, worsened on 3, and was
+unchanged on 7.
+
+A per-clip review identified that all three WER regressions were pure-Hindi
+Devanagari outputs accepted from Srota after a Hindi-primary detection. In two
+cases the previous IndicConformer transcript was an exact match; in one it was
+near-exact. This violated the intended specialist boundary.
+
+The acceptance policy is therefore tightened:
+- Hindi-primary audio retains IndicConformer unless Srota demonstrates
+  mixed-script Hinglish or sufficiently strong Romanized-Hindi evidence.
+- Short/uncertain English-primary audio may still accept a Devanagari-only Srota
+  candidate when the secondary audio-language signal triggers the probe.
+- Clear English remains on Whisper.
+
+This correction is intended to preserve the pure-Hindi baseline while keeping
+the short-Hindi recovery path. Re-run the same 20-clip automatic comparison
+after pulling this change. The current and preceding 20-clip runs are diagnostic
+smoke tests only; they do not establish production accuracy or unseen-speaker
+generalization.
