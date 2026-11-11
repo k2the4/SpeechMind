@@ -43,6 +43,11 @@ class AsrRoutingSignalTests(unittest.TestCase):
             )
         )
 
+    def test_mixed_script_with_unknown_english_name_triggers_srota(self):
+        self.assertTrue(
+            whisper_transcript_suggests_hinglish("मेरा iPhone है", "hi")
+        )
+
     def test_srota_duration_limit_is_inclusive(self):
         self.assertTrue(srota_supports_duration(30 * 16000))
         self.assertFalse(srota_supports_duration(30 * 16000 + 1))
