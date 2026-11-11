@@ -17,7 +17,9 @@ from models.asr_quality import estimate_whisper_quality
 from models.srota_provider import SrotaASRProvider
 from models.language_spans import annotate_language_spans
 from models.asr_routing import (
+    audio_language_suggests_hindi,
     srota_supports_duration,
+    srota_transcript_supports_hindi,
     whisper_transcript_suggests_hinglish,
 )
 
@@ -94,7 +96,15 @@ class SpeechRecognizer:
         ).to(self.device)
         _, probabilities = self.whisper.detect_language(mel)
         language = max(probabilities, key=probabilities.get)
-        return str(language).lower().strip(), float(probabilities[language])
+        language_probabilities = {
+            str(code).lower().strip(): float(score)
+            for code, score in probabilities.items()
+        }
+        return (
+            str(language).lower().strip(),
+            float(probabilities[language]),
+            language_probabilities,
+        )
 
     def _load_indic_model(self):
         if self.indic_model_error is not None:
@@ -187,22 +197,24 @@ class SpeechRecognizer:
             )
             transcript = str(result.get("transcript") or "").strip()
             annotation = annotate_language_spans(transcript, primary_language)
-            use_srota = whisper_transcript_suggests_hinglish(
+            use_srota = srota_transcript_supports_hindi(
                 transcript, primary_language or "unknown"
             )
             if not use_srota:
                 return None
-            source_prefix = (
-                "whisper_transcript_srota"
-                if probe_source == "whisper_transcript"
-                else "whisper_detection_srota"
-            )
-            source = (
-                f"{source_prefix}_romanized_hindi"
-                if annotation["romanized_hindi_detected"]
-                and not annotation["mixed_script_detected"]
-                else f"{source_prefix}_code_switch_probe"
-            )
+            source_prefix = {
+                "whisper_transcript": "whisper_transcript_srota",
+                "audio_language": "whisper_audio_language_srota",
+            }.get(probe_source, "whisper_detection_srota")
+            if annotation["mixed_script_detected"]:
+                source_suffix = "code_switch_probe"
+            elif annotation["romanized_hindi_detected"]:
+                source_suffix = "romanized_hindi"
+            elif "hi" in annotation["languages_present"]:
+                source_suffix = "hindi_script"
+            else:
+                source_suffix = "code_switch_probe"
+            source = f"{source_prefix}_{source_suffix}"
             return _attach_language_spans({
                 "transcript": transcript,
                 "language": "hi",
@@ -273,7 +285,9 @@ class SpeechRecognizer:
             )
 
         try:
-            detected_language, language_score = self._detect_language(audio_numpy)
+            detected_language, language_score, language_probabilities = self._detect_language(
+                audio_numpy
+            )
         except Exception as error:
             print(f"[ASR] Language detection failed; Whisper will detect during transcription: {error}")
             whisper_result = self._decode_with_whisper(audio_numpy)
@@ -305,6 +319,24 @@ class SpeechRecognizer:
                 srota_result = self._try_srota_code_switch(
                     audio_numpy, language_score=language_score,
                     primary_language=detected_language,
+                )
+                srota_already_probed = True
+                if srota_result is not None:
+                    return srota_result
+            elif audio_language_suggests_hindi(
+                language_probabilities,
+                detected_language,
+                audio_numpy.size / 16000.0,
+            ):
+                print(
+                    "[ASR] Short English-detected clip has a secondary Hindi "
+                    "audio-language signal; probing Srota."
+                )
+                srota_result = self._try_srota_code_switch(
+                    audio_numpy,
+                    language_score=language_score,
+                    primary_language=detected_language,
+                    probe_source="audio_language",
                 )
                 srota_already_probed = True
                 if srota_result is not None:
