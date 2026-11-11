@@ -27,7 +27,11 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
             else:
                 python_path = root / ".venv_srota" / "bin" / "python"
             python_path.parent.mkdir(parents=True)
-            python_path.write_bytes(Path(sys.executable).read_bytes())
+            try:
+                python_path.symlink_to(Path(sys.executable))
+            except OSError:
+                python_path.write_bytes(Path(sys.executable).read_bytes())
+                python_path.chmod(0o755)
             script = root / "scripts" / "srota_asr_worker.py"
             script.parent.mkdir(parents=True)
             script.write_text(
@@ -48,7 +52,7 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 second = provider.transcribe_file(audio)
                 self.assertEqual(first["transcript"], "मेरा image है")
                 self.assertEqual(second["transcript"], "मेरा image है")
-                self.assertEqual(second["count"], 2)
+                self.assertEqual(second["worker_response"]["count"], 2)
             finally:
                 provider.close()
 
