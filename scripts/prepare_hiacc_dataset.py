@@ -132,6 +132,7 @@ def _split(parts: tuple[str, ...]) -> str:
 
 def _speaker_from_name(name: str) -> str:
     patterns = (
+        r"^((?:AD|CH)\d{2})",
         r"(?:speaker|spk)[_-]?([a-z0-9]+)",
         r"\b([AC]\d{1,3})\b",
     )
