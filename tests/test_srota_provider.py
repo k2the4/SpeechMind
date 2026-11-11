@@ -59,7 +59,7 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                     translation["translated_text"],
                     "This is our thought about this image.",
                 )
-                self.assertEqual(translation["worker_response"] if "worker_response" in translation else translation["translated_text"], "This is our thought about this image." if "worker_response" not in translation else translation["worker_response"])
+                self.assertEqual(translation["worker_response"]["count"], 3)
             finally:
                 provider.close()
 
