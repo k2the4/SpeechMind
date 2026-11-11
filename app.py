@@ -100,6 +100,8 @@ if audio_source is not None:
 
             st.subheader("Meaning (English)")
             st.write(result.get("meaning_en") or "English meaning is unavailable.")
+            if result.get("meaning_en_note"):
+                st.caption("Translation note: " + str(result["meaning_en_note"]))
             if not result.get("meaning_en_available", False):
                 st.warning(
                     "An English translation could not be produced. The text above "
@@ -258,6 +260,9 @@ if audio_source is not None:
                     "arousal_available": result.get("arousal_available"),
                     "meaning_en_available": result.get("meaning_en_available"),
                     "meaning_en_source": result.get("meaning_en_source"),
+                    "meaning_en_source_language": result.get("meaning_en_source_language"),
+                    "meaning_en_method": result.get("meaning_en_method"),
+                    "meaning_en_note": result.get("meaning_en_note"),
                     "translator_provider": result.get("translator_provider"),
                     "translator_loaded": result.get("translator_loaded"),
                     "translator_inference_seconds": result.get(
