@@ -32,10 +32,7 @@ def whisper_transcript_suggests_hinglish(transcript: str,
     """
     annotation = annotate_language_spans(transcript, primary_language)
 
-    if (
-        annotation["code_switch_detected"]
-        and "Devanagari" in annotation["scripts_present"]
-    ):
+    if annotation["mixed_script_detected"]:
         return True
 
     romanized_tokens = {
