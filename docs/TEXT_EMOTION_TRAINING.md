@@ -86,3 +86,10 @@ language in its metadata.
 Neither model's softmax score is a calibrated probability of correctness.
 Evaluate on representative, human-labeled spoken-language transcripts before
 treating outputs as reliable.
+
+
+## Prepared BRIGHTER + HinEmo training path
+
+For the prepared JSONL files produced by `PREPARE_TEXT_EMOTION_DATA.bat`, use `TRAIN_TEXT_EMOTION.bat`. It invokes `scripts/train_text_emotion_multilabel.py`, not the legacy CSV trainer. The multi-label trainer preserves the released train/dev/test splits, masks unknown HinEmo categories from both loss and validation metrics, down-weights GPT-generated HinEmo labels, and writes the six-label checkpoint format consumed by `models/text_emotion.py`. Neutral is derived only when no non-neutral signal crosses its threshold. The held-out test metrics are written to `checkpoints/text_emotion_muril/text_emotion_metrics.json`.
+
+The default launcher uses batch size 2, max length 96, and two epochs for CPU memory constraints. Training may still take several hours on a CPU. Do not enable the checkpoint in product claims until held-out per-label results have been reviewed.
