@@ -115,3 +115,16 @@ class BenchmarkEntrypointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_english_hinglish_targeted_route_check_launcher_exists(self):
+        root = Path(__file__).resolve().parents[1]
+        launcher = root / "CHECK_SPEECHMIND_ENGLISH_HINGLISH_ROUTE.bat"
+        script = root / "scripts" / "check_hinglish_english_route.py"
+        self.assertTrue(launcher.is_file())
+        self.assertTrue(script.is_file())
+        self.assertIn("scripts\\check_hinglish_english_route.py", launcher.read_text(encoding="utf-8"))
+        source = script.read_text(encoding="utf-8")
+        self.assertIn('in {"en", "english"}', source)
+        self.assertIn("DEFAULT_INPUT", source)
+        self.assertIn('"previous_automatic_route"', source)
