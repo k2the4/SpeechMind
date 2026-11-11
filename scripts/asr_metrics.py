@@ -61,7 +61,7 @@ def split_reference_alternatives(reference: str) -> list[str]:
         return [""]
     alternatives = [
         item.strip()
-        for item in re.split(r"(?: {3,}|\\t+|\\s*\\|\\|\\s*)", text)
+        for item in re.split(r"(?: {3,}|\t+|\s*\|\|\s*)", text)
         if item.strip()
     ]
     return alternatives or [text]
