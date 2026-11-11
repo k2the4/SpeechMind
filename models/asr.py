@@ -1,10 +1,10 @@
 """
-SpeechMind local ASR with automatic Hindi-English code-switch probing.
+SpeechMind local ASR with automatic Hindi-English and Romanized-Hindi routing.
 
 Whisper supplies a primary-language estimate. Hindi-dominant and uncertain
-English utterances may be checked by the isolated Srota provider; Srota is
-selected only when its output visibly contains both Devanagari and Latin text.
-Pure-Hindi and clear-English routes retain their existing specialist models.
+English utterances may be checked by the isolated Srota provider. Srota output
+is selected when transcript evidence supports mixed language, mixed script,
+or Romanized Hindi. Pure-Hindi and clear-English routes retain their specialists.
 """
 
 import torch
