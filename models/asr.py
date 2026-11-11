@@ -1,10 +1,12 @@
 """
 SpeechMind local ASR with automatic Hindi-English and Romanized-Hindi routing.
 
-Whisper supplies a primary-language estimate. Hindi-dominant and uncertain
-English utterances may be checked by the isolated Srota provider. Srota output
-is selected when transcript evidence supports mixed language, mixed script,
-or Romanized Hindi. Pure-Hindi and clear-English routes retain their specialists.
+Whisper supplies a primary-language estimate and, for English detections, a
+transcript-level Hinglish signal. Hindi-dominant and uncertain English
+utterances may be checked by the isolated Srota provider; high-confidence
+English detections are checked only when the Whisper transcript contains
+Hindi/Hinglish evidence. Pure-Hindi and clear-English routes retain their
+specialists.
 """
 
 import torch
@@ -23,8 +25,9 @@ WHISPER_MODEL = "small"
 INDIC_CONFORMER_MODEL = "ai4bharat/indic-conformer-600m-multilingual"
 MIN_INDIC_ROUTE_SCORE = 0.65
 MIN_WHISPER_LANGUAGE_LOCK_SCORE = 0.70
-# Srota probing is limited to Hindi-dominant or uncertain English utterances.
-# The detector score is a routing heuristic, not a calibrated probability.
+# This threshold controls the early Srota probe for uncertain English.
+# High-confidence English is probed only when its Whisper transcript suggests
+# Hinglish. The detector score is not a calibrated probability.
 MIN_SROTA_PROBE_ENGLISH_SCORE = 0.90
 
 INDIC_LANGUAGES = {
@@ -153,12 +156,17 @@ class SpeechRecognizer:
             return result
 
     def _try_srota_code_switch(
-        self, audio_numpy, language_score=None, primary_language=None
+        self, audio_numpy, language_score=None, primary_language=None,
+        probe_source="whisper_detection",
     ):
         """Probe Srota for mixed-script Hinglish and fully Romanized Hindi."""
         if self.srota_provider_error is not None:
             return None
-        if not srota_supports_duration(int(audio_numpy.size), sample_rate=16000):
+        if not srota_supports_duration(
+            int(audio_numpy.size),
+            sample_rate=16000,
+            max_seconds=SrotaASRProvider.MAX_CLIP_SECONDS,
+        ):
             print(
                 "[ASR] Skipping Srota for this clip only: current worker limit "
                 "is 30 seconds. Existing specialist routing will handle it."
@@ -186,11 +194,16 @@ class SpeechRecognizer:
             )
             if not use_srota:
                 return None
+            source_prefix = (
+                "whisper_transcript_srota"
+                if probe_source == "whisper_transcript"
+                else "whisper_detection_srota"
+            )
             source = (
-                "whisper_detection_srota_romanized_hindi"
+                f"{source_prefix}_romanized_hindi"
                 if annotation["romanized_hindi_detected"]
                 and not annotation["mixed_script_detected"]
-                else "whisper_detection_srota_code_switch_probe"
+                else f"{source_prefix}_code_switch_probe"
             )
             return _attach_language_spans({
                 "transcript": transcript,
@@ -320,6 +333,7 @@ class SpeechRecognizer:
                 srota_result = self._try_srota_code_switch(
                     audio_numpy, language_score=language_score,
                     primary_language=detected_language,
+                    probe_source="whisper_transcript",
                 )
                 if srota_result is not None:
                     return srota_result
