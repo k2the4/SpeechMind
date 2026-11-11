@@ -78,6 +78,32 @@ class LanguageSpanTests(unittest.TestCase):
             all(span["language"] == "und" for span in result["language_spans"])
         )
 
+    def test_devanagari_vowel_marks_are_preserved_in_spans(self):
+        text = "इस image के बारे में हमारे ये thought है"
+        result = annotate_language_spans(text, "hi")
+
+        devanagari_spans = [
+            span for span in result["language_spans"]
+            if span["script"] == "Devanagari"
+        ]
+        hindi_tokens = [
+            token
+            for span in devanagari_spans
+            for token in span["tokens"]
+        ]
+
+        self.assertIn("के", hindi_tokens)
+        self.assertIn("में", hindi_tokens)
+        self.assertIn("ये", hindi_tokens)
+        self.assertIn("है", hindi_tokens)
+        self.assertNotIn("य", hindi_tokens)
+        self.assertNotIn("ह", hindi_tokens)
+        for span in devanagari_spans:
+            self.assertEqual(
+                text[span["char_start"]:span["char_end"]],
+                span["text"],
+            )
+
     def test_offsets_are_character_offsets_not_audio_timestamps(self):
         text = "main meeting mein ja raha hoon."
         result = annotate_language_spans(text, "en")
