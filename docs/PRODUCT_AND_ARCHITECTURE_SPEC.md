@@ -157,7 +157,7 @@ Training and evaluation must be reproducible through documented scripts and Wind
 The repository currently contains:
 - Librosa-based audio decoding/resampling/normalization.
 - Whisper Small language detection and transcription, with IndicConformer routing for a detected Indic language.
-- IndicTrans2 distilled translation for supported single-language transcripts.
+- IndicTrans2 distilled translation for supported Indic-language transcripts, isolated in a Linux/WSL worker on Windows.
 - MuRIL text-emotion loading only when a fine-tuned checkpoint exists; an English-only fallback exists.
 - WavLM Base Plus frozen embeddings and an SVM voice-emotion classifier trained on CREMA-D + RAVDESS.
 - Rule-based late fusion with fixed heuristic weights.
@@ -175,3 +175,15 @@ These are implementation details that may change. They do not override the produ
 6. Keep training, data preparation, inference, and UI concerns modular.
 7. Do not claim local execution, training, or testing unless it was actually performed.
 8. Explain product-level changes before implementing them; routine engineering improvements can proceed within this specification.
+
+
+## 11. Translation runtime on Windows
+
+Windows SpeechMind keeps ASR and emotion inference in its existing environments.
+IndicTrans2 runs in a separate WSL Linux virtual environment because the
+IndicTransToolkit maintainers state that their package is not built or tested for
+native Windows. The Windows application connects to a persistent JSONL worker;
+the original transcript remains immutable and English meaning is a separate
+result. Translation runs concurrently with semantic and vocal analysis after
+ASR, so model loading/inference overlaps the other branches. See
+`docs/TRANSLATION_WSL_SETUP.md`.
