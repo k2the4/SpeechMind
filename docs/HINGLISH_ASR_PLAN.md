@@ -228,3 +228,35 @@ Remaining runtime gaps observed in the local app:
 - Voice emotion currently runs, but its acted-speech baseline and the combined score remain experimental and uncalibrated.
 
 The original transcript is preserved when translation fails; the UI explicitly warns that the displayed fallback text is not an English translation.
+
+
+## First transcript language-span annotation (2026-11-11)
+
+The automatic ASR result now includes conservative transcript-level language
+spans from `models/language_spans.py`:
+
+- Each span reports the exact transcript text, Python character offsets,
+  Unicode script, language guess, evidence method, and a heuristic score.
+- Devanagari and other recognized Indic scripts are mapped using the ASR
+  language result where possible.
+- Common Romanized-Hindi words are recognized even when Srota emits the whole
+  sentence in Latin script. This allows the Hindi specialist path to accept
+  Romanized Hindi rather than requiring mixed Devanagari/Latin output.
+- Common English words are identified separately. Unknown Latin words remain
+  `und`; once Romanized-Hindi evidence is present, unrecognized Latin tokens
+  are not automatically assigned to English merely because Whisper's primary
+  language guess was English.
+- The Streamlit results page exposes these spans in an expandable section.
+
+Important limitations:
+- These are transcript character offsets, not audio timestamps. No timing is
+  inferred from text or fabricated when the ASR provider does not return
+  aligned word timestamps.
+- This is a deterministic lexicon/script heuristic, not a neural language-ID
+  model. Romanized Hindi outside the lexicon and proper names may remain
+  undetermined; overlapping words can be ambiguous.
+- The heuristic score is not calibrated confidence. Do not report it as
+  probability of correctness.
+- The new routing still needs a real local Srota smoke test and a controlled
+  comparison on the existing HiACC clips. It is a first pass, not a claim that
+  robust language-span detection is complete.
