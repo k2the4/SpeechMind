@@ -98,3 +98,16 @@ The default launcher uses batch size 2, max length 96, and two epochs for CPU me
 ### CPU baseline configuration
 
 The default launcher performs a bounded baseline run: all 2,556 BRIGHTER-Hindi training examples plus a deterministic 1,200-row HinEmo subset; one epoch; batch size 8; maximum sequence length 64; frozen MuRIL encoder with only the classification head trained. Validation uses all 200 BRIGHTER dev rows plus a deterministic 500-row HinEmo subset. Test evaluation uses all 2,020 BRIGHTER test rows plus a deterministic 500-row HinEmo subset. The trainer prints progress and ETA every 25 batches. This is a first-pass baseline, not full MuRIL fine-tuning; metrics must be reviewed before making product accuracy claims.
+
+
+### Corrected CPU baseline: class balance and threshold calibration
+
+The trainer computes bounded per-label positive-class weights from the training split
+(to reduce the all-negative prediction failure on rare emotions). After each epoch,
+it reports validation metrics at the fixed 0.50 threshold and separately sweeps
+per-label thresholds from 0.05 to 0.95 using validation data only. The selected
+thresholds are stored in `speechmind_metadata.json` and are then applied unchanged
+to the held-out test split. Review `class_diagnostics` in the validation and test
+metrics: actual positive rate, predicted positive rate, mean/max probability, and
+the chosen threshold. Threshold calibration is not a substitute for good held-out
+performance; do not use the model if test metrics remain poor.
