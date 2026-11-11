@@ -26,54 +26,59 @@ class SpeechMindPipeline:
         self.voice_emotion = VoiceEmotionRecognizer()
         self.translator = None
         self.translator_enabled = load_translator
-        self.translator_error = None
-        self.translation_available = False
-        self.translation_source = None
+        self._translator_lock = threading.Lock()
         print(
             "[Pipeline] Core local models initialized. "
             "No hosted or metered inference service is configured."
         )
 
-    def _translate(self, transcript: str, language: str) -> str:
-        self.translation_available = False
-        self.translation_source = None
-        if not transcript:
-            return transcript
-        if language == "en":
-            self.translation_available = True
-            self.translation_source = "original_english_transcript"
-            self.translator_error = None
-            return transcript
-
-        if not self.translator_enabled:
-            self.translator_error = "Translation is disabled."
-            return transcript
-
-        if language not in TRANSLATABLE_LANGUAGES:
-            self.translator_error = (
-                f"English meaning is not configured for detected language: {language}."
-            )
-            return transcript
-
-        try:
+    def _get_translator(self):
+        # Streamlit can serve repeated requests through one cached pipeline.
+        # Initialize the isolated worker once even if two requests arrive together.
+        with self._translator_lock:
             if self.translator is None:
                 print("[Pipeline] Initializing isolated IndicTrans2 translator...")
                 from models.translation import Translator
-
-                # Translation runs in its own isolated worker. On Windows,
-                # this routes to WSL so native Linux-only IndicTransToolkit
-                # dependencies never enter the Srota ASR environment.
                 self.translator = Translator()
+            return self.translator
 
-            translated = self.translator.to_english(transcript, language)
-            self.translation_available = True
-            self.translation_source = self.translator.model_name
-            self.translator_error = None
-            return translated
+    def _translate(self, transcript: str, language: str) -> dict:
+        started = time.perf_counter()
+        result = {
+            "text": transcript,
+            "available": False,
+            "source": None,
+            "error": None,
+            "duration_sec": 0.0,
+        }
+        try:
+            if not transcript:
+                result["error"] = "No transcript was produced."
+            elif language in ("en", "english"):
+                result.update(
+                    text=transcript,
+                    available=True,
+                    source="original_english_transcript",
+                )
+            elif not self.translator_enabled:
+                result["error"] = "Translation is disabled."
+            elif language not in TRANSLATABLE_LANGUAGES:
+                result["error"] = (
+                    f"English meaning is not configured for detected language: {language}."
+                )
+            else:
+                translator = self._get_translator()
+                translated = translator.to_english(transcript, language)
+                result.update(
+                    text=translated,
+                    available=True,
+                    source=translator.model_name,
+                )
         except Exception as error:
-            self.translator_error = f"{type(error).__name__}: {error}"
-            print(f"[Pipeline] Translation unavailable: {self.translator_error}")
-            return transcript
+            result["error"] = f"{type(error).__name__}: {error}"
+            print(f"[Pipeline] Translation unavailable: {result['error']}")
+        result["duration_sec"] = round(time.perf_counter() - started, 3)
+        return result
 
     def run(self, audio_path: str, language_hint: str = None) -> dict:
         total_start = time.perf_counter()
@@ -99,14 +104,21 @@ class SpeechMindPipeline:
             asr_confidence = None
 
         stage_start = time.perf_counter()
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=3) as executor:
             text_future = executor.submit(
                 self.text_emotion.predict, transcript, language
             )
             voice_future = executor.submit(self.voice_emotion.predict, audio)
+            translation_future = executor.submit(
+                self._translate, transcript, language
+            )
             text_result = text_future.result()
             voice_result = voice_future.result()
-        timings["emotion_branches"] = round(time.perf_counter() - stage_start, 3)
+            translation_result = translation_future.result()
+        timings["parallel_analysis_and_translation"] = round(
+            time.perf_counter() - stage_start, 3
+        )
+        timings["translation"] = translation_result["duration_sec"]
 
         stage_start = time.perf_counter()
         fused = fuse(
@@ -116,9 +128,7 @@ class SpeechMindPipeline:
         )
         timings["fusion"] = round(time.perf_counter() - stage_start, 3)
 
-        stage_start = time.perf_counter()
-        english_meaning = self._translate(transcript, language)
-        timings["translation"] = round(time.perf_counter() - stage_start, 3)
+        english_meaning = translation_result["text"]
         timings["total"] = round(time.perf_counter() - total_start, 3)
 
         return {
@@ -145,8 +155,8 @@ class SpeechMindPipeline:
             "asr_avg_no_speech_prob": asr_result.get("avg_no_speech_prob"),
             "asr_avg_compression_ratio": asr_result.get("avg_compression_ratio"),
             "meaning_en": english_meaning,
-            "meaning_en_available": self.translation_available,
-            "meaning_en_source": self.translation_source,
+            "meaning_en_available": translation_result["available"],
+            "meaning_en_source": translation_result["source"],
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", True)),
             "text_emotion_reason": text_result.get("reason"),
@@ -172,7 +182,7 @@ class SpeechMindPipeline:
             "timings_sec": timings,
             "translator_provider": (
                 self.translator.provider_name if self.translator is not None
-                else "not_initialized"
+                else ("disabled" if not self.translator_enabled else "not_initialized")
             ),
             "translator_loaded": bool(
                 self.translator is not None and self.translator.loaded
@@ -181,7 +191,7 @@ class SpeechMindPipeline:
                 self.translator.last_inference_seconds
                 if self.translator is not None else None
             ),
-            "translator_error": self.translator_error,
+            "translator_error": translation_result["error"],
         }
 
 
