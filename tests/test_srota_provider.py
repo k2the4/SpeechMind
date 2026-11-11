@@ -30,7 +30,7 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 "for line in sys.stdin:\n"
                 " request = json.loads(line)\n"
                 " count += 1\n"
-                " print(json.dumps({'ok': True, 'transcript': 'मेरा image है', 'count': count}), flush=True)\n",
+                " print(json.dumps({'ok': True, 'transcript': 'मेरा image है', 'count': count}, ensure_ascii=True), flush=True)\n",
                 encoding="utf-8",
             )
             audio = root / "sample.wav"
