@@ -80,7 +80,7 @@ class SrotaASRProvider:
             return
         try:
             for line in process.stdout:
-                responses.put(line.rstrip("\\r\\n"))
+                responses.put(line.rstrip())
         finally:
             responses.put(None)
 
