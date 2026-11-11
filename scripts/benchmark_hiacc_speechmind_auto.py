@@ -60,6 +60,21 @@ def script_label(value: str) -> str:
     return "+".join(sorted(scripts)) if scripts else "empty_or_other"
 
 
+
+
+def read_previous_predictions(path: Path) -> dict[str, dict]:
+    """Load the previous automatic route before its output CSV is replaced."""
+    if not path.is_file():
+        return {}
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    previous = {}
+    for row in rows:
+        audio_path = str(row.get("audio_path") or "").replace("\\", "/").lower()
+        if audio_path and row.get("hypothesis") is not None:
+            previous[audio_path] = row
+    return previous
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
@@ -69,6 +84,15 @@ def main() -> int:
     started = time.perf_counter()
     try:
         records = read_records(args.input)
+        predictions_path = args.output_dir / "predictions.csv"
+        previous_predictions = read_previous_predictions(predictions_path)
+        if previous_predictions:
+            print(
+                f"[SpeechMind Auto] Found {len(previous_predictions)} previous "
+                "predictions; this run will compare old and updated routing."
+            )
+        else:
+            print("[SpeechMind Auto] No previous output found; running a baseline.")
         print(f"[SpeechMind Auto] Exact Srota clip list: {len(records)} clips")
         print("[SpeechMind Auto] Running current automatic language detection and routing.")
         init_started = time.perf_counter()
@@ -84,6 +108,10 @@ def main() -> int:
         inference_times = []
         route_counts = {}
         script_counts = {}
+        language_counts = {}
+        by_age_group = {}
+        previous_metric_rows = []
+        comparison_rows = 0
         inference_started = time.perf_counter()
 
         for index, record in enumerate(records, start=1):
@@ -101,10 +129,29 @@ def main() -> int:
             metric_rows.append(metrics)
             inference_times.append(inference_seconds)
 
+            normalized_audio_path = str(record["audio_path"]).replace("\\", "/").lower()
+            previous = previous_predictions.get(normalized_audio_path)
+            previous_metrics = None
+            if previous is not None and str(previous.get("reference") or "") == reference:
+                previous_metrics = error_counts_multi_reference(
+                    reference, str(previous.get("hypothesis") or "")
+                )
+                previous_metric_rows.append(previous_metrics)
+                comparison_rows += 1
+            elif previous is not None:
+                print(
+                    f"[SpeechMind Auto] Previous reference differs for "
+                    f"{audio_path.name}; excluding that row from before/after comparison."
+                )
+
             model_used = str(result.get("asr_model") or "unknown")
             route_counts[model_used] = route_counts.get(model_used, 0) + 1
             output_script = script_label(hypothesis)
             script_counts[output_script] = script_counts.get(output_script, 0) + 1
+            detected_language = str(result.get("language") or "unknown")
+            language_counts[detected_language] = language_counts.get(detected_language, 0) + 1
+            age_group = str(record.get("age_group") or "unknown")
+            by_age_group.setdefault(age_group, []).append(metrics)
 
             rows.append({
                 "audio_path": record["audio_path"],
@@ -112,14 +159,39 @@ def main() -> int:
                 "age_group": record.get("age_group"),
                 "speaker_id": record.get("speaker_id"),
                 "reference": reference,
+                "previous_hypothesis": (
+                    str(previous.get("hypothesis") or "") if previous_metrics else ""
+                ),
+                "previous_model": (
+                    str(previous.get("asr_model") or "") if previous_metrics else ""
+                ),
+                "previous_wer": previous_metrics["wer"] if previous_metrics else None,
+                "previous_cer": previous_metrics["cer"] if previous_metrics else None,
+                "previous_wer_reference_index": (
+                    previous_metrics["wer_reference_index"] if previous_metrics else None
+                ),
+                "previous_cer_reference_index": (
+                    previous_metrics["cer_reference_index"] if previous_metrics else None
+                ),
                 "hypothesis": hypothesis,
-                "detected_language": result.get("language"),
+                "detected_language": detected_language,
+                "language_source": result.get("language_source"),
+                "languages_present": ",".join(result.get("languages_present") or []),
+                "code_switch_detected": result.get("code_switch_detected", False),
                 "asr_model": model_used,
                 "asr_fallback": result.get("asr_fallback", False),
                 "asr_fallback_reason": result.get("asr_fallback_reason"),
                 "hypothesis_script": output_script,
                 "wer": metrics["wer"],
                 "cer": metrics["cer"],
+                "wer_reference_index": metrics["wer_reference_index"],
+                "cer_reference_index": metrics["cer_reference_index"],
+                "wer_change_vs_previous": (
+                    metrics["wer"] - previous_metrics["wer"] if previous_metrics else None
+                ),
+                "cer_change_vs_previous": (
+                    metrics["cer"] - previous_metrics["cer"] if previous_metrics else None
+                ),
                 "inference_seconds": round(inference_seconds, 3),
             })
 
@@ -131,7 +203,6 @@ def main() -> int:
                 )
 
         args.output_dir.mkdir(parents=True, exist_ok=True)
-        predictions_path = args.output_dir / "predictions.csv"
         with predictions_path.open("w", encoding="utf-8-sig", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
             writer.writeheader()
@@ -143,6 +214,32 @@ def main() -> int:
             "route": "SpeechMind current automatic ASR",
             "samples": len(rows),
             "overall": aggregate_error_counts(metric_rows),
+            "previous_route_comparison_samples": comparison_rows,
+            "previous_route_overall": (
+                aggregate_error_counts(previous_metric_rows)
+                if previous_metric_rows else None
+            ),
+            "route_metric_change": (
+                {
+                    "wer_percentage_points": round(
+                        (aggregate_error_counts(metric_rows)["wer"]
+                         - aggregate_error_counts(previous_metric_rows)["wer"]) * 100,
+                        3,
+                    ),
+                    "cer_percentage_points": round(
+                        (aggregate_error_counts(metric_rows)["cer"]
+                         - aggregate_error_counts(previous_metric_rows)["cer"]) * 100,
+                        3,
+                    ),
+                    "interpretation": "negative values indicate improvement",
+                }
+                if previous_metric_rows else None
+            ),
+            "by_age_group": {
+                group: aggregate_error_counts(group_metrics)
+                for group, group_metrics in by_age_group.items()
+            },
+            "detected_language_counts": language_counts,
             "model_routes": route_counts,
             "hypothesis_script_counts": script_counts,
             "whisper_initialization_seconds": round(whisper_initialization_seconds, 3),
@@ -156,9 +253,10 @@ def main() -> int:
             "predictions_csv": str(predictions_path.resolve()),
             "notes": [
                 "Uses the exact audio_path and reference rows from the completed Srota smoke test.",
-                "Measures the existing automatic Whisper language detection and IndicConformer/Whisper routing without changing production code.",
-                "The first clip routed to IndicConformer may include its lazy model initialization in that clip's inference time.",
-                "WER/CER use the same SpeechMind normalization utility as the Srota and IndicConformer diagnostics.",
+                "If a prior speechmind_auto/predictions.csv exists, old and new hypotheses are scored against the same alternative-aware references.",
+                "The previous output is read before predictions.csv is overwritten.",
+                "WER/CER use the same alternative-aware metric utility as the other HiACC benchmarks.",
+                "Per-age-group, detected-language, selected-model, script, and code-switch diagnostics are retained.",
                 "This 20-clip result is diagnostic only and is not production evidence.",
             ],
         }
