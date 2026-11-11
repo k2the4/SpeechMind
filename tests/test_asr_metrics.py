@@ -4,7 +4,9 @@ from scripts.asr_metrics import (
     aggregate_error_counts,
     edit_distance,
     error_counts,
+    error_counts_multi_reference,
     normalize_asr_text,
+    split_reference_alternatives,
 )
 
 
@@ -21,6 +23,33 @@ class ASRMetricTests(unittest.TestCase):
         self.assertEqual(result["reference_words"], 3)
         self.assertEqual(result["word_errors"], 1)
         self.assertGreater(result["cer"], 0.0)
+
+
+    def test_hiacc_reference_alternatives_split_on_three_spaces(self):
+        alternatives = split_reference_alternatives(
+            "चिंटू और राजू।   चिन्टु और राजु।"
+        )
+        self.assertEqual(
+            alternatives,
+            ["चिंटू और राजू।", "चिन्टु और राजु।"],
+        )
+
+    def test_normal_word_spacing_is_not_split_into_alternatives(self):
+        self.assertEqual(
+            split_reference_alternatives("this is a normal sentence"),
+            ["this is a normal sentence"],
+        )
+
+    def test_multi_reference_metrics_accept_exact_match_to_one_alternative(self):
+        result = error_counts_multi_reference(
+            "चिंटू और राजू।   चिन्टु और राजु।",
+            "चिंटू और राजू",
+        )
+        self.assertEqual(result["reference_alternatives"], 2)
+        self.assertEqual(result["wer"], 0.0)
+        self.assertEqual(result["cer"], 0.0)
+        self.assertEqual(result["wer_reference_index"], 1)
+        self.assertEqual(result["cer_reference_index"], 1)
 
     def test_aggregate_uses_corpus_level_denominator(self):
         rows = [
