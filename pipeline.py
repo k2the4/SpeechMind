@@ -39,14 +39,14 @@ class SpeechMindPipeline:
         self.translation_source = None
         if not transcript:
             return transcript
-        if not self.translator_enabled:
-            self.translator_error = "Translation is disabled."
-            return transcript
-
         if language == "en":
             self.translation_available = True
             self.translation_source = "original_english_transcript"
             self.translator_error = None
+            return transcript
+
+        if not self.translator_enabled:
+            self.translator_error = "Translation is disabled."
             return transcript
 
         if language not in TRANSLATABLE_LANGUAGES:
