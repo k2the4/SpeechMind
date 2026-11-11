@@ -169,6 +169,11 @@ if audio_source is not None:
                     "Voice-emotion analysis is unavailable. "
                     + str(result.get("voice_emotion_reason") or "")
                 )
+            else:
+                st.caption(
+                    "Experimental baseline: the current voice model has not been "
+                    "validated on spontaneous Indian/Hinglish speech."
+                )
 
             st.divider()
             st.subheader("Combined interpretation")
@@ -199,12 +204,17 @@ if audio_source is not None:
                     "No combined emotion was assigned because neither analysis "
                     "branch returned usable evidence."
                 )
+            elif result.get("interpretation_status") == "branch_disagreement":
+                st.info(
+                    "No combined emotion or valence is assigned when the text "
+                    "and voice branches disagree."
+                )
             else:
                 st.metric(
                     "Combined model score (uncalibrated)",
                     f"{float(result.get('confidence', 0.0)) * 100:.1f}%",
                 )
-            st.metric("Valence", str(result.get("valence", "unknown")))
+                st.metric("Valence", str(result.get("valence", "unknown")))
 
             with st.expander("Performance timings and diagnostics"):
                 st.write(
