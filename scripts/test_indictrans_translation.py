@@ -13,10 +13,11 @@ from models.translation import Translator
 
 def main() -> int:
     original = "इस image के बारे में हमारा ये thought है"
-    print("[Translation smoke] Original Hinglish transcript:")
-    print(original)
     try:
         translator = Translator()
+        print(f"[Translation smoke] Provider: {translator.provider_name}")
+        print("[Translation smoke] Original Hinglish transcript:")
+        print(original)
         translated = translator.to_english(original, "hi")
     except Exception as error:
         print(f"\n[Translation smoke] FAILED: {type(error).__name__}: {error}")
