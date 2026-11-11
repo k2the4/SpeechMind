@@ -36,15 +36,19 @@ class AsrRoutingSignalTests(unittest.TestCase):
             )
         )
 
+    def test_ambiguous_english_word_main_does_not_trigger_srota(self):
+        self.assertFalse(
+            whisper_transcript_suggests_hinglish(
+                "This is the main image for our project", "en"
+            )
+        )
+
     def test_srota_duration_limit_is_inclusive(self):
         self.assertTrue(srota_supports_duration(30 * 16000))
         self.assertFalse(srota_supports_duration(30 * 16000 + 1))
         self.assertFalse(srota_supports_duration(0))
         self.assertFalse(srota_supports_duration(16000, sample_rate=0))
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 class AsrRouterIntegrationPolicyTests(unittest.TestCase):
     @classmethod
@@ -82,3 +86,7 @@ class AsrRouterIntegrationPolicyTests(unittest.TestCase):
         self.assertNotIn('self.srota_provider_error =', handler)
 
 
+
+
+if __name__ == "__main__":
+    unittest.main()
