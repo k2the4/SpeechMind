@@ -1,26 +1,18 @@
-"""
-SpeechMind - Translation branch.
+"""Thin adapter for IndicTrans2 running in the isolated model worker.
 
-Converts the original-language transcript into English for the final
-"Meaning (English)" field shown in app.py. This runs AFTER meaning/emotion
-have already been extracted from the original-language text/audio - never
-before - so nuance isn't lost prior to analysis.
-
-Uses AI4Bharat's distilled IndicTrans2 (200M) rather than the full 1B model,
-since the distilled version is realistic to run on a free Colab GPU or even
-CPU, which matters for a student project.
+This module intentionally does not import Transformers or Torch in the main
+SpeechMind environment. IndicTransToolkit and IndicTrans2 stay inside
+.venv_srota, alongside the optional Srota worker.
 """
-import torch
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from __future__ import annotations
+
+from models.srota_provider import SrotaASRProvider
 
 MODEL_NAME = "ai4bharat/indictrans2-indic-en-dist-200M"
-
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # IndicTrans2 uses FLORES-style language codes rather than plain ISO codes.
 FLORES_CODE = {
     "hi": "hin_Deva",
-    "en": "eng_Latn",
     "bn": "ben_Beng",
     "ta": "tam_Taml",
     "te": "tel_Telu",
@@ -34,40 +26,29 @@ FLORES_CODE = {
 
 
 class Translator:
-    def __init__(self):
-        from IndicTransToolkit.processor import IndicProcessor  # pip install IndicTransToolkit
+    def __init__(self, provider: SrotaASRProvider | None = None):
+        self.provider = provider or SrotaASRProvider()
+        self.loaded = False
+        self.model_name = MODEL_NAME
+        self.last_inference_seconds = None
 
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME, trust_remote_code=True).to(DEVICE)
-        self.model.eval()
-        self.ip = IndicProcessor(inference=True)
-
-    @torch.no_grad()
     def to_english(self, text: str, src_lang: str) -> str:
-        """
-        src_lang: two-letter code (e.g. "hi") as returned by models/asr.py.
-        If src_lang is already English (or unrecognized), returns text unchanged
-        rather than crashing the pipeline.
-        """
+        """Translate original Hindi/Indic text to English without mutating it."""
         if not text or not text.strip():
             return text
-
-        if src_lang == "en":
+        language = str(src_lang or "").lower().strip()
+        if language in ("en", "english"):
             return text
-
-        src_flores = FLORES_CODE.get(src_lang)
+        src_flores = FLORES_CODE.get(language)
         if src_flores is None:
-            # Unknown/unsupported language tag - don't fail the whole pipeline,
-            # just skip translation and show the original transcript.
-            return text
+            raise ValueError(
+                f"IndicTrans2 translation is not configured for language: {language or 'unknown'}"
+            )
 
-        try:
-            batch = self.ip.preprocess_batch([text], src_lang=src_flores, tgt_lang="eng_Latn")
-            inputs = self.tokenizer(batch, return_tensors="pt", padding=True, truncation=True).to(DEVICE)
-            generated = self.model.generate(**inputs, max_length=256, num_beams=5)
-            decoded = self.tokenizer.batch_decode(generated, skip_special_tokens=True)
-            translated = self.ip.postprocess_batch(decoded, lang="eng_Latn")
-            return translated[0]
-        except Exception as e:
-            print(f"[Translation] Failed ({e}); falling back to original transcript")
-            return text
+        result = self.provider.translate_to_english(text, src_flores)
+        translated = str(result.get("translated_text") or "").strip()
+        if not translated:
+            raise RuntimeError("IndicTrans2 returned an empty translation.")
+        self.loaded = True
+        self.last_inference_seconds = result.get("inference_seconds")
+        return translated
