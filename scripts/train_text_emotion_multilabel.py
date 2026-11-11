@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from sklearn.metrics import f1_score, precision_recall_fscore_support
+from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
@@ -109,7 +109,7 @@ def build_model():
 @torch.no_grad()
 def evaluate(model, loader, device, threshold=0.5):
     model.eval()
-    truths, predictions = [], []
+    truths, predictions, known_masks = [], [], []
     total_loss = 0.0
     batches = 0
     for batch in loader:
@@ -124,15 +124,17 @@ def evaluate(model, loader, device, threshold=0.5):
         batches += 1
         predictions.extend((torch.sigmoid(logits) >= threshold).cpu().numpy())
         truths.extend(labels.cpu().numpy())
+        known_masks.extend(masks.cpu().numpy())
 
     truth = np.asarray(truths, dtype=np.int32)
     predicted = np.asarray(predictions, dtype=np.int32)
+    known = np.asarray(known_masks, dtype=np.int32)
     # Report only categories with at least one positive and one negative
     # known label in the held-out split.
     per_label = {}
     f1_values = []
     for index, label in enumerate(LABELS):
-        known_rows = truth[:, index] >= 0
+        known_rows = known[:, index] > 0
         y_true = truth[known_rows, index]
         y_pred = predicted[known_rows, index]
         score = float(f1_score(y_true, y_pred, zero_division=0))
