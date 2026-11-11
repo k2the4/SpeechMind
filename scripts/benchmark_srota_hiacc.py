@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.asr_metrics import aggregate_error_counts, error_counts
+from scripts.asr_metrics import aggregate_error_counts, error_counts_multi_reference
 
 DATA_ROOT = PROJECT_ROOT / "data" / "hiacc"
 MANIFEST = DATA_ROOT / "manifest.csv"
@@ -173,7 +173,7 @@ def main() -> int:
             inference_times.append(inference_seconds)
 
             reference = str(row.get("transcript") or "")
-            metrics = error_counts(reference, hypothesis)
+            metrics = error_counts_multi_reference(reference, hypothesis)
             metric_rows.append(metrics)
             age_group = row.get("age_group") or "unknown"
             by_group[age_group].append(metrics)
