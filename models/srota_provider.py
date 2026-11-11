@@ -13,10 +13,25 @@ import subprocess
 import tempfile
 import threading
 import atexit
+import unicodedata
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
+
+
+def has_mixed_devanagari_latin(text: str) -> bool:
+    """Return true when text contains both Devanagari and Latin letters."""
+    scripts = set()
+    for character in str(text or ""):
+        name = unicodedata.name(character, "")
+        if "DEVANAGARI" in name:
+            scripts.add("Devanagari")
+        elif "LATIN" in name:
+            scripts.add("Latin")
+        if len(scripts) == 2:
+            return True
+    return False
 
 
 class SrotaASRProvider:
@@ -99,8 +114,10 @@ class SrotaASRProvider:
             bufsize=1,
             creationflags=creation_flags,
         )
+        response_queue = self._responses
         threading.Thread(
             target=self._read_stdout,
+            args=(self._process, response_queue),
             name="speechmind-srota-stdout",
             daemon=True,
         ).start()
@@ -132,6 +149,7 @@ class SrotaASRProvider:
             "transcript": transcript,
             "asr_model": self.MODEL_NAME,
             "inference_seconds": response.get("inference_seconds"),
+            "worker_response": response,
         }
 
     def transcribe_audio(
