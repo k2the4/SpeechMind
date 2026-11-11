@@ -184,3 +184,16 @@ Interpretation and decision:
 - Next implementation phase: add an isolated Srota inference provider behind the existing ASR interface, preserving the main environment. Add automatic mixed-speech routing and explicit model/fallback metadata. Evaluate pure Hindi and English separately before finalizing specialist selection. Do not repeat the completed 20-clip smoke test unless the model, routing hypothesis, or evaluation set changes.
 
 Caveats: the 20-clip HiACC test sample is diagnostic only; it does not establish production accuracy or unseen-speaker generalization. The results are not evidence for Bengali or other regional-language support.
+
+
+## First Srota integration implementation (2026-11-11)
+
+The main ASR interface now has an isolated Srota probe for automatic code-switch handling:
+- `models/srota_provider.py` manages one persistent worker process and sends audio to it through a JSON-lines protocol.
+- `scripts/srota_asr_worker.py` loads Qwen3-ASR inside `.venv_srota`; the main `.venv` and its Transformers 4.46.3 pin remain untouched.
+- Hindi-dominant audio is probed with Srota. Its output is selected only when both Devanagari and Latin scripts are present; otherwise the existing IndicConformer Hindi route remains the pure-Hindi baseline.
+- An uncertain English primary-language detection is also probed, because code-switched speech can be classified as English. Clear English-only audio remains on Whisper.
+- If the isolated environment is missing, the clip exceeds Srota's current 30-second limit, or the worker fails, SpeechMind retains its existing ASR route and records a diagnostic message in the application log.
+- The worker remains loaded between requests, avoiding repeated model initialization for each clip.
+
+This is an initial automatic routing heuristic, not a validated language-span detector. Srota script output is used as a code-switch signal; Romanized Hindi that Srota emits entirely in Latin script may not be detected by this first version. The English language-score threshold is provisional and is not a calibrated probability. The next user-side action is a one-clip integration smoke test before running the full application.
