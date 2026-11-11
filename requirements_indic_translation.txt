@@ -1,0 +1,3 @@
+# Optional IndicTrans2 translation runtime, installed only in .venv_srota.
+# The main SpeechMind .venv remains on Transformers 4.46.3.
+indictranstoolkit==1.1.1
