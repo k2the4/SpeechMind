@@ -41,6 +41,13 @@ if errorlevel 1 goto failed
 
 echo.
 echo IndicTrans2 translation smoke test passed.
+echo.
+echo Verifying that the same worker still handles the Hinglish ASR route...
+"%APP_PY%" "%~dp0scripts\test_srota_auto_integration.py"
+if errorlevel 1 goto failed
+
+echo.
+echo Translation and Hinglish ASR integration checks passed.
 pause
 exit /b 0
 
