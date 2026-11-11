@@ -32,7 +32,7 @@ if not exist "%APP_PY%" (
 "%WORKER_PY%" -m pip install -r "%~dp0requirements_indic_translation.txt"
 if errorlevel 1 goto failed
 
-"%WORKER_PY%" -c "import transformers; from IndicTransToolkit.processor import IndicProcessor; print('Transformers:', transformers.__version__); print('IndicProcessor: OK')"
+"%WORKER_PY%" -c "import transformers; assert transformers.__version__ == '4.57.6', 'Expected Transformers 4.57.6'; from IndicTransToolkit.processor import IndicProcessor; print('Transformers:', transformers.__version__); print('IndicProcessor: OK')"
 if errorlevel 1 goto failed
 
 echo.
