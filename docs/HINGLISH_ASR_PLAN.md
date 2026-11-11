@@ -260,3 +260,34 @@ Important limitations:
 - The new routing still needs a real local Srota smoke test and a controlled
   comparison on the existing HiACC clips. It is a first pass, not a claim that
   robust language-span detection is complete.
+
+
+## ASR routing hardening (2026-11-11)
+
+The automatic router now handles English-primary detections in two stages:
+
+1. Low-confidence English detections retain the early Srota probe. If Srota does
+   not produce Hindi/Hinglish evidence, Whisper's transcript remains the route.
+2. High-confidence English detections run Whisper transcription first. This is
+   already required for the English route. The resulting transcript is checked
+   for mixed Devanagari/Latin, recognized Romanized-Hindi tokens, or Hindi +
+   English language evidence. Only then is Srota invoked as a second pass.
+   Clear English transcripts do not trigger Srota.
+
+This is intended to catch Romanized Hindi that Whisper classified as English
+with a high language-detection score, without invoking the slower Hinglish model
+on every clear English clip. It is a transcript-lexicon gate, not a trained
+audio language-identification model; missed or mistranscribed Hindi tokens can
+still cause false negatives.
+
+Srota's 30-second input limit is now checked before starting the worker. An
+overlength clip skips Srota for that request and continues through the existing
+specialist route. A transient Srota request failure is logged for that clip
+rather than permanently disabling the provider for the rest of the app session.
+Only a missing isolated environment is cached as unavailable.
+
+The policy has unit coverage for clear English, Romanized Hindi, mixed-script
+Hinglish, unknown Latin tokens, the Srota duration boundary, transcript-first
+probing, and per-clip failure handling. CI success does not establish audio
+accuracy or latency. Re-evaluate on held-out English and Romanized-Hindi audio
+before treating this routing change as production-validated.
