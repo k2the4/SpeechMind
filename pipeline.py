@@ -109,6 +109,11 @@ class SpeechMindPipeline:
             "asr_fallback": bool(asr_result.get("asr_fallback", False)),
             "asr_fallback_reason": asr_result.get("asr_fallback_reason"),
             "asr_requested_model": asr_result.get("asr_requested_model"),
+            "code_switch_detected": bool(asr_result.get("code_switch_detected", False)),
+            "asr_candidate_model": asr_result.get("asr_candidate_model"),
+            "asr_candidate_inference_seconds": asr_result.get(
+                "asr_candidate_inference_seconds"
+            ),
             "asr_confidence": round(asr_confidence, 3) if asr_confidence is not None else None,
             "asr_quality_score": (
                 round(asr_confidence, 3) if asr_confidence is not None else None
