@@ -143,6 +143,15 @@ class SpeechMindPipeline:
             "asr_fallback_reason": asr_result.get("asr_fallback_reason"),
             "asr_requested_model": asr_result.get("asr_requested_model"),
             "code_switch_detected": bool(asr_result.get("code_switch_detected", False)),
+            "language_spans": asr_result.get("language_spans", []),
+            "language_evidence": asr_result.get("language_evidence", {}),
+            "script_evidence": asr_result.get("script_evidence", {}),
+            "languages_present": asr_result.get("languages_present", []),
+            "scripts_present": asr_result.get("scripts_present", []),
+            "mixed_script_detected": bool(asr_result.get("mixed_script_detected", False)),
+            "romanized_hindi_detected": bool(asr_result.get("romanized_hindi_detected", False)),
+            "language_span_unit": asr_result.get("span_unit"),
+            "audio_timestamps_available": bool(asr_result.get("audio_timestamps_available", False)),
             "asr_candidate_model": asr_result.get("asr_candidate_model"),
             "asr_candidate_inference_seconds": asr_result.get(
                 "asr_candidate_inference_seconds"
