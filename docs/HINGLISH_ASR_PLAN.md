@@ -150,3 +150,14 @@ Interpretation:
 - IndicConformer is much faster on CPU, but forced-Hindi decoding often renders English speech as Devanagari phonetics. This is expected to be a poor fit for mixed-language speech and is not a valid reason to replace the Hinglish specialist.
 - This comparison does not establish production accuracy. It is only 20 utterances from one corpus, and the two models have different intended language scopes.
 - The next useful measurement is SpeechMind's actual automatic ASR route on these same 20 clips. That path uses Whisper language detection, IndicConformer for confidently detected Indic languages, and Whisper for other routes. Measure it without changing routing or the application environment.
+
+
+## Measure the current automatic SpeechMind ASR route
+
+The next diagnostic launcher is `BENCHMARK_HIACC_SPEECHMIND_AUTO.bat`, backed by `scripts/benchmark_hiacc_speechmind_auto.py`.
+
+It reads the same saved 20-clip Srota prediction CSV and runs the current `SpeechRecognizer.transcribe()` automatic path. That means Whisper performs language detection and the existing route chooses IndicConformer for confidently detected Indic languages or Whisper for other cases. The script records detected language, model route, fallback, transcript, WER/CER and inference time per clip.
+
+Run after pulling the latest feature branch. It uses the existing `.venv`, installs nothing, and does not change production code or routing. The first clip routed to IndicConformer may include lazy model initialization in its timing. Results are saved to `data/hiacc/benchmarks/speechmind_auto/`.
+
+This is the most useful next check: it measures the system users currently have, rather than only comparing isolated candidate models. Once complete, compare its per-clip output and routing against Srota. If the automatic route underperforms on Hinglish, the next engineering task is a language-span/code-switch-aware routing strategy—not simply replacing every utterance with Srota.
