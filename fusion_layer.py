@@ -215,6 +215,36 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
             "These are different observations, so the combined label should be "
             "treated cautiously rather than as a resolved emotional state."
         )
+
+        # Do not manufacture a combined winner from contradictory modalities.
+        # Keep the distributions for inspection, but leave the overall label
+        # and valence unresolved.
+        return {
+            "text_emotion": text_result.get("emotion", "unavailable"),
+            "voice_emotion": voice_result.get("emotion", "unavailable"),
+            "valence": "Unknown",
+            "arousal": "Not assessed",
+            "confidence": None,
+            "confidence_margin": round(confidence_margin, 3),
+            "confidence_is_calibrated": False,
+            "overall_interpretation": (
+                "Text and vocal signals conflict. No combined emotion has been assigned."
+            ),
+            "low_confidence_warning": True,
+            "overall_emotion": "unresolved",
+            "fusion_weights": {"text": round(text_weight, 3), "voice": round(voice_weight, 3)},
+            "text_distribution": text_distribution,
+            "voice_distribution": voice_distribution,
+            "fused_distribution": fused_scores,
+            "text_branch_available": True,
+            "voice_branch_available": True,
+            "branch_agreement": False,
+            "branch_disagreement": True,
+            "branch_comparison": branch_comparison,
+            "interpretation_status": "branch_disagreement",
+            "uncertainty_reasons": uncertainty_reasons,
+            "arousal_available": False,
+        }
     elif branch_agreement is True:
         interpretation_status = "branch_agreement"
         branch_comparison = (
