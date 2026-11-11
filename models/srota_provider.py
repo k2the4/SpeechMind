@@ -207,3 +207,9 @@ class SrotaASRProvider:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 process.kill()
+                process.wait(timeout=2)
+        finally:
+            # Close the parent-side pipe wrappers as well as the child process.
+            for stream in (process.stdout, process.stderr):
+                if stream is not None and not stream.closed:
+                    stream.close()
