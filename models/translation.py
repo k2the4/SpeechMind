@@ -1,12 +1,7 @@
-"""Thin adapter for IndicTrans2 running in the isolated model worker.
-
-This module intentionally does not import Transformers or Torch in the main
-SpeechMind environment. IndicTransToolkit and IndicTrans2 stay inside
-.venv_srota, alongside the optional Srota worker.
-"""
+"""IndicTrans2 adapter with an OS-isolated translation runtime."""
 from __future__ import annotations
 
-from models.srota_provider import SrotaASRProvider
+import os
 
 MODEL_NAME = "ai4bharat/indictrans2-indic-en-dist-200M"
 
@@ -26,8 +21,23 @@ FLORES_CODE = {
 
 
 class Translator:
-    def __init__(self, provider: SrotaASRProvider | None = None):
-        self.provider = provider or SrotaASRProvider()
+    def __init__(self, provider=None):
+        if provider is None:
+            if os.name == "nt":
+                from models.wsl_translation_provider import WslIndicTransProvider
+                provider = WslIndicTransProvider()
+                self.provider_name = "wsl_linux_indictrans2"
+            else:
+                from models.srota_provider import SrotaASRProvider
+                provider = SrotaASRProvider()
+                self.provider_name = "isolated_indictrans2_worker"
+        else:
+            self.provider_name = (
+                "injected_translation_provider"
+                if provider.__class__.__name__ != "SrotaASRProvider"
+                else "isolated_indictrans2_worker"
+            )
+        self.provider = provider
         self.loaded = False
         self.model_name = MODEL_NAME
         self.last_inference_seconds = None
