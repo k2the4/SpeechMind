@@ -13,6 +13,7 @@ from utils.audio_utils import preprocess
 from models.asr import SpeechRecognizer
 from models.text_emotion import TextEmotionClassifier
 from models.voice_emotion import VoiceEmotionRecognizer
+from models.translation_routing import resolve_translation_route
 from fusion_layer import fuse
 
 TRANSLATABLE_LANGUAGES = {
@@ -70,19 +71,33 @@ class SpeechMindPipeline:
                 self.translator = Translator()
             return self.translator
 
-    def _translate(self, transcript: str, language: str) -> dict:
+    def _translate(self, transcript: str, asr_result: dict) -> dict:
         started = time.perf_counter()
+        route = resolve_translation_route(
+            detected_language=asr_result.get("language"),
+            language_spans=asr_result.get("language_spans"),
+            romanized_hindi_detected=asr_result.get(
+                "romanized_hindi_detected", False
+            ),
+        )
         result = {
             "text": transcript,
             "available": False,
             "source": None,
-            "error": None,
+            "source_language": route["source_language"],
+            "method": route["method"],
+            "note": route["note"],
+            "error": route["error"],
             "duration_sec": 0.0,
         }
         try:
             if not transcript:
                 result["error"] = "No transcript was produced."
-            elif language in ("en", "english"):
+            elif not route["available"]:
+                # Do not call a Hindi-only MT model with Romanized Hindi and
+                # display its output as if meaning preservation were supported.
+                pass
+            elif route["source_language"] == "en":
                 result.update(
                     text=transcript,
                     available=True,
@@ -90,13 +105,11 @@ class SpeechMindPipeline:
                 )
             elif not self.translator_enabled:
                 result["error"] = "Translation is disabled."
-            elif language not in TRANSLATABLE_LANGUAGES:
-                result["error"] = (
-                    f"English meaning is not configured for detected language: {language}."
-                )
             else:
                 translator = self._get_translator()
-                translated = translator.to_english(transcript, language)
+                translated = translator.to_english(
+                    transcript, route["source_language"]
+                )
                 result.update(
                     text=translated,
                     available=True,
@@ -194,7 +207,7 @@ class SpeechMindPipeline:
             )
             voice_future = executor.submit(self._predict_voice_emotion, audio)
             translation_future = executor.submit(
-                self._translate, transcript, language
+                self._translate, transcript, asr_result
             )
             text_result = text_future.result()
             voice_result = voice_future.result()
@@ -251,6 +264,9 @@ class SpeechMindPipeline:
             "meaning_en": english_meaning,
             "meaning_en_available": translation_result["available"],
             "meaning_en_source": translation_result["source"],
+            "meaning_en_source_language": translation_result["source_language"],
+            "meaning_en_method": translation_result["method"],
+            "meaning_en_note": translation_result["note"],
             "text_emotion": fused["text_emotion"],
             "text_emotion_available": bool(text_result.get("available", False)),
             "text_emotion_reason": text_result.get("reason"),
