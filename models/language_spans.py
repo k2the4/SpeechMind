@@ -73,6 +73,20 @@ ROMANIZED_HINDI_WORDS = {
     "yahan", "yahi", "ya", "woh", "wo"
 }
 
+# Context-sensitive Romanized-Hindi tokens. These are valid Hindi forms but
+# common enough in English ("the", "main") that they must not establish Hindi
+# evidence by themselves when Whisper's primary-language guess is English.
+AMBIGUOUS_ROMANIZED_HINDI_WORDS = {
+    "main", "mai", "the", "ka", "ke", "ko", "se", "par", "pe",
+    "ja", "ya", "toh", "wo", "ye", "is", "me", "kal", "kam", "ga", "ji",
+}
+STRONG_ROMANIZED_HINDI_WORDS = {
+    "aaj", "aapko", "achha", "acha", "bahut", "batao", "chahiye",
+    "hai", "hain", "hoon", "hun", "kyunki", "mujhe", "mujhko",
+    "mujhse", "nahi", "nahin", "nhi", "raha", "rahe", "rahi",
+    "samajh", "tumhe", "tujhe",
+}
+
 # A compact list of common English function words and frequent Hinglish-domain
 # words. Unknown Latin tokens are not forced into English.
 ENGLISH_WORDS = {
@@ -141,7 +155,10 @@ def _classify_token(
         return language, 0.96, "unicode_script"
 
     if script == "Latin":
-        if normalized in ROMANIZED_HINDI_WORDS:
+        if normalized in ROMANIZED_HINDI_WORDS and (
+            normalized not in AMBIGUOUS_ROMANIZED_HINDI_WORDS
+            or not allow_primary_hint
+        ):
             return "hi", 0.90, "romanized_hindi_lexicon"
         if normalized in ENGLISH_WORDS:
             return "en", 0.86, "common_english_lexicon"
@@ -167,7 +184,12 @@ def annotate_language_spans(text: str, primary_language: str | None = None) -> d
     matches = list(_iter_word_spans(original))
     romanized_hindi_evidence = any(
         _script_for_token(original[start:end]) == "Latin"
-        and original[start:end].casefold().replace("’", "'") in ROMANIZED_HINDI_WORDS
+        and (
+            original[start:end].casefold().replace("’", "'")
+            in STRONG_ROMANIZED_HINDI_WORDS
+            or original[start:end].casefold().replace("’", "'")
+            in ROMANIZED_HINDI_WORDS - AMBIGUOUS_ROMANIZED_HINDI_WORDS
+        )
         for start, end in matches
     )
     tokens = []
