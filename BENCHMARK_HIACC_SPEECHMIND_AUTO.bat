@@ -13,8 +13,10 @@ if not exist "data\hiacc\benchmarks\srota\predictions.csv" (
     exit /b 1
 )
 
-echo SpeechMind - Current automatic ASR route on the exact 20 HiACC clips
-echo Uses Whisper language detection and the existing IndicConformer/Whisper routing.
+echo SpeechMind - Updated automatic ASR route on the exact 20 HiACC clips
+echo Compares the previous saved route with the updated Whisper/IndicConformer/Srota routing.
+echo Reports overall, adult/child, language, script, and code-switch diagnostics.
+echo Preserves old hypotheses in the comparison CSV before replacing the previous output.
 echo No dependency installation. No production routing changes.
 echo.
 ".venv\Scripts\python.exe" "%~dp0scripts\benchmark_hiacc_speechmind_auto.py"
