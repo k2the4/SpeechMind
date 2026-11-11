@@ -21,7 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
 os.environ["SPEECHMIND_ASR_PROVIDER"] = "local"
 
 from models.asr import SpeechRecognizer
-from scripts.asr_metrics import aggregate_error_counts, error_counts
+from scripts.asr_metrics import aggregate_error_counts, error_counts_multi_reference
 from utils.audio_utils import load_audio
 
 DATA_ROOT = PROJECT_ROOT / "data" / "hiacc"
@@ -86,11 +86,11 @@ def main() -> int:
             result = recognizer.transcribe(audio)
             inference_seconds = time.perf_counter() - clip_started
 
-            old_metrics = error_counts(
+            old_metrics = error_counts_multi_reference(
                 str(record.get("reference") or ""),
                 str(record.get("hypothesis") or ""),
             )
-            new_metrics = error_counts(
+            new_metrics = error_counts_multi_reference(
                 str(record.get("reference") or ""),
                 str(result.get("transcript") or ""),
             )
@@ -103,6 +103,11 @@ def main() -> int:
             rows.append({
                 "audio_path": record["audio_path"],
                 "reference": record["reference"],
+                "reference_alternatives": new_metrics["reference_alternatives"],
+                "previous_wer_reference_index": old_metrics["wer_reference_index"],
+                "previous_cer_reference_index": old_metrics["cer_reference_index"],
+                "updated_wer_reference_index": new_metrics["wer_reference_index"],
+                "updated_cer_reference_index": new_metrics["cer_reference_index"],
                 "previous_model": record.get("asr_model"),
                 "previous_hypothesis": record.get("hypothesis"),
                 "previous_wer": old_metrics["wer"],
@@ -152,7 +157,9 @@ def main() -> int:
             ),
             "elapsed_seconds": round(time.perf_counter() - started, 3),
             "predictions_csv": str(predictions_path.resolve()),
+            "evaluation_method": "best matching HiACC reference alternative; WER and CER selected independently",
             "notes": [
+                "Reference alternatives separated by three spaces, tabs, or || are evaluated separately.",
                 "This is a targeted regression check, not a representative benchmark.",
                 "The same saved English-detected audio paths and references are reused.",
                 "Metrics are directly comparable only for these selected clips.",
