@@ -80,6 +80,7 @@ class TextEmotionClassifier:
         self.english_labels = None
         self.english_load_error = None
         self.thresholds = {}
+        self.max_length = 128
 
         if not CHECKPOINT_DIR.is_dir():
             self.load_error = f"Fine-tuned MuRIL checkpoint not found: {CHECKPOINT_DIR}"
@@ -128,6 +129,9 @@ class TextEmotionClassifier:
             self.model_source = str(CHECKPOINT_DIR)
             self.task_type = task_type
             self.thresholds = metadata.get("thresholds") or {}
+            self.max_length = int(metadata.get("max_length", 128))
+            if self.max_length < 8 or self.max_length > 512:
+                raise ValueError(f"Invalid checkpoint max_length: {self.max_length}")
             raw_languages = metadata.get("languages", ["en"])
             if not isinstance(raw_languages, list) or not raw_languages:
                 raw_languages = ["en"]
@@ -223,7 +227,7 @@ class TextEmotionClassifier:
             task_type = self.task_type
 
         inputs = tokenizer(
-            text, return_tensors="pt", truncation=True, max_length=128
+            text, return_tensors="pt", truncation=True, max_length=self.max_length
         ).to(DEVICE)
         logits = model(**inputs).logits[0]
 
