@@ -103,7 +103,7 @@ def infer_hinglish_context_from_audio_tail(
     sample_rate: int = 16000,
     tail_seconds: float = 5.0,
 ) -> dict:
-    """Run a short English-forced tail probe and extract allow-listed terms."""
+    """Auto-detect the final speech segment and extract terms only if it is English."""
     sample_count = int(getattr(audio, "size", len(audio)))
     tail_samples = min(sample_count, int(sample_rate * tail_seconds))
     if sample_rate <= 0 or tail_seconds <= 0 or tail_samples < sample_rate:
@@ -120,13 +120,21 @@ def infer_hinglish_context_from_audio_tail(
         result = whisper_model.transcribe(
             tail_audio,
             task="transcribe",
-            language="en",
+            language=None,
             fp16=False,
             verbose=False,
             beam_size=3,
             condition_on_previous_text=False,
         )
         transcript = str(result.get("text") or "").strip()
+        detected_language = str(result.get("language") or "").lower().strip()
+        if detected_language not in {"en", "english"}:
+            return {
+                "context": "",
+                "source": "whisper_tail_not_english",
+                "probe_seconds": round(time.perf_counter() - started, 3),
+                "transcript": transcript,
+            }
         context = build_hinglish_context(transcript)
         return {
             "context": context,
