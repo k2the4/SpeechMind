@@ -91,14 +91,19 @@ def generate_translation_with_cache(model, inputs, torch, environ=None):
         # The IndicTrans2 custom model can surface a cache incompatibility as
         # an AttributeError ("NoneType has no attribute shape"). Include the
         # traceback so the failing past_key_values access is recognized.
-        message = (str(error) + "\\n" + traceback.format_exc()).casefold()
-        cache_incompatibility = any(
-            marker in message
-            for marker in (
-                "use_cache", "past_key_values", "cache_position",
-                "cache", "none' object has no attribute 'shape'",
-                'noneType" object has no attribute "shape"',
+        error_message = str(error).casefold()
+        error_traceback = traceback.format_exc().casefold()
+        # Do not search for the generic word "cache" in the traceback:
+        # this worker's own source lines contain use_cache even for unrelated
+        # exceptions. Match the concrete custom-decoder failure signatures.
+        cache_incompatibility = (
+            "past_key_values" in error_message
+            or "cache_position" in error_message
+            or (
+                "past_key_values" in error_traceback
+                or "cache_position" in error_traceback
             )
+            or ("nonetype" in error_message and "shape" in error_message)
         )
         if not requested_cache or not cache_incompatibility:
             raise
