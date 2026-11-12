@@ -7,6 +7,7 @@ technical vocabulary are passed to Srota.
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 
 
@@ -93,3 +94,53 @@ def build_hinglish_context(transcript: str, *, max_terms: int = 6) -> str:
     return ", ".join(
         extract_hinglish_context_terms(transcript, max_terms=max_terms)
     )
+
+
+def infer_hinglish_context_from_audio_tail(
+    audio,
+    whisper_model,
+    *,
+    sample_rate: int = 16000,
+    tail_seconds: float = 5.0,
+) -> dict:
+    """Run a short English-forced tail probe and extract allow-listed terms."""
+    sample_count = int(getattr(audio, "size", len(audio)))
+    tail_samples = min(sample_count, int(sample_rate * tail_seconds))
+    if sample_rate <= 0 or tail_seconds <= 0 or tail_samples < sample_rate:
+        return {
+            "context": "",
+            "source": "whisper_tail_too_short",
+            "probe_seconds": 0.0,
+            "transcript": "",
+        }
+
+    started = time.perf_counter()
+    try:
+        tail_audio = audio[-tail_samples:]
+        result = whisper_model.transcribe(
+            tail_audio,
+            task="transcribe",
+            language="en",
+            fp16=False,
+            verbose=False,
+            beam_size=3,
+            condition_on_previous_text=False,
+        )
+        transcript = str(result.get("text") or "").strip()
+        context = build_hinglish_context(transcript)
+        return {
+            "context": context,
+            "source": (
+                "whisper_tail_vocabulary"
+                if context else "whisper_tail_no_allowlisted_terms"
+            ),
+            "probe_seconds": round(time.perf_counter() - started, 3),
+            "transcript": transcript,
+        }
+    except Exception as error:
+        return {
+            "context": "",
+            "source": f"whisper_tail_probe_failed:{type(error).__name__}",
+            "probe_seconds": round(time.perf_counter() - started, 3),
+            "transcript": "",
+        }
