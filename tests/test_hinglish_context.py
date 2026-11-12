@@ -60,7 +60,7 @@ class HinglishContextTests(unittest.TestCase):
         self.assertEqual(result["context"], "layout")
         self.assertEqual(result["source"], "whisper_tail_vocabulary")
         self.assertEqual(result["transcript"], "not sure about the layout")
-        self.assertEqual(model.sample_count, 5 * 16000)
+        self.assertEqual(model.sample_count, 3 * 16000)
         self.assertIsNone(model.kwargs["language"])
         self.assertEqual(model.kwargs["beam_size"], 3)
 
