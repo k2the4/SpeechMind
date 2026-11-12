@@ -189,6 +189,18 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
     text_emotion = _top_emotion(text_distribution)
     voice_emotion = _top_emotion(voice_distribution)
     both_available = text_available and voice_available
+    voice_ranked = sorted(
+        voice_distribution.items(), key=lambda item: item[1], reverse=True
+    )
+    voice_top_two_margin = (
+        voice_ranked[0][1] - voice_ranked[1][1]
+        if len(voice_ranked) > 1 else 1.0
+    )
+    voice_label_ambiguous = bool(
+        both_available and voice_top_two_margin < 0.05
+    )
+    if voice_label_ambiguous:
+        voice_emotion = "uncertain"
     branch_agreement = (
         text_emotion == voice_emotion if both_available else None
     )
@@ -205,23 +217,35 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         uncertainty_reasons.append("Voice-emotion branch unavailable")
     if branch_disagreement:
         uncertainty_reasons.append("Text and voice branches disagree")
+    if voice_label_ambiguous:
+        uncertainty_reasons.append(
+            "Voice model top-two scores are too close to support a stable label"
+        )
     if confidence_margin < 0.15:
         uncertainty_reasons.append("Combined distribution has a narrow top-score margin")
 
     if branch_disagreement:
         interpretation_status = "branch_disagreement"
-        branch_comparison = (
-            f"Text signals {text_emotion}; vocal signals {voice_emotion}. "
-            "These are different observations, so the combined label should be "
-            "treated cautiously rather than as a resolved emotional state."
-        )
+        if voice_label_ambiguous:
+            first, second = voice_ranked[:2]
+            branch_comparison = (
+                f"Text signals {text_emotion}; the voice model does not clearly "
+                f"separate {first[0]} ({first[1]:.3f}) from "
+                f"{second[0]} ({second[1]:.3f}). No combined label is assigned."
+            )
+        else:
+            branch_comparison = (
+                f"Text signals {text_emotion}; vocal signals {voice_emotion}. "
+                "These are different observations, so the combined label should be "
+                "treated cautiously rather than as a resolved emotional state."
+            )
 
         # Do not manufacture a combined winner from contradictory modalities.
         # Keep the distributions for inspection, but leave the overall label
         # and valence unresolved.
         return {
             "text_emotion": text_result.get("emotion", "unavailable"),
-            "voice_emotion": voice_result.get("emotion", "unavailable"),
+            "voice_emotion": voice_emotion or "unavailable",
             "valence": "Unknown",
             "arousal": "Not assessed",
             "confidence": None,
@@ -263,7 +287,7 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
 
     return {
         "text_emotion": text_result.get("emotion", "unavailable") if text_available else "unavailable",
-        "voice_emotion": voice_result.get("emotion", "unavailable") if voice_available else "unavailable",
+        "voice_emotion": voice_emotion if voice_available else "unavailable",
         "valence": VALENCE_MAP.get(overall_emotion, "Unknown"),
         # No independently validated acoustic arousal estimator is implemented.
         "arousal": "Not assessed",
