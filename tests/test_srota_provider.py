@@ -57,14 +57,14 @@ class SrotaTimeoutTests(unittest.TestCase):
 
 
 class SrotaWorkerConfigTests(unittest.TestCase):
-    def test_generation_limit_is_capped_for_short_speech_clips(self):
+    def test_standard_qwen_generation_budget_is_preserved(self):
         root = Path(__file__).resolve().parents[1]
         source = (root / "scripts" / "srota_asr_worker.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn('"max_new_tokens": 256', source)
-        self.assertIn("max_new_tokens=256", source)
-        self.assertNotIn('"max_new_tokens": 512', source)
+        self.assertIn('"max_new_tokens": 512', source)
+        self.assertIn("max_new_tokens=512", source)
+        self.assertNotIn('"max_new_tokens": 256', source)
 
 
 class SrotaModelSelectionTests(unittest.TestCase):
@@ -122,12 +122,11 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 self.assertEqual(second["worker_response"]["count"], 2)
                 self.assertIn("Possible names or technical terms: layout, Figma", second["worker_response"]["context"])
                 self.assertIn("natural Hindi-English", first["worker_response"]["context"])
-                self.assertIn(
-                    "do not translate an English phrase into a Hindi explanation",
-                    first["worker_response"]["context"],
+                self.assertEqual(first["worker_response"]["context"], "")
+                self.assertEqual(
+                    second["worker_response"]["context"],
+                    "layout, Figma",
                 )
-                self.assertIn("layout", first["worker_response"]["context"])
-                self.assertIn("only when it is actually spoken", first["worker_response"]["context"])
                 translation = provider.translate_to_english(
                     "इस image के बारे में हमारा ये thought है", "hin_Deva"
                 )
