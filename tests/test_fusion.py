@@ -37,13 +37,13 @@ class FusionTests(unittest.TestCase):
         self.assertTrue(result["branch_disagreement"])
         self.assertEqual(result["interpretation_status"], "branch_disagreement")
 
-    def test_missing_asr_quality_uses_conservative_text_weight(self):
+    def test_missing_asr_quality_uses_equal_branch_weights(self):
         result = fuse(
             text_result={"emotion": "anger", "distribution": {"anger": 1.0}},
             voice_result={"emotion": "joy", "distribution": {"joy": 1.0}},
             asr_confidence=None,
         )
-        self.assertEqual(result["fusion_weights"], {"text": 0.3, "voice": 0.7})
+        self.assertEqual(result["fusion_weights"], {"text": 0.5, "voice": 0.5})
         self.assertTrue(result["low_confidence_warning"])
         self.assertIn("ASR quality indicator unavailable", result["uncertainty_reasons"])
 
@@ -110,9 +110,13 @@ class FusionTests(unittest.TestCase):
             asr_confidence=None,
         )
         self.assertEqual(result["voice_emotion"], "uncertain")
-        self.assertTrue(result["branch_disagreement"])
-        self.assertEqual(result["overall_emotion"], "unresolved")
+        self.assertFalse(result["branch_disagreement"])
+        self.assertIsNone(result["branch_agreement"])
+        self.assertEqual(result["interpretation_status"], "single_branch")
+        self.assertEqual(result["overall_emotion"], "neutral")
+        self.assertIsNone(result["confidence"])
         self.assertIn("does not clearly separate fear", result["branch_comparison"])
+        self.assertIn("text evidence only", result["branch_comparison"])
         self.assertIn(
             "Voice model top-two scores are too close to support a stable label",
             result["uncertainty_reasons"],
