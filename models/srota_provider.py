@@ -68,6 +68,8 @@ class SrotaASRProvider:
         if not self.model_name:
             raise ValueError("Srota model_name must be a non-empty Hugging Face model ID.")
         self._process: subprocess.Popen[str] | None = None
+        self._stderr_handle = None
+        self.stderr_log_path = self.project_root / "logs" / "srota_worker_stderr.log"
         self._responses: queue.Queue[str | None] = queue.Queue()
         self._lock = threading.Lock()
         atexit.register(self.close)
@@ -108,6 +110,8 @@ class SrotaASRProvider:
     def _start(self) -> None:
         if self._process is not None and self._process.poll() is None:
             return
+        if self._process is not None:
+            self.close()
         if not self.available:
             raise FileNotFoundError(
                 "Srota environment is unavailable. Expected .venv_srota and "
@@ -119,19 +123,28 @@ class SrotaASRProvider:
         worker_env = os.environ.copy()
         worker_env["PYTHONIOENCODING"] = "utf-8:backslashreplace"
         worker_env["PYTHONUTF8"] = "1"
-        self._process = subprocess.Popen(
-            [str(self.python_executable), str(self.worker_script)],
-            cwd=str(self.project_root),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+        self.stderr_log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._stderr_handle = self.stderr_log_path.open(
+            "a", encoding="utf-8", errors="replace"
+        )
+        try:
+            self._process = subprocess.Popen(
+                [str(self.python_executable), str(self.worker_script)],
+                cwd=str(self.project_root),
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=self._stderr_handle,
             text=True,
             encoding="utf-8",
             errors="replace",
             bufsize=1,
-            creationflags=creation_flags,
-            env=worker_env,
-        )
+                creationflags=creation_flags,
+                env=worker_env,
+            )
+        except Exception:
+            self._stderr_handle.close()
+            self._stderr_handle = None
+            raise
         response_queue = self._responses
         threading.Thread(
             target=self._read_stdout,
@@ -154,7 +167,18 @@ class SrotaASRProvider:
                 json.dumps(payload, ensure_ascii=True) + "\n"
             )
             process.stdin.flush()
-            response = self._receive(timeout or self.request_timeout)
+            effective_timeout = timeout or self.request_timeout
+            try:
+                response = self._receive(effective_timeout)
+            except TimeoutError as error:
+                # A timed-out worker may still emit a late JSON response. Kill
+                # it and discard its response queue so that it cannot be
+                # mistaken for the next request's result.
+                self.close()
+                raise TimeoutError(
+                    f"Srota request timed out after {effective_timeout:.0f}s. "
+                    f"Worker stopped; stderr log: {self.stderr_log_path}"
+                ) from error
 
         if not response.get("ok"):
             raise RuntimeError(response.get("error") or "Isolated model worker request failed.")
@@ -272,3 +296,7 @@ class SrotaASRProvider:
             for stream in (process.stdout, process.stderr):
                 if stream is not None and not stream.closed:
                     stream.close()
+            if self._stderr_handle is not None:
+                if not self._stderr_handle.closed:
+                    self._stderr_handle.close()
+                self._stderr_handle = None
