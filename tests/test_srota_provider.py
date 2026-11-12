@@ -33,7 +33,7 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 " if request.get('action') == 'translate':\n"
                 "  response = {'ok': True, 'translated_text': 'This is our thought about this image.', 'count': count}\n"
                 " else:\n"
-                "  response = {'ok': True, 'transcript': 'मेरा image है', 'count': count}\n"
+                "  response = {'ok': True, 'transcript': 'मेरा image है', 'count': count, 'context': request.get('context')}\n"
                 " print(json.dumps(response, ensure_ascii=True), flush=True)\n",
                 encoding="utf-8",
             )
@@ -52,6 +52,7 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 self.assertEqual(first["transcript"], "मेरा image है")
                 self.assertEqual(second["transcript"], "मेरा image है")
                 self.assertEqual(second["worker_response"]["count"], 2)
+                self.assertIn("natural Hindi-English", first["worker_response"]["context"])
                 translation = provider.translate_to_english(
                     "इस image के बारे में हमारा ये thought है", "hin_Deva"
                 )
