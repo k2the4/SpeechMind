@@ -192,7 +192,7 @@ def main() -> int:
         )
         selected_context = context_info["context"] or None
     print(
-        "[ASR benchmark] Automatic context: "
+        "[ASR benchmark] Selected Srota context: "
         + (selected_context if selected_context else "[none]")
         + f" ({context_info['source']}, {context_info['probe_seconds']}s)"
     )
