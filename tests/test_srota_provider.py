@@ -111,6 +111,12 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 self.assertEqual(second["worker_response"]["count"], 2)
                 self.assertIn("Possible names or technical terms: layout, Figma", second["worker_response"]["context"])
                 self.assertIn("natural Hindi-English", first["worker_response"]["context"])
+                self.assertIn(
+                    "do not translate an English phrase into a Hindi explanation",
+                    first["worker_response"]["context"],
+                )
+                self.assertIn("layout", first["worker_response"]["context"])
+                self.assertIn("only when it is actually spoken", first["worker_response"]["context"])
                 translation = provider.translate_to_english(
                     "इस image के बारे में हमारा ये thought है", "hin_Deva"
                 )
