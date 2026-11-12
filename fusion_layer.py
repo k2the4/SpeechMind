@@ -314,8 +314,14 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         "voice_emotion": voice_emotion,
         "valence": VALENCE_MAP.get(overall_emotion, "Unknown"),
         "arousal": "Not assessed",
-        "confidence": round(fused_scores[overall_emotion], 3),
-        "confidence_margin": round(confidence_margin, 3),
+        "confidence": (
+            round(fused_scores[overall_emotion], 3)
+            if interpretation_status == "branch_agreement" else None
+        ),
+        "confidence_margin": (
+            round(confidence_margin, 3)
+            if interpretation_status == "branch_agreement" else None
+        ),
         "confidence_is_calibrated": False,
         "overall_interpretation": overall_interpretation,
         "low_confidence_warning": bool(uncertainty_reasons),
