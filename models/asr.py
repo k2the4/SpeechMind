@@ -201,6 +201,7 @@ class SpeechRecognizer:
         self, audio_numpy, language_score=None, primary_language=None,
         probe_source="whisper_detection",
         context=None,
+        context_source=None,
     ):
         """Probe Srota for mixed-script Hinglish and fully Romanized Hindi."""
         if self.srota_provider_error is not None:
@@ -236,7 +237,7 @@ class SpeechRecognizer:
                 ) = self._infer_srota_context(audio_numpy)
             else:
                 context = str(context).strip()
-                context_source = (
+                context_source = context_source or (
                     "explicit_context" if context else "explicit_empty_context"
                 )
 
@@ -435,6 +436,7 @@ class SpeechRecognizer:
                             whisper_result.get("transcript", "")
                         ) or None
                     ),
+                    context_source="whisper_full_transcript",
                 )
                 if srota_result is not None:
                     return srota_result
