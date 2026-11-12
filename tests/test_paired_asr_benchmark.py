@@ -6,6 +6,7 @@ from pathlib import Path
 from scripts.benchmark_asr_models_paired import (
     aggregate_predictions,
     grouped_metrics,
+    paired_model_comparison,
     paired_vs_production,
     read_records,
     select_records,
@@ -117,6 +118,43 @@ class PairedASRBenchmarkTests(unittest.TestCase):
             grouped_metrics(rows, "srota_auto_hypothesis", "age_group"),
             {"unknown": result["micro"]},
         )
+
+    def test_reader_refuses_to_invent_speaker_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "missing-speaker.csv"
+            with path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle, fieldnames=["audio_path", "reference_transcript"]
+                )
+                writer.writeheader()
+                writer.writerow({
+                    "audio_path": "clip.wav",
+                    "reference_transcript": "hello there",
+                })
+            with self.assertRaisesRegex(ValueError, "no speaker_id"):
+                read_records(path)
+
+    def test_context_comparison_scores_failures_as_empty_hypotheses(self):
+        rows = [
+            {
+                "reference_transcript": "one two",
+                "srota_auto_hypothesis": "one two",
+                "srota_native_hypothesis": "one",
+            },
+            {
+                "reference_transcript": "one two",
+                "srota_auto_hypothesis": "",
+                "srota_native_hypothesis": "one two",
+            },
+        ]
+        result = paired_model_comparison(
+            rows, "srota_auto_hypothesis", "srota_native_hypothesis"
+        )
+        self.assertEqual(result["paired_samples"], 2)
+        self.assertEqual(result["candidate_better"], 1)
+        self.assertEqual(result["candidate_worse"], 1)
+        self.assertEqual(result["tied"], 0)
+        self.assertEqual(result["mean_clip_wer_delta"], 0.0)
 
     def test_paired_comparison_uses_identical_clips_and_reports_win_tie_loss(self):
         rows = [
