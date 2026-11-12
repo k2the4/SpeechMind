@@ -76,6 +76,15 @@ def main() -> int:
         "--context", default=None,
         help="Optional identical task context for Srota only; omit for the baseline comparison",
     )
+    parser.add_argument(
+        "--srota-model",
+        default=SrotaASRProvider.MODEL_NAME,
+        help=(
+            "Srota model ID. Use "
+            f"{SrotaASRProvider.CONVERSATIONAL_MODEL_NAME} to test the "
+            "conversational specialist."
+        ),
+    )
     args = parser.parse_args()
 
     audio_value = args.audio or input("Enter the audio file path: ").strip().strip('"')
@@ -100,8 +109,8 @@ def main() -> int:
     )
     whisper_text = str(whisper_result.get("text") or "").strip()
 
-    print("[ASR benchmark] Running Srota/Qwen3-ASR...")
-    srota = SrotaASRProvider()
+    print(f"[ASR benchmark] Running Srota model: {args.srota_model}...")
+    srota = SrotaASRProvider(model_name=args.srota_model)
     srota_result = srota.transcribe_audio(
         audio, sample_rate=16000, context=args.context
     )
@@ -112,7 +121,7 @@ def main() -> int:
     print("\n========== WHISPER-SMALL ==========")
     print(whisper_text or "[empty transcript]")
     print(error_rates(args.reference, whisper_text))
-    print("\n========== SROTA / QWEN3-ASR ==========")
+    print(f"\n========== SROTA / {args.srota_model} ==========")
     print(srota_text or "[empty transcript]")
     print(error_rates(args.reference, srota_text))
     print("\n[ASR benchmark] Lower WER/CER is better. Scores are diagnostic for this clip,")
