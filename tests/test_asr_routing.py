@@ -175,7 +175,7 @@ class AsrRouterIntegrationPolicyTests(unittest.TestCase):
             Path(__file__).resolve().parents[1]
             / "models" / "hinglish_context.py"
         ).read_text(encoding="utf-8")
-        self.assertIn('language="en"', helper)
+        self.assertIn('language=None', helper)
         self.assertIn("build_hinglish_context(transcript)", helper)
 
     def test_transient_srota_error_does_not_disable_provider_for_session(self):
