@@ -31,13 +31,13 @@ The current ASR routing and IndicTrans2 FLORES mapping contain routes for these 
 
 Do not start new ASR fine-tuning based on one recording. First build a held-out evaluation set with verified transcripts, multiple speakers, accents, recording conditions, conversational Hinglish, and technical Hinglish. Compare WER and CER using the same normalisation for each candidate.
 
-Example: run the conversational specialist on the reference clip without changing the production model:
+Example: compare the local recognizers on the reference clip. The default runs Whisper-small in automatic and forced-Hindi modes, then the general Srota model:
 
 ```powershell
-.venv\Scripts\python.exe scripts\compare_asr_reference.py --srota-model moorlee/qwen3-asr-0.6b-hinglish-hiacc-v1 --skip-whisper
+.venv\Scripts\python.exe scripts\compare_asr_reference.py --audio "hinglish 2.wav" --whisper-languages auto hi
 ```
 
-The script prompts for an audio path when `--audio` is omitted. Lower WER/CER is better; a single clip is diagnostic, not a general quality claim.
+Add `--include-indicconformer` to include the existing IndicConformer Hindi recognizer. The model may need to load its weights on first use. Lower WER/CER is better; a single clip is diagnostic, not a general quality claim. The conversational Srota specialist remains optional because its CPU startup previously timed out on the development machine.
 
 ## Srota runtime
 
@@ -48,7 +48,7 @@ The isolated worker now selects the runtime automatically:
 - In automatic mode, a GPU load failure falls back to CPU.
 - Override with `SPEECHMIND_SROTA_DEVICE=auto|cpu|cuda`.
 
-FlashAttention 2 is enabled only when the `flash_attn` package is present. This does not make CPU inference faster; hosted inference remains a separate deployment option to evaluate.
+FlashAttention 2 is enabled only when the `flash_attn` package is present. This does not make CPU inference faster.
 
 ## Meaning and translation
 
