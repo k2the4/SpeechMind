@@ -43,3 +43,26 @@ def extract_wavlm_embedding(model, feature_extractor, waveform, device) -> np.nd
             f"expected ({EXPECTED_FEATURE_DIMENSION},)."
         )
     return embedding
+
+
+def rank_top_two_scores(distribution: dict) -> tuple[list[dict], float | None]:
+    """Return the two highest raw class scores and their uncalibrated margin."""
+    if not isinstance(distribution, dict) or not distribution:
+        return [], None
+    ranked = []
+    for label, score in distribution.items():
+        try:
+            value = float(score)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(value):
+            ranked.append((str(label), value))
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    if not ranked:
+        return [], None
+    top_two = [
+        {"label": label, "score": round(score, 4)}
+        for label, score in ranked[:2]
+    ]
+    margin = ranked[0][1] - ranked[1][1] if len(ranked) > 1 else 1.0
+    return top_two, round(float(margin), 4)
