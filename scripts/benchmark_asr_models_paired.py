@@ -184,9 +184,17 @@ def seconds_key_for_hypothesis(hypothesis_key: str) -> str:
 def aggregate_predictions(rows: list[dict], hypothesis_key: str) -> dict:
     status_key = status_key_for_hypothesis(hypothesis_key)
     seconds_key = seconds_key_for_hypothesis(hypothesis_key)
-    scored = [
+    all_selected_scores = [
         error_counts_multi_reference(
-            row["reference_transcript"], str(row.get(hypothesis_key) or "")
+            row["reference_transcript"],
+            str(row.get(hypothesis_key) or ""),
+        )
+        for row in rows
+    ]
+    successful_scores = [
+        error_counts_multi_reference(
+            row["reference_transcript"],
+            str(row.get(hypothesis_key) or ""),
         )
         for row in rows if row.get(status_key) == "ok"
     ]
@@ -197,10 +205,22 @@ def aggregate_predictions(rows: list[dict], hypothesis_key: str) -> dict:
         and row.get(seconds_key) not in (None, "")
     ]
     return {
-        "successful_samples": len(scored),
-        "failed_samples": len(rows) - len(scored),
-        "micro": aggregate_error_counts(scored) if scored else None,
+        "selected_samples": len(rows),
+        "successful_samples": len(successful_scores),
+        "failed_samples": len(rows) - len(successful_scores),
+        "micro": (
+            aggregate_error_counts(all_selected_scores)
+            if all_selected_scores else None
+        ),
+        "micro_successful_samples_only": (
+            aggregate_error_counts(successful_scores)
+            if successful_scores else None
+        ),
         "median_inference_seconds": optional_median(times),
+        "failure_policy": (
+            "Failed model calls are scored as empty hypotheses in micro WER/CER; "
+            "successful-only metrics are also provided for diagnosis."
+        ),
     }
 
 
@@ -214,7 +234,7 @@ def grouped_metrics(rows: list[dict], hypothesis_key: str, group_key: str) -> di
             error_counts_multi_reference(
                 row["reference_transcript"], str(row.get(hypothesis_key) or "")
             )
-            for row in values if row.get(status_key_for_hypothesis(hypothesis_key)) == "ok"
+            for row in values
         ]
         output[group] = aggregate_error_counts(scored) if scored else None
     return output
@@ -223,12 +243,9 @@ def grouped_metrics(rows: list[dict], hypothesis_key: str, group_key: str) -> di
 def paired_vs_production(rows: list[dict], hypothesis_key: str) -> dict | None:
     comparable = []
     for row in rows:
-        if (
-            row.get("production_hypothesis")
-            and row.get(status_key_for_hypothesis(hypothesis_key)) == "ok"
-        ):
+        if row.get("production_hypothesis"):
             candidate = error_counts_multi_reference(
-                row["reference_transcript"], str(row[hypothesis_key])
+                row["reference_transcript"], str(row.get(hypothesis_key) or "")
             )
             production = error_counts_multi_reference(
                 row["reference_transcript"], row["production_hypothesis"]
