@@ -68,34 +68,11 @@ Romanized Hindi is not passed directly to IndicTrans2. A transliteration stage i
 
 All model scores and fusion weights remain uncalibrated until validated on paired, held-out Indian-language speech with human emotion annotations. Emotion output is descriptive and is not a diagnosis.
 
-## Optional hosted ASR
+## Hosted ASR candidate
 
-Sarvam Saaras v4 is integrated as an **opt-in alternative**, not a silent fallback. The local Whisper/Srota/IndicConformer routing remains the default and does not require an API key.
+Sarvam Saaras v4 is a candidate for a later hosted deployment comparison because its API documents transcription, translation, verbatim, transliteration, and code-mixed modes for Indian languages. It is not integrated into this branch. A hosted provider would transmit recordings outside the local application and may incur usage charges, so it must remain an explicit deployment choice with disclosure and credentials rather than a silent fallback.
 
-- Hosted model: `saaras:v4`
-- Output mode: `codemix` (Indic words in native script and English words in Latin script)
-- The app offers the hosted option only when `SARVAM_API_KEY` is configured.
-- Selecting hosted mode requires a separate consent checkbox because the recording is sent to Sarvam AI for processing.
-- REST requests support clips up to 30 seconds. Longer audio needs Sarvam's Batch API, which is not wired into this prototype.
-- The response does not expose a transcript-quality score, so SpeechMind must continue to mark ASR quality as unavailable rather than invent confidence.
-- This integration is not yet benchmarked on the project's held-out Hinglish set. Do not call it more accurate until it has been compared against verified transcripts.
-
-Local Windows setup:
-
-```powershell
-pip install -r requirements.txt
-$env:SARVAM_API_KEY = "YOUR_KEY"
-.venv\Scripts\python.exe -m streamlit run app.py
-```
-
-For deployment, add `SARVAM_API_KEY` to the hosting platform's secret manager. Never commit the key. The app defaults to local processing; choose the hosted provider explicitly and tick the consent checkbox before sending a recording.
-
-Saaras v4 supports code-mixed output and is billed per second. Check Sarvam's current pricing before production use.
-
-Documentation:
-- https://docs.sarvam.ai/api/api-guides-tutorials/speech-to-text/rest-api
-- https://docs.sarvam.ai/api/api-guides-tutorials/models/saaras
-- https://docs.sarvam.ai/api/getting-started/pricing
+Documentation: https://docs.sarvam.ai/api/api-guides-tutorials/models/saaras
 
 ## Training policy
 
