@@ -55,7 +55,7 @@ class FusionReliabilityTests(unittest.TestCase):
         )
 
         self.assertEqual(result["interpretation_status"], "insufficient_evidence")
-        self.assertEqual(result["overall_emotion"], "unresolved")
+        self.assertEqual(result["overall_emotion"], "unavailable")
         self.assertTrue(result["voice_label_ambiguous"])
         self.assertIsNone(result["confidence"])
 
