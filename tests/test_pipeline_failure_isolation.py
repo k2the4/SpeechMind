@@ -27,13 +27,12 @@ with patch.dict(sys.modules, {
 
 
 class FakeASR:
-    def transcribe(self, audio, language_hint=None, context=None, provider="local"):
+    def transcribe(self, audio, language_hint=None):
         return {
             "transcript": "I am happy today",
             "language": "en",
             "quality_score": 0.9,
-            "asr_model": "saaras:v4" if provider == "sarvam" else "fake-asr",
-            "asr_provider": provider,
+            "asr_model": "fake-asr",
         }
 
 
@@ -64,7 +63,7 @@ class FakeVoiceEmotion:
 class PipelineFailureIsolationTests(unittest.TestCase):
     def _run_with_patched_components(
         self, asr_factory=FakeASR, text_factory=FakeTextEmotion,
-        voice_factory=FakeVoiceEmotion, asr_provider="local"
+        voice_factory=FakeVoiceEmotion
     ):
         with (
             patch.object(pipeline_module, "SpeechRecognizer", asr_factory),
@@ -76,14 +75,7 @@ class PipelineFailureIsolationTests(unittest.TestCase):
             ),
         ):
             pipeline = pipeline_module.SpeechMindPipeline(load_translator=False)
-            return pipeline.run("unused.wav", asr_provider=asr_provider)
-
-    def test_hosted_asr_selection_is_passed_to_recognizer(self):
-        result = self._run_with_patched_components(asr_provider="sarvam")
-
-        self.assertEqual(result["asr_provider"], "sarvam")
-        self.assertEqual(result["asr_model"], "saaras:v4")
-        self.assertEqual(result["transcript"], "I am happy today")
+            return pipeline.run("unused.wav")
 
     def test_voice_branch_survives_asr_initialization_failure(self):
         def unavailable_asr():
