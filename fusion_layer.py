@@ -113,7 +113,7 @@ def _empty_result(text_distribution, voice_distribution, uncertainty_reasons,
         "confidence_is_calibrated": False,
         "overall_interpretation": "Insufficient reliable evidence. No overall emotion has been assigned.",
         "low_confidence_warning": True,
-        "overall_emotion": "unresolved",
+        "overall_emotion": "unavailable",
         "fusion_weights": {"text": 0.0, "voice": 0.0},
         "text_distribution": text_distribution,
         "voice_distribution": voice_distribution,
@@ -189,9 +189,16 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
     if not text_available and not reliable_voice_available:
         if voice_available and not voice_label_ambiguous:
             uncertainty_reasons.append("No usable text or voice emotion evidence")
+        comparison = (
+            f"The voice model does not clearly separate {voice_ranked[0][0]} "
+            f"({voice_ranked[0][1]:.3f}) from {voice_ranked[1][0]} "
+            f"({voice_ranked[1][1]:.3f}). No reliable emotion label is available."
+            if voice_label_ambiguous and len(voice_ranked) > 1 else
+            "No reliable text or voice emotion evidence is available."
+        )
         return _empty_result(
             text_distribution, voice_distribution, uncertainty_reasons,
-            text_available, voice_available, voice_emotion,
+            text_available, voice_available, voice_emotion, comparison,
         )
 
     if text_available and reliable_voice_available:
@@ -282,8 +289,10 @@ def fuse(text_result: dict, voice_result: dict, asr_confidence: float) -> dict:
         interpretation_status = "single_branch"
         if voice_label_ambiguous:
             branch_comparison = (
-                "Voice analysis was inconclusive; the current interpretation "
-                "uses text evidence only."
+                f"The voice model does not clearly separate {voice_ranked[0][0]} "
+                f"({voice_ranked[0][1]:.3f}) from {voice_ranked[1][0]} "
+                f"({voice_ranked[1][1]:.3f}). Voice analysis is inconclusive; "
+                "the current interpretation uses text evidence only."
             )
             overall_interpretation = (
                 INTERPRETATIONS.get(overall_emotion, "Interpretation unavailable")
