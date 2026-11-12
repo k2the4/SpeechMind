@@ -24,7 +24,7 @@ The current ASR routing and IndicTrans2 FLORES mapping contain routes for these 
 
 ## ASR provider policy
 
-- **Hinglish:** Srota union model is the local default. It is trained for conversational and technical-tutorial Hinglish.
+- **Hinglish:** Srota union model is the local default. It is trained for conversational and technical-tutorial Hinglish. Use its native inference prompt by default (`language=None`, empty context); inject context only for actual names or domain terms, not as a long instruction prompt.
 - **Hinglish experiment:** Srota-Conv (`moorlee/qwen3-asr-0.6b-hinglish-hiacc-v1`) may be selected in the reference benchmark for conversational recordings. It is not the production default; the union model remains the general-purpose default until a representative held-out evaluation supports changing it.
 - **Pure Indic speech:** The existing IndicConformer route remains the multilingual specialist.
 - **English:** Whisper remains the English recognition route.
@@ -40,6 +40,8 @@ Example: compare the local recognizers on the reference clip. The default runs W
 Add `--include-indicconformer` to include the existing IndicConformer Hindi recognizer. The model may need to load its weights on first use. Lower WER/CER is better; a single clip is diagnostic, not a general quality claim. The conversational Srota specialist remains optional because its CPU startup previously timed out on the development machine.
 
 ## Srota runtime
+
+The isolated worker follows the model's normal 512-token generation budget. Lowering this ceiling is not an accuracy fix and can truncate the remaining transcript. The inference wrapper also avoids injecting a long custom instruction prompt: the default request uses an empty context, matching the published model-card example.
 
 The isolated worker now selects the runtime automatically:
 
