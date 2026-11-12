@@ -40,6 +40,8 @@ class FusionReliabilityTests(unittest.TestCase):
         self.assertEqual(result["interpretation_status"], "single_branch")
         self.assertEqual(result["overall_emotion"], "neutral")
         self.assertEqual(result["fusion_weights"], {"text": 1.0, "voice": 0.0})
+        self.assertIsNone(result["confidence"])
+        self.assertIsNone(result["confidence_margin"])
         self.assertIn("inconclusive", result["branch_comparison"].lower())
 
     def test_ambiguous_voice_without_text_evidence_abstains(self):
