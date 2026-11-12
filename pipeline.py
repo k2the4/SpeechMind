@@ -227,7 +227,9 @@ class SpeechMindPipeline:
 
         transcript = str(asr_result.get("transcript") or "").strip()
         language = str(asr_result.get("language") or "unknown").lower().strip()
-        quality_value = asr_result.get("quality_score", asr_result.get("confidence"))
+        quality_value = asr_result.get("quality_score")
+        if quality_value is None:
+            quality_value = asr_result.get("confidence")
         try:
             asr_confidence = (
                 max(0.0, min(1.0, float(quality_value)))
@@ -235,6 +237,19 @@ class SpeechMindPipeline:
             )
         except (TypeError, ValueError):
             asr_confidence = None
+
+        asr_quality_status = (
+            "unavailable" if asr_confidence is None
+            else "uncalibrated_estimate"
+        )
+        asr_quality_note = (
+            "The selected recognizer does not expose a usable transcript-quality "
+            "score. Check the original transcript before relying on its English "
+            "meaning or text-emotion result."
+            if asr_confidence is None else
+            "The transcript-quality value is an uncalibrated model heuristic, "
+            "not a probability that every recognised word is correct."
+        )
 
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=3) as executor:
@@ -262,6 +277,12 @@ class SpeechMindPipeline:
         timings["fusion"] = round(time.perf_counter() - stage_start, 3)
 
         english_meaning = translation_result["text"]
+        if translation_result["available"]:
+            existing_note = translation_result.get("note")
+            translation_result["note"] = (
+                f"{existing_note} {asr_quality_note}"
+                if existing_note else asr_quality_note
+            )
         timings["total"] = round(time.perf_counter() - total_start, 3)
 
         return {
@@ -293,6 +314,8 @@ class SpeechMindPipeline:
             "asr_quality_score": (
                 round(asr_confidence, 3) if asr_confidence is not None else None
             ),
+            "asr_quality_status": asr_quality_status,
+            "asr_quality_note": asr_quality_note,
             "asr_quality_method": asr_result.get("quality_method"),
             "asr_avg_logprob": asr_result.get("avg_logprob"),
             "asr_avg_no_speech_prob": asr_result.get("avg_no_speech_prob"),
@@ -336,6 +359,7 @@ class SpeechMindPipeline:
             "voice_branch_available": fused["voice_branch_available"],
             "branch_agreement": fused["branch_agreement"],
             "branch_disagreement": fused["branch_disagreement"],
+            "voice_label_ambiguous": fused.get("voice_label_ambiguous", False),
             "branch_comparison": fused["branch_comparison"],
             "interpretation_status": fused["interpretation_status"],
             "uncertainty_reasons": fused["uncertainty_reasons"],
