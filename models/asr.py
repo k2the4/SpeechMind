@@ -234,8 +234,14 @@ class SpeechRecognizer:
                 "asr_model": result.get("asr_model", "qwen3-asr-0.6b-hinglish"),
                 "asr_fallback": False,
                 "asr_fallback_reason": None,
-                "asr_candidate_model": "qwen3-asr-0.6b-hinglish",
+                "asr_candidate_model": result.get(
+                    "asr_model", SrotaASRProvider.MODEL_NAME
+                ),
                 "asr_candidate_inference_seconds": result.get("inference_seconds"),
+                "asr_inference_device": (
+                    result.get("worker_response", {}).get("device")
+                    if isinstance(result.get("worker_response"), dict) else None
+                ),
                 "code_switch_detected": bool(
                     annotation["code_switch_detected"] or annotation["mixed_script_detected"]
                 ),
