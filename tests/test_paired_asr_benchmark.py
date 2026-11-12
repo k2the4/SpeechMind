@@ -105,10 +105,14 @@ class PairedASRBenchmarkTests(unittest.TestCase):
             },
         ]
         result = aggregate_predictions(rows, "srota_auto_hypothesis")
+        self.assertEqual(result["selected_samples"], 3)
         self.assertEqual(result["successful_samples"], 2)
         self.assertEqual(result["failed_samples"], 1)
-        self.assertAlmostEqual(result["micro"]["wer"], 0.25)
-        self.assertEqual(result["median_inference_seconds_including_first_call"], 3.0)
+        self.assertAlmostEqual(result["micro"]["wer"], 0.5)
+        self.assertAlmostEqual(
+            result["micro_successful_samples_only"]["wer"], 0.25
+        )
+        self.assertEqual(result["median_inference_seconds"], 3.0)
         self.assertEqual(
             grouped_metrics(rows, "srota_auto_hypothesis", "age_group"),
             {"unknown": result["micro"]},
