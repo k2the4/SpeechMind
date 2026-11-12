@@ -78,7 +78,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    audio_value = args.audio or input("Enter the audio file path: ").strip().strip(\'"\')
+    audio_value = args.audio or input("Enter the audio file path: ").strip().strip('"')
     if not audio_value:
         parser.error("An audio file path is required.")
     audio_path = Path(audio_value).expanduser().resolve()
