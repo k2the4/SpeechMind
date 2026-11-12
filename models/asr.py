@@ -16,7 +16,10 @@ import whisper
 from transformers import AutoModel
 
 from models.asr_quality import estimate_whisper_quality
-from models.hinglish_context import build_hinglish_context
+from models.hinglish_context import (
+    build_hinglish_context,
+    infer_hinglish_context_from_audio_tail,
+)
 from models.srota_provider import SrotaASRProvider
 from models.language_spans import annotate_language_spans
 from models.asr_routing import (
@@ -168,53 +171,31 @@ class SpeechRecognizer:
             return result
 
     def _infer_srota_context(self, audio_numpy):
-        """Use a short English-forced Whisper tail pass to scout known terms.
-
-        Whisper is not used as the Hinglish transcript here. Only exact matches
-        from the local allow-list are passed to Srota as vocabulary context.
-        """
-        tail_samples = min(int(audio_numpy.size), 5 * 16000)
-        if tail_samples < 16000:
-            return "", "whisper_tail_too_short", 0.0, ""
-
-        started = time.perf_counter()
-        try:
-            tail_audio = audio_numpy[-tail_samples:]
-            scout_result = self._decode_with_whisper(
-                tail_audio, language="en"
-            )
-            scout_transcript = str(
-                scout_result.get("text") or ""
-            ).strip()
-            context = build_hinglish_context(scout_transcript)
-            source = (
-                "whisper_tail_vocabulary"
-                if context else "whisper_tail_no_allowlisted_terms"
-            )
-            if context:
-                print(f"[ASR] Automatic Srota vocabulary context: {context}")
-            else:
-                print(
-                    "[ASR] Whisper tail scout found no allow-listed "
-                    "technical vocabulary; using native Srota decoding."
-                )
-            return (
-                context,
-                source,
-                round(time.perf_counter() - started, 3),
-                scout_transcript,
-            )
-        except Exception as error:
+        """Use a short English-forced Whisper tail pass to scout known terms."""
+        context_info = infer_hinglish_context_from_audio_tail(
+            audio_numpy, self.whisper, sample_rate=16000, tail_seconds=5.0
+        )
+        if context_info["context"]:
             print(
-                "[ASR] Whisper vocabulary scout unavailable; using native "
-                f"Srota decoding: {type(error).__name__}: {error}"
+                "[ASR] Automatic Srota vocabulary context: "
+                + context_info["context"]
             )
-            return (
-                "",
-                "whisper_tail_probe_failed",
-                round(time.perf_counter() - started, 3),
-                "",
+        elif context_info["source"] == "whisper_tail_no_allowlisted_terms":
+            print(
+                "[ASR] Whisper tail scout found no allow-listed technical "
+                "vocabulary; using native Srota decoding."
             )
+        else:
+            print(
+                "[ASR] Automatic context unavailable: "
+                + str(context_info["source"])
+            )
+        return (
+            context_info["context"],
+            context_info["source"],
+            context_info["probe_seconds"],
+            context_info["transcript"],
+        )
 
     def _try_srota_code_switch(
         self, audio_numpy, language_score=None, primary_language=None,
