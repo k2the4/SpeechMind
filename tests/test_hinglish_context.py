@@ -3,6 +3,7 @@ import unittest
 from models.hinglish_context import (
     build_hinglish_context,
     extract_hinglish_context_terms,
+    infer_hinglish_context_from_audio_tail,
 )
 
 
@@ -40,6 +41,50 @@ class HinglishContextTests(unittest.TestCase):
             ),
             ["project", "design", "layout"],
         )
+
+    def test_whisper_tail_probe_extracts_only_allowlisted_terms(self):
+        class FakeWhisper:
+            def __init__(self):
+                self.kwargs = None
+                self.sample_count = None
+
+            def transcribe(self, audio, **kwargs):
+                self.sample_count = len(audio)
+                self.kwargs = kwargs
+                return {"text": "not sure about the layout"}
+
+        audio = [0.0] * (9 * 16000)
+        model = FakeWhisper()
+        result = infer_hinglish_context_from_audio_tail(audio, model)
+
+        self.assertEqual(result["context"], "layout")
+        self.assertEqual(result["source"], "whisper_tail_vocabulary")
+        self.assertEqual(result["transcript"], "not sure about the layout")
+        self.assertEqual(model.sample_count, 5 * 16000)
+        self.assertEqual(model.kwargs["language"], "en")
+        self.assertEqual(model.kwargs["beam_size"], 3)
+
+    def test_whisper_tail_probe_does_not_add_context_for_generic_english(self):
+        class FakeWhisper:
+            def transcribe(self, audio, **kwargs):
+                return {"text": "I am not sure what to do next"}
+
+        result = infer_hinglish_context_from_audio_tail(
+            [0.0] * (8 * 16000), FakeWhisper()
+        )
+        self.assertEqual(result["context"], "")
+        self.assertEqual(result["source"], "whisper_tail_no_allowlisted_terms")
+
+    def test_whisper_tail_probe_skips_very_short_audio(self):
+        class FakeWhisper:
+            def transcribe(self, audio, **kwargs):
+                raise AssertionError("Whisper should not be called")
+
+        result = infer_hinglish_context_from_audio_tail(
+            [0.0] * 8000, FakeWhisper()
+        )
+        self.assertEqual(result["context"], "")
+        self.assertEqual(result["source"], "whisper_tail_too_short")
 
     def test_empty_input_returns_no_context(self):
         self.assertEqual(build_hinglish_context(""), "")
