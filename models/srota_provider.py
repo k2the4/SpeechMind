@@ -155,7 +155,9 @@ class SrotaASRProvider:
             raise RuntimeError(response.get("error") or "Isolated model worker request failed.")
         return response
 
-    def transcribe_file(self, audio_path: str | Path) -> dict:
+    def transcribe_file(
+        self, audio_path: str | Path, context: str | None = None
+    ) -> dict:
         path = Path(audio_path).resolve()
         if not path.is_file():
             raise FileNotFoundError(f"Audio file not found: {path}")
@@ -163,6 +165,15 @@ class SrotaASRProvider:
         response = self._request({
             "action": "transcribe",
             "audio_path": str(path),
+            "context": (
+                context.strip() if isinstance(context, str) and context.strip()
+                else (
+                    "This is natural Hindi-English (Hinglish) speech. "
+                    "Keep Hindi words in Devanagari and English words in Latin "
+                    "script. Transcribe exactly what is spoken; do not translate "
+                    "or paraphrase."
+                )
+            ),
         })
         transcript = str(response.get("transcript") or "").strip()
         if not transcript:
@@ -198,7 +209,10 @@ class SrotaASRProvider:
         }
 
     def transcribe_audio(
-        self, audio: np.ndarray, sample_rate: int = 16000
+        self,
+        audio: np.ndarray,
+        sample_rate: int = 16000,
+        context: str | None = None,
     ) -> dict:
         waveform = np.asarray(audio, dtype=np.float32).squeeze()
         if waveform.ndim != 1 or waveform.size == 0:
@@ -219,7 +233,7 @@ class SrotaASRProvider:
         handle.close()
         try:
             sf.write(str(temp_path), waveform, sample_rate, subtype="PCM_16")
-            return self.transcribe_file(temp_path)
+            return self.transcribe_file(temp_path, context=context)
         finally:
             try:
                 temp_path.unlink(missing_ok=True)
