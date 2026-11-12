@@ -132,9 +132,10 @@ def main() -> int:
                 started = time.perf_counter()
                 torch = get_torch()
                 model = get_srota_model()
+                context = str(request.get("context") or "").strip()
                 with redirect_stdout(StringIO()), torch.inference_mode():
                     result = model.transcribe(
-                        audio=str(audio_path), language=None
+                        audio=str(audio_path), language=None, context=context
                     )
                 transcript = extract_text(result)
                 if not transcript:
