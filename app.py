@@ -258,6 +258,14 @@ if audio_source is not None:
                     "asr_candidate_inference_seconds": result.get(
                         "asr_candidate_inference_seconds"
                     ),
+                    "asr_context_terms": result.get("asr_context_terms"),
+                    "asr_context_source": result.get("asr_context_source"),
+                    "asr_context_probe_seconds": result.get(
+                        "asr_context_probe_seconds"
+                    ),
+                    "asr_context_probe_transcript": result.get(
+                        "asr_context_probe_transcript"
+                    ),
                     "asr_inference_device": result.get("asr_inference_device"),
                     "language_source": result.get("language_source"),
                     "language_detection_score": result.get("language_detection_score"),
