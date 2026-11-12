@@ -60,7 +60,11 @@ def read_manifest(path: Path, split: str) -> tuple[list[dict[str, str]], list[di
         for line_number, raw in enumerate(reader, start=2):
             row = {str(key): str(value or "").strip() for key, value in raw.items()}
             row["_line_number"] = str(line_number)
-            row["dataset"] = row.get("dataset") or "unspecified"
+            row["dataset"] = row.get("dataset") or path.parent.name or "unspecified"
+            if not row.get("language"):
+                row["language"] = (
+                    "hinglish" if "hiacc" in row["dataset"].casefold() else "unknown"
+                )
             row["speaker_id"] = row["speaker_id"].strip()
             row["split"] = row["split"].strip().lower()
             if not row["audio_path"] or not row["transcript"]:
