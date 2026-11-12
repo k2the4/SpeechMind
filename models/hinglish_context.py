@@ -70,7 +70,7 @@ def extract_hinglish_context_terms(
     for canonical, aliases in _CONTEXT_ALIASES.items():
         positions = []
         for alias in aliases:
-            pattern = r"(?<![\\w])" + re.escape(alias.casefold()) + r"(?![\\w])"
+            pattern = r"(?<![\w])" + re.escape(alias.casefold()) + r"(?![\w])"
             match = re.search(pattern, text, flags=re.UNICODE)
             if match:
                 positions.append(match.start())
