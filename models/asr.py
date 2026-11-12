@@ -168,6 +168,7 @@ class SpeechRecognizer:
     def _try_srota_code_switch(
         self, audio_numpy, language_score=None, primary_language=None,
         probe_source="whisper_detection",
+        context=None,
     ):
         """Probe Srota for mixed-script Hinglish and fully Romanized Hindi."""
         if self.srota_provider_error is not None:
@@ -195,12 +196,7 @@ class SpeechRecognizer:
             result = self.srota_provider.transcribe_audio(
                 audio_numpy,
                 sample_rate=16000,
-                context=(
-                    "This is natural Hindi-English (Hinglish) speech. "
-                    "Keep Hindi words in Devanagari and English words in Latin "
-                    "script. Transcribe exactly what is spoken; do not translate "
-                    "or paraphrase."
-                ),
+                context=context,
             )
             transcript = str(result.get("transcript") or "").strip()
             annotation = annotate_language_spans(transcript, primary_language)
@@ -265,7 +261,7 @@ class SpeechRecognizer:
             condition_on_previous_text=False,
         )
 
-    def transcribe(self, audio, language_hint=None) -> dict:
+    def transcribe(self, audio, language_hint=None, context=None) -> dict:
         if isinstance(audio, torch.Tensor):
             audio_numpy = audio.detach().cpu().numpy()
         else:
@@ -313,6 +309,7 @@ class SpeechRecognizer:
             srota_result = self._try_srota_code_switch(
                 audio_numpy, language_score=language_score,
                 primary_language=indic_language,
+                context=context,
             )
             if srota_result is not None:
                 return srota_result
@@ -328,6 +325,7 @@ class SpeechRecognizer:
                 srota_result = self._try_srota_code_switch(
                     audio_numpy, language_score=language_score,
                     primary_language=detected_language,
+                    context=context,
                 )
                 srota_already_probed = True
                 if srota_result is not None:
@@ -346,6 +344,7 @@ class SpeechRecognizer:
                     language_score=language_score,
                     primary_language=detected_language,
                     probe_source="audio_language",
+                    context=context,
                 )
                 srota_already_probed = True
                 if srota_result is not None:
@@ -373,6 +372,7 @@ class SpeechRecognizer:
                     audio_numpy, language_score=language_score,
                     primary_language=detected_language,
                     probe_source="whisper_transcript",
+                    context=context,
                 )
                 if srota_result is not None:
                     return srota_result
