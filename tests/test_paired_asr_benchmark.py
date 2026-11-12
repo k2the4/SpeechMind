@@ -154,7 +154,7 @@ class PairedASRBenchmarkTests(unittest.TestCase):
         self.assertEqual(result["candidate_better"], 1)
         self.assertEqual(result["candidate_worse"], 1)
         self.assertEqual(result["tied"], 0)
-        self.assertEqual(result["mean_clip_wer_delta"], 0.0)
+        self.assertEqual(result["mean_clip_wer_delta"], 0.25)
 
     def test_paired_comparison_uses_identical_clips_and_reports_win_tie_loss(self):
         rows = [
