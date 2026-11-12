@@ -106,6 +106,87 @@ class SpeechMindManifestEvaluationTests(unittest.TestCase):
         self.assertAlmostEqual(result["accuracy_all_labelled_samples"], 1 / 3)
         self.assertAlmostEqual(result["accuracy_on_covered_samples"], 0.5)
 
+    def test_full_runner_writes_asr_translation_emotion_and_timing_scores(self):
+        import json
+        import sys
+        import types
+        from unittest.mock import patch
+
+        from scripts.evaluate_speechmind_manifest import run_evaluation
+
+        class FakePipeline:
+            def __init__(self):
+                pass
+
+            def run(self, _audio_path):
+                return {
+                    "transcript": "hello world",
+                    "meaning_en": "Hello world.",
+                    "meaning_en_available": True,
+                    "text_emotion": "joy",
+                    "voice_emotion": "joy",
+                    "overall_emotion": "joy",
+                    "interpretation_status": "branch_agreement",
+                    "asr_model": "fake-local-asr",
+                    "timings_sec": {"asr": 1.0, "translation": 2.0},
+                    "processing_time_sec": 3.0,
+                }
+
+        fake_pipeline_module = types.ModuleType("pipeline")
+        fake_pipeline_module.SpeechMindPipeline = FakePipeline
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audio_root = root / "audio"
+            audio_root.mkdir()
+            (audio_root / "clip.wav").write_bytes(b"test")
+            manifest = root / "manifest.csv"
+            fields = [
+                "audio_path", "transcript", "speaker_id", "split",
+                "dataset", "age_group", "reference_meaning_en", "emotion_label",
+            ]
+            with manifest.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields)
+                writer.writeheader()
+                writer.writerow({
+                    "audio_path": "clip.wav",
+                    "transcript": "hello world",
+                    "speaker_id": "speaker-test",
+                    "split": "test",
+                    "dataset": "tiny-fixture",
+                    "age_group": "adult",
+                    "reference_meaning_en": "Hello world.",
+                    "emotion_label": "joy",
+                })
+                writer.writerow({
+                    "audio_path": "train.wav",
+                    "transcript": "training only",
+                    "speaker_id": "speaker-train",
+                    "split": "train",
+                    "dataset": "tiny-fixture",
+                    "age_group": "adult",
+                })
+            output_dir = root / "output"
+            with patch.dict(sys.modules, {"pipeline": fake_pipeline_module}):
+                summary = run_evaluation(
+                    manifest_path=manifest,
+                    audio_root=audio_root,
+                    output_dir=output_dir,
+                    split="test",
+                    limit=0,
+                    max_per_speaker=1,
+                )
+
+            self.assertEqual(summary["asr"]["micro"]["wer"], 0.0)
+            self.assertEqual(summary["translation"]["micro"]["wer"], 0.0)
+            self.assertEqual(summary["emotion"]["voice"]["accuracy_all_labelled_samples"], 1.0)
+            self.assertEqual(summary["emotion"]["text"]["accuracy_all_labelled_samples"], 1.0)
+            self.assertEqual(summary["performance"]["median_stage_timings"]["asr"]["median_seconds"], 1.0)
+            self.assertTrue((output_dir / "predictions.csv").is_file())
+            self.assertTrue((output_dir / "summary.json").is_file())
+            saved = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["samples"]["successful_pipeline_runs"], 1)
+
     def test_no_gold_emotion_labels_means_not_scored(self):
         self.assertIsNone(classification_metrics(
             [{"emotion_label": "", "voice_emotion": "neutral"}],
