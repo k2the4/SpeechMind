@@ -15,6 +15,7 @@ from models.voice_features import (
     POOLING_VERSION,
     EXPECTED_FEATURE_DIMENSION,
     extract_wavlm_embedding,
+    rank_top_two_scores,
 )
 
 BASE_MODEL_NAME = "Dpngtm/wav2vec2-emotion-recognition"
@@ -240,13 +241,7 @@ class VoiceEmotionRecognizer:
             distribution.items(), key=lambda item: item[1], reverse=True
         )
         emotion = ranked[0][0]
-        top_two = [
-            {"label": label, "score": round(float(score), 4)}
-            for label, score in ranked[:2]
-        ]
-        top_two_margin = (
-            float(ranked[0][1] - ranked[1][1]) if len(ranked) > 1 else 1.0
-        )
+        top_two, top_two_margin = rank_top_two_scores(distribution)
         return {
             "available": True,
             "emotion": emotion,
