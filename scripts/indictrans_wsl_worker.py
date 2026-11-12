@@ -70,7 +70,7 @@ def generate_translation_with_cache(model, inputs, torch, environ=None):
     """Prefer decoder KV caching; retry without it only for cache incompatibility."""
     environment = os.environ if environ is None else environ
     cache_setting = str(
-        environment.get("SPEECHMIND_INDIC_TRANS_USE_CACHE", "1")
+        environment.get("SPEECHMIND_INDIC_TRANS_USE_CACHE", "0")
     ).strip().lower()
     requested_cache = cache_setting not in {"0", "false", "no", "off"}
 
@@ -88,10 +88,17 @@ def generate_translation_with_cache(model, inputs, torch, environ=None):
     try:
         return generate(requested_cache), requested_cache
     except Exception as error:
-        message = str(error).casefold()
+        # The IndicTrans2 custom model can surface a cache incompatibility as
+        # an AttributeError ("NoneType has no attribute shape"). Include the
+        # traceback so the failing past_key_values access is recognized.
+        message = (str(error) + "\\n" + traceback.format_exc()).casefold()
         cache_incompatibility = any(
             marker in message
-            for marker in ("use_cache", "past_key_values", "cache_position", "cache")
+            for marker in (
+                "use_cache", "past_key_values", "cache_position",
+                "cache", "none' object has no attribute 'shape'",
+                'noneType" object has no attribute "shape"',
+            )
         )
         if not requested_cache or not cache_incompatibility:
             raise
