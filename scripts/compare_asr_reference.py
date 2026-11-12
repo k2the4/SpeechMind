@@ -188,9 +188,13 @@ def main() -> int:
             print("[ASR benchmark] Loading Whisper-small for automatic vocabulary scouting...")
             whisper_model = whisper.load_model("small", device=scout_device)
         context_info = infer_hinglish_context_from_audio_tail(
-            audio, whisper_model, sample_rate=16000, tail_seconds=5.0
+            audio, whisper_model, sample_rate=16000, tail_seconds=3.0
         )
         selected_context = context_info["context"] or None
+    print(
+        "[ASR benchmark] Automatic context: "
+        + (selected_context if selected_context else "[none]")
+    )
     print(
         "[ASR benchmark] Selected Srota context: "
         + (selected_context if selected_context else "[none]")
