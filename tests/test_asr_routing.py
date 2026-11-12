@@ -160,6 +160,24 @@ class AsrRouterIntegrationPolicyTests(unittest.TestCase):
             method.index('self.srota_provider.transcribe_audio('),
         )
 
+    def test_automatic_vocabulary_scout_runs_before_srota_decode(self):
+        method_start = self.source.index('def _try_srota_code_switch(')
+        method_end = self.source.index('def _decode_with_whisper(', method_start)
+        method = self.source[method_start:method_end]
+        scout_line = method.index('self._infer_srota_context(audio_numpy)')
+        provider_line = method.index('self.srota_provider.transcribe_audio(')
+        self.assertLess(scout_line, provider_line)
+        self.assertIn('context=context or None', method)
+
+    def test_tail_vocabulary_scout_is_limited_and_forces_english(self):
+        self.assertIn('tail_seconds=5.0', self.source)
+        helper = (
+            Path(__file__).resolve().parents[1]
+            / "models" / "hinglish_context.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('language="en"', helper)
+        self.assertIn("build_hinglish_context(transcript)", helper)
+
     def test_transient_srota_error_does_not_disable_provider_for_session(self):
         method_start = self.source.index('def _try_srota_code_switch(')
         method_end = self.source.index('def _decode_with_whisper(', method_start)
