@@ -60,16 +60,6 @@ LANGUAGE_ALIASES = {
     "urdu": "ur",
 }
 
-SARVAM_LANGUAGE_CODES = {
-    "as": "as-IN", "bn": "bn-IN", "brx": "brx-IN", "doi": "doi-IN",
-    "en": "en-IN", "gu": "gu-IN", "hi": "hi-IN", "kn": "kn-IN",
-    "kok": "kok-IN", "ks": "ks-IN", "mai": "mai-IN", "ml": "ml-IN",
-    "mni": "mni-IN", "mr": "mr-IN", "ne": "ne-IN", "or": "od-IN",
-    "pa": "pa-IN", "sa": "sa-IN", "sat": "sat-IN", "sd": "sd-IN",
-    "ta": "ta-IN", "te": "te-IN", "ur": "ur-IN",
-}
-
-
 def _attach_language_spans(result: dict) -> dict:
     """Attach conservative transcript offsets without inventing audio timing."""
     annotation = annotate_language_spans(
@@ -92,7 +82,6 @@ class SpeechRecognizer:
         self.indic_model_error = None
         self.srota_provider = None
         self.srota_provider_error = None
-        self.sarvam_provider = None
         print(
             f"[ASR] Whisper loaded on {self.device}; "
             "IndicConformer remains lazy-loaded."
@@ -266,39 +255,6 @@ class SpeechRecognizer:
             )
             return None
 
-    def _transcribe_with_sarvam(self, audio_numpy, language_hint=None):
-        """Use hosted Saaras v4 only when explicitly selected by the caller."""
-        detected_language = language_hint
-        detection_score = None
-        if not detected_language:
-            try:
-                detected_language, detection_score, _ = self._detect_language(
-                    audio_numpy
-                )
-            except Exception as error:
-                print(
-                    "[ASR] Whisper language detection unavailable before hosted "
-                    f"Saaras request: {type(error).__name__}: {error}"
-                )
-                detected_language = "unknown"
-
-        language_code = SARVAM_LANGUAGE_CODES.get(
-            str(detected_language or "unknown").lower().strip(), "unknown"
-        )
-        if self.sarvam_provider is None:
-            from models.sarvam_asr_provider import SarvamASRProvider
-            self.sarvam_provider = SarvamASRProvider()
-
-        result = self.sarvam_provider.transcribe_audio(
-            audio_numpy,
-            sample_rate=16000,
-            language_code=language_code,
-        )
-        if detection_score is not None:
-            result["language_detection_score"] = round(float(detection_score), 3)
-        result["language_detection_source"] = "whisper_audio_detection"
-        return _attach_language_spans(result)
-
     def _decode_with_whisper(self, audio_numpy, language=None):
         return self.whisper.transcribe(
             audio_numpy,
@@ -310,14 +266,7 @@ class SpeechRecognizer:
             condition_on_previous_text=False,
         )
 
-    def transcribe(
-        self, audio, language_hint=None, context=None, provider="local"
-    ) -> dict:
-        selected_provider = str(provider or "local").lower().strip()
-        if selected_provider not in {"local", "sarvam"}:
-            raise ValueError(
-                "ASR provider must be 'local' or 'sarvam'."
-            )
+    def transcribe(self, audio, language_hint=None, context=None) -> dict:
         if isinstance(audio, torch.Tensor):
             audio_numpy = audio.detach().cpu().numpy()
         else:
@@ -330,9 +279,6 @@ class SpeechRecognizer:
         if hint in ("", "auto", "auto-detect", "none"):
             hint = None
         hint = LANGUAGE_ALIASES.get(hint, hint)
-
-        if selected_provider == "sarvam":
-            return self._transcribe_with_sarvam(audio_numpy, language_hint=hint)
 
         # Local open-source inference path. Language is never selected in the UI.
         if hint:
