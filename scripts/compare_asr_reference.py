@@ -67,7 +67,7 @@ def error_rates(reference: str, hypothesis: str) -> dict[str, float]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--audio", required=True, help="Path to the reference WAV/audio file")
+    parser.add_argument("--audio", required=False, help="Path to the reference WAV/audio file")
     parser.add_argument(
         "--reference", default=DEFAULT_REFERENCE,
         help="Correct human transcript (defaults to the hinglish 2.wav reference)",
@@ -78,7 +78,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    audio_path = Path(args.audio).expanduser().resolve()
+    audio_value = args.audio or input("Enter the audio file path: ").strip().strip(\'"\')
+    if not audio_value:
+        parser.error("An audio file path is required.")
+    audio_path = Path(audio_value).expanduser().resolve()
     if not audio_path.is_file():
         parser.error(f"Audio file not found: {audio_path}")
 
