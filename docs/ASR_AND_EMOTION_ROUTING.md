@@ -93,15 +93,18 @@ The Srota ASR worker has its own thread pool because it runs in an isolated
 Python process. Its default is 4 threads; `SPEECHMIND_SROTA_TORCH_THREADS`
 accepts values from 1 to 16. Change it only for a controlled timing comparison.
 
-IndicTrans2's custom decoder is not yet compatible with KV caching in
-the current local runtime: the cached path can fail while reading
-`past_key_values`. Therefore decoder KV caching is **disabled by default** to
-preserve translation availability. The selected behavior is returned as
-`translation_cache_used` in app diagnostics. Caching can be explicitly tested
-by setting `SPEECHMIND_INDIC_TRANS_USE_CACHE=1` inside the WSL worker
-environment; when a cache-specific error is detected, that request retries
-without caching. Do not enable it by default until it passes a real translation
-test on the installed model stack.
+IndicTrans2 uses the known-compatible decoder generation path with
+`use_cache=False`, four-beam search, and a maximum output length of 256 tokens.
+The model's custom decoder crashed when KV caching was enabled, so the cache
+optimisation has been removed entirely rather than left as a runtime option.
+The worker reports `translation_cache_used: false` for transparency.
+
+Validate the installed WSL model after updating the repository with:
+
+```powershell
+.venv\Scripts\python.exe scripts\test_indictrans_translation.py
+```
+
 
 The app reports separate ASR, text-emotion, voice-emotion, translation, and
 parallel wall-clock timings. Voice diagnostics expose the two highest raw
