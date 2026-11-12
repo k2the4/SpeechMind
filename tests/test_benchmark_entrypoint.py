@@ -128,6 +128,17 @@ class BenchmarkEntrypointTests(unittest.TestCase):
         self.assertTrue(launcher.is_file())
         self.assertIn("--model whisper-hi", launcher.read_text(encoding="utf-8"))
 
+    def test_reference_clip_benchmark_compares_local_asr_candidates(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "scripts" / "compare_asr_reference.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"--whisper-languages"', source)
+        self.assertIn('choices=("auto", "hi", "en")', source)
+        self.assertIn('"--include-indicconformer"', source)
+        self.assertIn('"ai4bharat/indic-conformer-600m-multilingual"', source)
+        self.assertIn("SrotaASRProvider", source)
+
     def test_saved_route_metrics_can_be_recomputed_without_asr_inference(self):
         root = Path(__file__).resolve().parents[1]
         source = (root / "scripts" / "check_hinglish_english_route.py").read_text(
