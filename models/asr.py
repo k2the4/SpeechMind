@@ -193,7 +193,14 @@ class SpeechRecognizer:
                 print(f"[ASR] {self.srota_provider_error}")
                 return None
             result = self.srota_provider.transcribe_audio(
-                audio_numpy, sample_rate=16000
+                audio_numpy,
+                sample_rate=16000,
+                context=(
+                    "This is natural Hindi-English (Hinglish) speech. "
+                    "Keep Hindi words in Devanagari and English words in Latin "
+                    "script. Transcribe exactly what is spoken; do not translate "
+                    "or paraphrase."
+                ),
             )
             transcript = str(result.get("transcript") or "").strip()
             annotation = annotate_language_spans(transcript, primary_language)
