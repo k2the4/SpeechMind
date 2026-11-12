@@ -26,12 +26,12 @@ class SrotaTimeoutTests(unittest.TestCase):
             script = root / "scripts" / "srota_asr_worker.py"
             script.parent.mkdir(parents=True)
             script.write_text(
-                "import json, sys, time\\n"
-                "print(json.dumps({'ready': True}), flush=True)\\n"
-                "for line in sys.stdin:\\n"
-                " print('simulated model loading diagnostic', file=sys.stderr, flush=True)\\n"
-                " time.sleep(2)\\n"
-                " print(json.dumps({'ok': True, 'transcript': 'late response'}), flush=True)\\n",
+                "import json, sys, time\n"
+                "print(json.dumps({'ready': True}), flush=True)\n"
+                "for line in sys.stdin:\n"
+                " print('simulated model loading diagnostic', file=sys.stderr, flush=True)\n"
+                " time.sleep(2)\n"
+                " print(json.dumps({'ok': True, 'transcript': 'late response'}), flush=True)\n",
                 encoding="utf-8",
             )
             audio = root / "sample.wav"
