@@ -130,7 +130,7 @@ def infer_hinglish_context_from_audio_tail(
             language=None,
             fp16=False,
             verbose=False,
-            beam_size=3,
+            beam_size=1,
             condition_on_previous_text=False,
         )
         transcript = str(result.get("text") or "").strip()
