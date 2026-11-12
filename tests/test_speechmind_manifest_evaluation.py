@@ -47,6 +47,8 @@ class SpeechMindManifestEvaluationTests(unittest.TestCase):
             all_rows, test_rows = read_manifest(path, "test")
             self.assertEqual(len(all_rows), 2)
             self.assertEqual([row["audio_path"] for row in test_rows], ["b.wav"])
+            self.assertEqual(test_rows[0]["dataset"], "hiacc")
+            self.assertEqual(test_rows[0]["language"], "hinglish")
 
     def test_speaker_split_report_detects_overlap(self):
         rows = [
