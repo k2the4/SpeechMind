@@ -193,37 +193,49 @@ if audio_source is not None:
                 )
             )
 
-            if result.get("branch_disagreement"):
+            interpretation_status = result.get("interpretation_status")
+            branch_comparison = str(result.get("branch_comparison") or "")
+            if interpretation_status == "insufficient_evidence":
                 st.warning(
-                    "Text and voice signals disagree. "
-                    + str(result.get("branch_comparison") or "")
+                    "There is not enough reliable evidence to assign an overall emotion."
                 )
-            elif result.get("branch_agreement") is True:
-                st.info(str(result.get("branch_comparison") or "Text and voice signals agree."))
-            else:
-                st.caption(str(result.get("branch_comparison") or ""))
-
-            st.caption(
-                "The fusion score is an uncalibrated model score, not a probability "
-                "of correctness. Predictions remain experimental until validated on "
-                "representative held-out Indian speech."
-            )
-            if result.get("interpretation_status") == "insufficient_evidence":
+                if branch_comparison:
+                    st.caption(branch_comparison)
+            elif interpretation_status == "branch_disagreement":
                 st.warning(
-                    "No combined emotion was assigned because neither analysis "
-                    "branch returned usable evidence."
+                    "The text and voice branches produced different reliable signals. "
+                    "No combined emotion or valence is assigned."
                 )
-            elif result.get("interpretation_status") == "branch_disagreement":
-                st.info(
-                    "No combined emotion or valence is assigned when the text "
-                    "and voice branches disagree."
+                if branch_comparison:
+                    st.caption(branch_comparison)
+            elif interpretation_status == "single_branch":
+                st.info(branch_comparison or "Only one reliable analysis branch contributed.")
+                st.caption(
+                    "This is a single-branch interpretation. SpeechMind does not show "
+                    "a combined confidence score when both modalities have not contributed reliably."
                 )
-            else:
-                st.metric(
-                    "Combined model score (uncalibrated)",
-                    f"{float(result.get('confidence', 0.0)) * 100:.1f}%",
+                if result.get("valence") not in (None, "Unknown"):
+                    st.metric("Valence from available branch", str(result["valence"]))
+            elif interpretation_status == "branch_agreement":
+                st.info(branch_comparison or "Text and voice signals agree.")
+                st.caption(
+                    "The displayed model score is uncalibrated; it is not a probability "
+                    "that the emotional interpretation is correct."
                 )
+                confidence = result.get("confidence")
+                if confidence is not None:
+                    st.metric(
+                        "Combined model score (uncalibrated)",
+                        f"{float(confidence) * 100:.1f}%",
+                    )
                 st.metric("Valence", str(result.get("valence", "unknown")))
+            else:
+                if branch_comparison:
+                    st.caption(branch_comparison)
+                st.caption(
+                    "Emotion predictions are experimental and require validation "
+                    "on representative held-out Indian speech."
+                )
 
             with st.expander("Performance timings and diagnostics"):
                 st.write(
