@@ -43,11 +43,15 @@ Upload these directories while preserving their paths:
 
 The voice folder must include `speechmind_metadata.json` and `voice_emotion_head.joblib`. The text folder must include the metadata, tokenizer and model weight files required by Transformers.
 
-From the SpeechMind project folder, authenticate with Hugging Face and upload the checkpoint directory:
+From the SpeechMind project folder, authenticate with Hugging Face. Because the project's `.gitignore` intentionally excludes `checkpoints/`, stage only the two required directories outside the repository before uploading:
 
 ```powershell
 hf auth login
-hf upload YOUR_HF_USERNAME/speechmind-models checkpoints --repo-type model
+$stage = Join-Path $env:TEMP "SpeechMind-hf-upload"
+New-Item -ItemType Directory -Force -Path "$stage\checkpoints" | Out-Null
+Copy-Item ".\checkpoints\text_emotion_muril" "$stage\checkpoints\" -Recurse -Force
+Copy-Item ".\checkpoints\voice_emotion_multicorpus_cpu" "$stage\checkpoints\" -Recurse -Force
+hf upload YOUR_HF_USERNAME/speechmind-models $stage . --repo-type model
 ```
 
 Do not upload datasets, raw recordings, temporary files or unrelated checkpoints.
