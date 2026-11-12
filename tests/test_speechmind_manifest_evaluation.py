@@ -25,7 +25,9 @@ class SpeechMindManifestEvaluationTests(unittest.TestCase):
 
     def test_manifest_reader_requires_speaker_metadata_and_selects_split(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "manifest.csv"
+            dataset_dir = Path(directory) / "hiacc"
+            dataset_dir.mkdir()
+            path = dataset_dir / "manifest.csv"
             with path.open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.DictWriter(
                     handle,
