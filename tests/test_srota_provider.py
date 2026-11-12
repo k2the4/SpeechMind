@@ -48,10 +48,11 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
             )
             try:
                 first = provider.transcribe_file(audio)
-                second = provider.transcribe_file(audio)
+                second = provider.transcribe_file(audio, context="layout, Figma")
                 self.assertEqual(first["transcript"], "मेरा image है")
                 self.assertEqual(second["transcript"], "मेरा image है")
                 self.assertEqual(second["worker_response"]["count"], 2)
+                self.assertIn("Possible names or technical terms: layout, Figma", second["worker_response"]["context"])
                 self.assertIn("natural Hindi-English", first["worker_response"]["context"])
                 translation = provider.translate_to_english(
                     "इस image के बारे में हमारा ये thought है", "hin_Deva"
