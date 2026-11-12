@@ -1,0 +1,14 @@
+# Main SpeechMind runtime for Docker Spaces.
+# PyTorch CPU is installed separately in the Dockerfile.
+transformers==4.46.3
+accelerate
+openai-whisper
+onnxruntime==1.20.1
+librosa
+soundfile
+scipy
+numpy
+streamlit==1.41.1
+scikit-learn
+pandas
+huggingface_hub
