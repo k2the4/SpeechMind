@@ -222,7 +222,7 @@ def paired_vs_production(rows: list[dict], hypothesis_key: str) -> dict | None:
     for row in rows:
         if (
             row.get("production_hypothesis")
-            and row.get(f"{hypothesis_key}_status") == "ok"
+            and row.get(status_key_for_hypothesis(hypothesis_key)) == "ok"
         ):
             candidate = error_counts_multi_reference(
                 row["reference_transcript"], str(row[hypothesis_key])
