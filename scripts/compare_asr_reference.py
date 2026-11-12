@@ -29,7 +29,7 @@ DEFAULT_REFERENCE = (
 
 def normalize_text(text: str) -> str:
     text = unicodedata.normalize("NFC", str(text or "")).casefold()
-    text = re.sub(r"[^\\w\\s]", " ", text, flags=re.UNICODE)
+    text = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE)
     return " ".join(text.split())
 
 
@@ -96,15 +96,15 @@ def main() -> int:
     )
     srota_text = str(srota_result.get("transcript") or "").strip()
 
-    print("\\n========== REFERENCE ==========")
+    print("\n========== REFERENCE ==========")
     print(args.reference)
-    print("\\n========== WHISPER-SMALL ==========")
+    print("\n========== WHISPER-SMALL ==========")
     print(whisper_text or "[empty transcript]")
     print(error_rates(args.reference, whisper_text))
-    print("\\n========== SROTA / QWEN3-ASR ==========")
+    print("\n========== SROTA / QWEN3-ASR ==========")
     print(srota_text or "[empty transcript]")
     print(error_rates(args.reference, srota_text))
-    print("\\n[ASR benchmark] Lower WER/CER is better. Scores are diagnostic for this clip,")
+    print("\n[ASR benchmark] Lower WER/CER is better. Scores are diagnostic for this clip,")
     print("not a general model-quality claim. Production routing was not changed.")
     srota.close()
     return 0
