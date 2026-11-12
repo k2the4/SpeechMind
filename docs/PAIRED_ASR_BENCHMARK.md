@@ -42,7 +42,7 @@ The existing production-router transcript from the input predictions file is als
 - Srota is warmed once before scored inference. Worker/model startup and warm-up time are reported separately, not counted as one candidate's first scored clip.
 - Srota auto-context records the Whisper vocabulary-scout duration separately and reports effective latency including that scout.
 - Model initialization is reported separately from per-recording inference.
-- Individual failures are retained as failed predictions; they are not silently removed from the selected sample.
+- Individual failures are retained as failed predictions. The main micro WER/CER treats failed calls as empty hypotheses; a separate successful-only metric is provided for debugging. Failures therefore cannot artificially improve the headline score.
 - WER/CER use the same NFKC/lowercase/punctuation normalization and multi-reference scoring helper used by the existing SpeechMind benchmarks.
 
 ## Outputs
