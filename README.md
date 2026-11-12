@@ -16,6 +16,8 @@ It identifies the spoken language, preserves the original transcript, produces a
 
 See [docs/ASR_AND_EMOTION_ROUTING.md](docs/ASR_AND_EMOTION_ROUTING.md) for current model routing, uncertainty handling, evaluation policy and hosted-ASR considerations.
 
+For an optional hosted Hinglish/Indic transcription comparison, configure `SARVAM_API_KEY` in the server environment or deployment secrets. The app then offers Saaras v4 as an explicit opt-in; the recording is sent to Sarvam AI only after the user selects hosted mode and checks the consent box. Local ASR remains the default. See the routing document for the 30-second REST limit and setup details.
+
 ## Hosted deployment
 
 See [docs/DEPLOY_HUGGINGFACE_SPACES.md](docs/DEPLOY_HUGGINGFACE_SPACES.md) for Docker Space setup, private checkpoint configuration and deployment instructions.
