@@ -25,7 +25,6 @@ mosestokenizer
 
 # Application and evaluation
 streamlit
-sarvamai
 scikit-learn
 pandas
 matplotlib
