@@ -62,7 +62,7 @@ if audio_source is not None and sarvam_api_key:
     provider_choice = st.radio(
         "Speech recognition engine",
         [
-            "Local models (audio stays on this machine)",
+            "SpeechMind local models (no Sarvam API)",
             "Hosted Saaras v4 (external processing)",
         ],
         index=0,
