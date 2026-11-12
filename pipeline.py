@@ -11,9 +11,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 from utils.runtime_config import configure_torch_runtime
 
-# Apply CPU limits before importing modules that initialize PyTorch models.
-TORCH_RUNTIME_CONFIG = configure_torch_runtime()
-
 from utils.audio_utils import preprocess
 from models.asr import SpeechRecognizer
 from models.text_emotion import TextEmotionClassifier
@@ -50,6 +47,10 @@ def _unavailable_branch(reason: str) -> dict:
 
 class SpeechMindPipeline:
     def __init__(self, load_translator: bool = True):
+        # Configure PyTorch when the application pipeline is constructed,
+        # not while this module is imported. This avoids loading native
+        # extensions inside temporary sys.modules test fixtures.
+        self.torch_runtime = configure_torch_runtime()
         print("[Pipeline] Initializing SpeechMind models...")
         self.component_errors = {}
         self.asr = self._initialize_component("asr", SpeechRecognizer)
@@ -377,7 +378,7 @@ class SpeechMindPipeline:
             "voice_validation_macro_f1": voice_result.get("validation_macro_f1"),
             "text_emotion_inference_seconds": text_duration,
             "voice_emotion_inference_seconds": voice_duration,
-            "torch_runtime": TORCH_RUNTIME_CONFIG,
+            "torch_runtime": self.torch_runtime,
             "valence": fused["valence"],
             "arousal": fused["arousal"],
             "arousal_available": fused["arousal_available"],
