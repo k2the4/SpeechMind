@@ -191,8 +191,7 @@ class SpeechMindPipeline:
             return _unavailable_branch(reason)
 
     def run(
-        self, audio_path: str, language_hint: str = None, asr_context: str = None,
-        asr_provider: str = "local",
+        self, audio_path: str, language_hint: str = None, asr_context: str = None
     ) -> dict:
         total_start = time.perf_counter()
         timings = {}
@@ -210,21 +209,13 @@ class SpeechMindPipeline:
             asr_result = {}
         else:
             try:
-                if asr_provider == "local":
-                    if asr_context and asr_context.strip():
-                        asr_result = self.asr.transcribe(
-                            audio, language_hint=language_hint, context=asr_context
-                        )
-                    else:
-                        asr_result = self.asr.transcribe(
-                            audio, language_hint=language_hint
-                        )
+                if asr_context and asr_context.strip():
+                    asr_result = self.asr.transcribe(
+                        audio, language_hint=language_hint, context=asr_context
+                    )
                 else:
                     asr_result = self.asr.transcribe(
-                        audio,
-                        language_hint=language_hint,
-                        context=asr_context,
-                        provider=asr_provider,
+                        audio, language_hint=language_hint
                     )
                 if not isinstance(asr_result, dict):
                     raise TypeError("ASR returned an invalid result.")
@@ -300,7 +291,7 @@ class SpeechMindPipeline:
             "language_source": asr_result.get("language_source"),
             "transcript": transcript,
             "asr_model": asr_result.get("asr_model", "unavailable"),
-            "asr_provider": asr_result.get("asr_provider", "local"),
+            "asr_provider": "local",
             "asr_error": asr_error,
             "asr_fallback": bool(asr_result.get("asr_fallback", False)),
             "asr_fallback_reason": asr_result.get("asr_fallback_reason"),
