@@ -89,7 +89,7 @@ def get_srota_model(model_name: str):
             "dtype": dtype,
             "device_map": device_map,
             "max_inference_batch_size": 1,
-            "max_new_tokens": 512,
+            "max_new_tokens": 256,
         }
         if use_cuda:
             try:
@@ -118,7 +118,7 @@ def get_srota_model(model_name: str):
                     dtype=torch.float32,
                     device_map="cpu",
                     max_inference_batch_size=1,
-                    max_new_tokens=512,
+                    max_new_tokens=256,
                 )
                 device_map = "cpu"
         _srota_model_name = requested_name
