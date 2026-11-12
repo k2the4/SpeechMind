@@ -68,11 +68,9 @@ Romanized Hindi is not passed directly to IndicTrans2. A transliteration stage i
 
 All model scores and fusion weights remain uncalibrated until validated on paired, held-out Indian-language speech with human emotion annotations. Emotion output is descriptive and is not a diagnosis.
 
-## Hosted ASR candidate
+## Runtime policy
 
-Sarvam Saaras v4 is a candidate for a later hosted deployment comparison because its API documents transcription, translation, verbatim, transliteration, and code-mixed modes for Indian languages. It is not integrated into this branch. A hosted provider would transmit recordings outside the local application and may incur usage charges, so it must remain an explicit deployment choice with disclosure and credentials rather than a silent fallback.
-
-Documentation: https://docs.sarvam.ai/api/api-guides-tutorials/models/saaras
+All ASR inference in this branch is local: Whisper-small, Srota, and IndicConformer. No API keys, external speech services, or paid inference are required.
 
 ## Training policy
 
