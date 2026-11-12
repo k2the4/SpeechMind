@@ -127,6 +127,21 @@ def speaker_split_report(all_rows: list[dict[str, str]], split: str) -> dict:
     }
 
 
+def unseen_speaker_records(
+    all_rows: list[dict[str, str]], evaluation_rows: list[dict[str, str]]
+) -> list[dict[str, str]]:
+    """Keep only evaluation speakers absent from train/validation/dev rows."""
+    train_splits = {"train", "training", "validation", "valid", "dev"}
+    training_speakers = {
+        (row["dataset"], row["speaker_id"])
+        for row in all_rows if row["split"] in train_splits
+    }
+    return [
+        row for row in evaluation_rows
+        if (row["dataset"], row["speaker_id"]) not in training_speakers
+    ]
+
+
 def select_records(
     records: list[dict[str, str]],
     limit: int,
@@ -205,7 +220,7 @@ def classification_metrics(rows: list[dict], prediction_key: str) -> dict | None
     covered = [(truth, pred) for truth, pred in normalized if pred not in ABSTAIN_LABELS]
     correct_covered = sum(truth == pred for truth, pred in covered)
     correct_all = sum(truth == pred for truth, pred in normalized)
-    labels = sorted({truth for truth, _ in covered})
+    labels = sorted({label for pair in covered for label in pair})
     f1_values = []
     for label in labels:
         tp = sum(truth == label and pred == label for truth, pred in covered)
@@ -309,21 +324,17 @@ def run_evaluation(
     split_report = speaker_split_report(all_rows, split)
     eligible_rows = list(evaluation_rows)
     if strict_speaker_holdout:
-        train_splits = {"train", "training", "validation", "valid", "dev"}
-        training_speakers = {
-            (row["dataset"], row["speaker_id"])
-            for row in all_rows if row["split"] in train_splits
-        }
-        eligible_rows = [
-            row for row in evaluation_rows
-            if (row["dataset"], row["speaker_id"]) not in training_speakers
-        ]
+        if not split_report["training_validation_rows_in_manifest"]:
+            raise RuntimeError(
+                "Strict speaker holdout cannot be checked because the manifest "
+                "contains no train/validation/dev rows. Do not claim an unseen-speaker result."
+            )
+        eligible_rows = unseen_speaker_records(all_rows, evaluation_rows)
         if not eligible_rows:
             raise RuntimeError(
-                "Strict speaker holdout selected zero evaluation rows: all speakers "
-                "in this split also appear in train/validation, or the manifest "
-                "does not contain train/validation rows. Do not silently fall back "
-                "to an overlapping-speaker evaluation."
+                "Strict speaker holdout selected zero evaluation rows: every speaker "
+                "in this evaluation split also appears in train/validation/dev. "
+                "Do not silently fall back to an overlapping-speaker evaluation."
             )
 
     selected = select_records(
@@ -398,6 +409,8 @@ def run_evaluation(
             "translation_wer": translation_score["wer"] if translation_score else None,
             "translation_cer": translation_score["cer"] if translation_score else None,
             "gold_emotion": emotion_label,
+            "emotion_label": emotion_label,
+            "asr_metrics": asr_score,
             "text_emotion": result.get("text_emotion", ""),
             "voice_emotion": result.get("voice_emotion", ""),
             "overall_emotion": result.get("overall_emotion", ""),
