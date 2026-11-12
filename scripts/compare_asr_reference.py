@@ -85,6 +85,11 @@ def main() -> int:
             "conversational specialist."
         ),
     )
+    parser.add_argument(
+        "--skip-whisper",
+        action="store_true",
+        help="Skip the Whisper pass when testing a Srota variant only.",
+    )
     args = parser.parse_args()
 
     audio_value = args.audio or input("Enter the audio file path: ").strip().strip('"')
@@ -100,15 +105,19 @@ def main() -> int:
     if not isinstance(audio, np.ndarray) or audio.ndim != 1 or audio.size == 0:
         raise RuntimeError("Audio preprocessing did not produce a non-empty mono waveform.")
 
-    print("[ASR benchmark] Running Whisper-small (automatic language)...")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    whisper_model = whisper.load_model("small", device=device)
-    whisper_result = whisper_model.transcribe(
-        audio, task="transcribe", language=None, fp16=False, verbose=False,
-        beam_size=5, condition_on_previous_text=False,
-    )
-    whisper_text = str(whisper_result.get("text") or "").strip()
-
+    whisper_text = ""
+    if args.skip_whisper:
+        print("[ASR benchmark] Skipping Whisper as requested.")
+    else:
+        print("[ASR benchmark] Running Whisper-small (automatic language)...")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        whisper_model = whisper.load_model("small", device=device)
+        whisper_result = whisper_model.transcribe(
+            audio, task="transcribe", language=None, fp16=False, verbose=False,
+            beam_size=5, condition_on_previous_text=False,
+        )
+        whisper_text = str(whisper_result.get("text") or "").strip()
+    
     print(f"[ASR benchmark] Running Srota model: {args.srota_model}...")
     srota = SrotaASRProvider(model_name=args.srota_model)
     srota_result = srota.transcribe_audio(
@@ -118,9 +127,10 @@ def main() -> int:
 
     print("\n========== REFERENCE ==========")
     print(args.reference)
-    print("\n========== WHISPER-SMALL ==========")
-    print(whisper_text or "[empty transcript]")
-    print(error_rates(args.reference, whisper_text))
+    if not args.skip_whisper:
+        print("\n========== WHISPER-SMALL ==========")
+        print(whisper_text or "[empty transcript]")
+        print(error_rates(args.reference, whisper_text))
     print(f"\n========== SROTA / {args.srota_model} ==========")
     print(srota_text or "[empty transcript]")
     print(error_rates(args.reference, srota_text))
