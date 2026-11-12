@@ -482,6 +482,24 @@ def main() -> int:
                     output_rows, hypothesis_key
                 ),
             }
+        if "srota_auto" in model_results:
+            effective_times = [
+                float(row["srota_auto_total_seconds"])
+                for row in output_rows
+                if row.get("srota_auto_status") == "ok"
+                and row.get("srota_auto_total_seconds") not in (None, "")
+            ]
+            probe_times = [
+                float(row["srota_context_probe_seconds"])
+                for row in output_rows
+                if row.get("srota_auto_status") == "ok"
+            ]
+            model_results["srota_auto"]["median_effective_seconds_including_context_scout"] = (
+                optional_median(effective_times)
+            )
+            model_results["srota_auto"]["median_context_scout_seconds"] = (
+                optional_median(probe_times)
+            )
 
         summary = {
             "benchmark": "SpeechMind paired direct-model ASR comparison",
