@@ -327,6 +327,7 @@ if audio_source is not None:
                     "translator_inference_seconds": result.get(
                         "translator_inference_seconds"
                     ),
+                    "translation_cache_used": result.get("translation_cache_used"),
                     "translator_error": result.get("translator_error"),
                     "full_result": result,
                 })
