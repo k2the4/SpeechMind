@@ -51,7 +51,7 @@ class HinglishContextTests(unittest.TestCase):
             def transcribe(self, audio, **kwargs):
                 self.sample_count = len(audio)
                 self.kwargs = kwargs
-                return {"text": "not sure about the layout"}
+                return {"text": "not sure about the layout", "language": "en"}
 
         audio = [0.0] * (9 * 16000)
         model = FakeWhisper()
@@ -61,19 +61,30 @@ class HinglishContextTests(unittest.TestCase):
         self.assertEqual(result["source"], "whisper_tail_vocabulary")
         self.assertEqual(result["transcript"], "not sure about the layout")
         self.assertEqual(model.sample_count, 5 * 16000)
-        self.assertEqual(model.kwargs["language"], "en")
+        self.assertIsNone(model.kwargs["language"])
         self.assertEqual(model.kwargs["beam_size"], 3)
 
     def test_whisper_tail_probe_does_not_add_context_for_generic_english(self):
         class FakeWhisper:
             def transcribe(self, audio, **kwargs):
-                return {"text": "I am not sure what to do next"}
+                return {"text": "I am not sure what to do next", "language": "en"}
 
         result = infer_hinglish_context_from_audio_tail(
             [0.0] * (8 * 16000), FakeWhisper()
         )
         self.assertEqual(result["context"], "")
         self.assertEqual(result["source"], "whisper_tail_no_allowlisted_terms")
+
+    def test_hindi_tail_does_not_supply_english_vocabulary_context(self):
+        class FakeWhisper:
+            def transcribe(self, audio, **kwargs):
+                return {"text": "मुझे यह समझ नहीं आया layout", "language": "hi"}
+
+        result = infer_hinglish_context_from_audio_tail(
+            [0.0] * (8 * 16000), FakeWhisper()
+        )
+        self.assertEqual(result["context"], "")
+        self.assertEqual(result["source"], "whisper_tail_not_english")
 
     def test_whisper_tail_probe_skips_very_short_audio(self):
         class FakeWhisper:
