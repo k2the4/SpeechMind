@@ -154,6 +154,18 @@ if audio_source is not None:
                     "Text-emotion analysis is unavailable. "
                     + str(result.get("text_emotion_reason") or "")
                 )
+            text_scores = result.get("text_emotion_multi_label_scores") or {}
+            if text_scores:
+                st.caption(
+                    "Independent text-model signals (uncalibrated; not probabilities "
+                    "that the speaker is experiencing these emotions)."
+                )
+                st.table([
+                    {"Signal": str(label).title(), "Model score": f"{float(score):.3f}"}
+                    for label, score in sorted(
+                        text_scores.items(), key=lambda item: float(item[1]), reverse=True
+                    )
+                ])
 
             st.subheader("Voice analysis")
             st.metric(
@@ -174,6 +186,18 @@ if audio_source is not None:
                     "Experimental baseline: the current voice model has not been "
                     "validated on spontaneous Indian/Hinglish speech."
                 )
+            voice_scores = result.get("voice_emotion_distribution") or {}
+            if voice_scores:
+                st.caption(
+                    "Vocal-model score distribution. Close scores mean the top "
+                    "label is not clearly separated from alternatives."
+                )
+                st.table([
+                    {"Signal": str(label).title(), "Model score": f"{float(score):.3f}"}
+                    for label, score in sorted(
+                        voice_scores.items(), key=lambda item: float(item[1]), reverse=True
+                    )
+                ])
 
             st.divider()
             st.subheader("Combined interpretation")
