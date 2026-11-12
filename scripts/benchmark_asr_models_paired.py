@@ -24,6 +24,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.asr_metrics import aggregate_error_counts, error_counts_multi_reference
+from scripts.asr_error_analysis import build_word_error_profile
 
 DATA_ROOT = PROJECT_ROOT / "data" / "hiacc"
 DEFAULT_OUTPUT = DATA_ROOT / "benchmarks" / "paired_asr"
@@ -535,6 +536,9 @@ def main() -> int:
                 ),
                 "paired_vs_production_router": paired_vs_production(
                     output_rows, hypothesis_key
+                ),
+                "word_error_profile": build_word_error_profile(
+                    output_rows, hypothesis_key, status_key, limit=20
                 ),
             }
         if "srota_auto" in model_results:
