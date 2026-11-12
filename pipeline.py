@@ -190,7 +190,9 @@ class SpeechMindPipeline:
             print(f"[Pipeline] Voice-emotion analysis unavailable: {reason}")
             return _unavailable_branch(reason)
 
-    def run(self, audio_path: str, language_hint: str = None) -> dict:
+    def run(
+        self, audio_path: str, language_hint: str = None, asr_context: str = None
+    ) -> dict:
         total_start = time.perf_counter()
         timings = {}
 
@@ -207,9 +209,14 @@ class SpeechMindPipeline:
             asr_result = {}
         else:
             try:
-                asr_result = self.asr.transcribe(
-                    audio, language_hint=language_hint
-                )
+                if asr_context and asr_context.strip():
+                    asr_result = self.asr.transcribe(
+                        audio, language_hint=language_hint, context=asr_context
+                    )
+                else:
+                    asr_result = self.asr.transcribe(
+                        audio, language_hint=language_hint
+                    )
                 if not isinstance(asr_result, dict):
                     raise TypeError("ASR returned an invalid result.")
             except Exception as error:
