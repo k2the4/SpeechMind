@@ -72,7 +72,10 @@ class TranslationWorkerCacheTests(unittest.TestCase):
         model = FakeModel("out of memory")
         with self.assertRaisesRegex(RuntimeError, "out of memory"):
             generate_translation_with_cache(
-                model, {"input_ids": [1]}, FakeTorch(), environ={}
+                model,
+                {"input_ids": [1]},
+                FakeTorch(),
+                environ={"SPEECHMIND_INDIC_TRANS_USE_CACHE": "1"},
             )
         self.assertEqual(model.calls, [True])
 
