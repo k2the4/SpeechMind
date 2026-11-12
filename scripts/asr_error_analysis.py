@@ -36,22 +36,30 @@ def align_word_errors(reference: str, hypothesis: str) -> dict:
     insertions = Counter()
     i, j = len(ref), len(hyp)
     while i or j:
-        if i and j:
-            cost = 0 if ref[i - 1] == hyp[j - 1] else 1
-            if dp[i][j] == dp[i - 1][j - 1] + cost:
-                if cost:
-                    substitutions[(ref[i - 1], hyp[j - 1])] += 1
-                i -= 1
-                j -= 1
-                continue
+        if (
+            i and j and ref[i - 1] == hyp[j - 1]
+            and dp[i][j] == dp[i - 1][j - 1]
+        ):
+            i -= 1
+            j -= 1
+            continue
+        # On equal-cost paths, prefer a boundary insertion/deletion over a
+        # substitution. This keeps alignments such as "one two three" vs
+        # "one too" as a substitution (two -> too) plus trailing deletion.
         if i and dp[i][j] == dp[i - 1][j] + 1:
             deletions[ref[i - 1]] += 1
             i -= 1
             continue
-        if j:
+        if j and dp[i][j] == dp[i][j - 1] + 1:
             insertions[hyp[j - 1]] += 1
             j -= 1
             continue
+        if i and j and dp[i][j] == dp[i - 1][j - 1] + 1:
+            substitutions[(ref[i - 1], hyp[j - 1])] += 1
+            i -= 1
+            j -= 1
+            continue
+        raise RuntimeError("Could not backtrace ASR word alignment.")
 
     return {
         "substitutions": substitutions,
