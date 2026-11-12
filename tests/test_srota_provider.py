@@ -56,6 +56,17 @@ class SrotaTimeoutTests(unittest.TestCase):
                 provider.close()
 
 
+class SrotaWorkerConfigTests(unittest.TestCase):
+    def test_generation_limit_is_capped_for_short_speech_clips(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "scripts" / "srota_asr_worker.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"max_new_tokens": 256', source)
+        self.assertIn("max_new_tokens=256", source)
+        self.assertNotIn("max_new_tokens": 512", source)
+
+
 class SrotaModelSelectionTests(unittest.TestCase):
     def test_general_model_remains_the_default(self):
         provider = SrotaASRProvider()
