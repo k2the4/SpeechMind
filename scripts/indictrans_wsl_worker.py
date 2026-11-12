@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import traceback
@@ -63,7 +64,43 @@ def get_components():
     return _components
 
 
-def translate_to_english(text: str, src_lang: str) -> str:
+
+
+def generate_translation_with_cache(model, inputs, torch, environ=None):
+    """Prefer decoder KV caching; retry without it only for cache incompatibility."""
+    environment = os.environ if environ is None else environ
+    cache_setting = str(
+        environment.get("SPEECHMIND_INDIC_TRANS_USE_CACHE", "1")
+    ).strip().lower()
+    requested_cache = cache_setting not in {"0", "false", "no", "off"}
+
+    def generate(use_cache):
+        with torch.inference_mode():
+            return model.generate(
+                **inputs,
+                use_cache=use_cache,
+                min_length=0,
+                max_length=256,
+                num_beams=4,
+                num_return_sequences=1,
+            )
+
+    try:
+        return generate(requested_cache), requested_cache
+    except Exception as error:
+        message = str(error).casefold()
+        cache_incompatibility = any(
+            marker in message
+            for marker in ("use_cache", "past_key_values", "cache_position", "cache")
+        )
+        if not requested_cache or not cache_incompatibility:
+            raise
+        # Some model/Transformers combinations expose generate() without a
+        # compatible cache implementation. Preserve translation availability.
+        return generate(False), False
+
+
+def translate_to_english(text: str, src_lang: str) -> tuple[str, bool]:
     stage = "input validation"
     try:
         if not text.strip():
@@ -98,18 +135,9 @@ def translate_to_english(text: str, src_lang: str) -> str:
         inputs = inputs.to("cpu")
 
         stage = "sequence generation"
-        # Disable KV caching on this CPU compatibility path. The model is a
-        # short-input translation worker; correctness takes priority over the
-        # cache speedup until generation compatibility is confirmed.
-        with torch.inference_mode():
-            generated = model.generate(
-                **inputs,
-                use_cache=False,
-                min_length=0,
-                max_length=256,
-                num_beams=4,
-                num_return_sequences=1,
-            )
+        generated, cache_used = generate_translation_with_cache(
+            model, inputs, torch
+        )
 
         stage = "token decoding"
         decoded = tokenizer.batch_decode(
@@ -125,7 +153,7 @@ def translate_to_english(text: str, src_lang: str) -> str:
         result = str(translated[0]).strip() if translated else ""
         if not result:
             raise RuntimeError("IndicTrans2 returned an empty English translation.")
-        return result
+        return result, cache_used
     except Exception as error:
         detail = traceback.format_exc()
         raise RuntimeError(
@@ -143,7 +171,7 @@ def main() -> int:
             if action != "translate":
                 raise ValueError(f"Unknown worker action: {action}")
             started = time.perf_counter()
-            translated = translate_to_english(
+            translated, cache_used = translate_to_english(
                 str(request.get("text") or ""),
                 str(request.get("src_lang") or ""),
             )
@@ -152,6 +180,7 @@ def main() -> int:
                 "translated_text": translated,
                 "inference_seconds": round(time.perf_counter() - started, 3),
                 "model": MODEL_NAME,
+                "cache_used": cache_used,
             })
         except Exception as error:
             emit({"ok": False, "error": f"{type(error).__name__}: {error}"})
