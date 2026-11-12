@@ -17,13 +17,17 @@ MODEL_ACCESS_URL = (
 
 
 def main() -> int:
-    original = "इस image के बारे में हमारा ये thought है"
+    original = "मुझे इस project के लिए एक नया डिजाइन बनाना है but i am not sure about the layout"
     try:
         translator = Translator()
         print(f"[Translation smoke] Provider: {translator.provider_name}")
         print("[Translation smoke] Original Hinglish transcript:")
         print(original)
         translated = translator.to_english(original, "hi")
+        if translator.last_cache_used is not False:
+            raise RuntimeError(
+                "Expected the known-compatible IndicTrans2 no-cache path."
+            )
     except Exception as error:
         details = f"{type(error).__name__}: {error}"
         print(f"\n[Translation smoke] FAILED: {details}")
