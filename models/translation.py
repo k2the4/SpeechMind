@@ -41,6 +41,7 @@ class Translator:
         self.loaded = False
         self.model_name = MODEL_NAME
         self.last_inference_seconds = None
+        self.last_cache_used = None
 
     def to_english(self, text: str, src_lang: str) -> str:
         """Translate original Hindi/Indic text to English without mutating it."""
@@ -61,4 +62,5 @@ class Translator:
             raise RuntimeError("IndicTrans2 returned an empty translation.")
         self.loaded = True
         self.last_inference_seconds = result.get("inference_seconds")
+        self.last_cache_used = result.get("cache_used")
         return translated
