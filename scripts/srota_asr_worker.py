@@ -18,6 +18,7 @@ for stream in (sys.stdin, sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 _srota_model = None
+_srota_model_name = None
 _translation_components = None
 _torch = None
 
@@ -52,19 +53,28 @@ def extract_text(result) -> str:
     return str(result).strip()
 
 
-def get_srota_model():
-    global _srota_model
+def get_srota_model(model_name: str):
+    global _srota_model, _srota_model_name
+    requested_name = str(model_name or "moorlee/qwen3-asr-0.6b-hinglish").strip()
+    if not requested_name:
+        raise ValueError("Srota request is missing a valid model_name.")
+    if _srota_model is not None and requested_name != _srota_model_name:
+        raise RuntimeError(
+            "This persistent worker already loaded "
+            f"{_srota_model_name}; start a new provider worker to load {requested_name}."
+        )
     if _srota_model is None:
         torch = get_torch()
         with redirect_stdout(StringIO()):
             from qwen_asr import Qwen3ASRModel
             _srota_model = Qwen3ASRModel.from_pretrained(
-                "moorlee/qwen3-asr-0.6b-hinglish",
+                requested_name,
                 dtype=torch.float32,
                 device_map="cpu",
                 max_inference_batch_size=1,
                 max_new_tokens=512,
             )
+        _srota_model_name = requested_name
     return _srota_model
 
 
@@ -131,7 +141,10 @@ def main() -> int:
                     raise ValueError("Transcription request is missing audio_path.")
                 started = time.perf_counter()
                 torch = get_torch()
-                model = get_srota_model()
+                model_name = str(
+                    request.get("model_name") or "moorlee/qwen3-asr-0.6b-hinglish"
+                ).strip()
+                model = get_srota_model(model_name)
                 context = str(request.get("context") or "").strip()
                 with redirect_stdout(StringIO()), torch.inference_mode():
                     result = model.transcribe(
@@ -144,7 +157,7 @@ def main() -> int:
                     "ok": True,
                     "transcript": transcript,
                     "inference_seconds": round(time.perf_counter() - started, 3),
-                    "model": "moorlee/qwen3-asr-0.6b-hinglish",
+                    "model": model_name,
                 })
 
             elif action == "translate":
