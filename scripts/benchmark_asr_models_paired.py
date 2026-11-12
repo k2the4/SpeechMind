@@ -62,6 +62,11 @@ def read_records(path: Path) -> list[dict]:
             raise ValueError(
                 f"Input row {index} needs non-empty audio_path and reference transcript."
             )
+        if not speaker:
+            raise ValueError(
+                f"Input row {index} has no speaker_id. Refusing to claim speaker-aware "
+                "sampling without trustworthy speaker identifiers."
+            )
         key = audio_path.casefold()
         if key in seen_paths:
             raise ValueError(
@@ -70,7 +75,7 @@ def read_records(path: Path) -> list[dict]:
         seen_paths.add(key)
         row["audio_path"] = audio_path
         row["reference_transcript"] = reference
-        row["speaker_id"] = speaker or f"unknown-row-{index}"
+        row["speaker_id"] = speaker
         row["age_group"] = row.get("age_group") or "unknown"
         dataset_value = row.get("dataset") or "hiacc"
         row["dataset"] = (
@@ -106,7 +111,7 @@ def select_records(
         rng.shuffle(values)
 
     keys = sorted(groups, key=lambda value: (value != "adult", value != "children", value))
-    speaker_counts: dict[str, int] = defaultdict(int)
+    speaker_counts: dict[tuple[str, str], int] = defaultdict(int)
     selected = []
     while keys and (limit == 0 or len(selected) < limit):
         remaining = []
@@ -116,11 +121,14 @@ def select_records(
             chosen = None
             while pool:
                 candidate = pool.pop()
-                speaker = candidate["speaker_id"]
-                if speaker_counts[speaker] >= max_per_speaker:
+                speaker_key = (
+                    candidate.get("dataset") or "hiacc",
+                    candidate["speaker_id"],
+                )
+                if speaker_counts[speaker_key] >= max_per_speaker:
                     continue
                 chosen = candidate
-                speaker_counts[speaker] += 1
+                speaker_counts[speaker_key] += 1
                 break
             if chosen is not None:
                 selected.append(chosen)
