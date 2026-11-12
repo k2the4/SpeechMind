@@ -124,13 +124,18 @@ if audio_source is not None:
                 )
 
             quality = result.get("asr_quality_score")
-            if quality is not None:
-                st.caption(
-                    f"ASR token-quality indicator: {quality * 100:.1f}% "
-                    "(uncalibrated; not a probability that the transcript is correct)."
+            quality_status = result.get("asr_quality_status")
+            if quality_status == "unavailable":
+                st.warning(
+                    result.get("asr_quality_note")
+                    or "Transcript quality could not be scored by this recognizer. "
+                       "Check the original transcript before relying on its meaning."
                 )
-            else:
-                st.caption("ASR quality information is unavailable for this decoder.")
+            elif quality is not None:
+                st.caption(
+                    f"Transcript quality estimate: {quality * 100:.1f}% "
+                    "(uncalibrated model heuristic, not a probability of correctness)."
+                )
 
             if result.get("low_confidence_warning"):
                 reasons = result.get("uncertainty_reasons") or []
@@ -157,19 +162,6 @@ if audio_source is not None:
                     "Text-emotion analysis is unavailable. "
                     + str(result.get("text_emotion_reason") or "")
                 )
-            text_scores = result.get("text_emotion_multi_label_scores") or {}
-            if text_scores:
-                st.caption(
-                    "Independent text-model signals (uncalibrated; not probabilities "
-                    "that the speaker is experiencing these emotions)."
-                )
-                st.table([
-                    {"Signal": str(label).title(), "Model score": f"{float(score):.3f}"}
-                    for label, score in sorted(
-                        text_scores.items(), key=lambda item: float(item[1]), reverse=True
-                    )
-                ])
-
             st.subheader("Emotion conveyed through voice")
             st.metric(
                 "Vocal emotion",
@@ -189,19 +181,6 @@ if audio_source is not None:
                     "Experimental baseline: the current voice model has not been "
                     "validated on spontaneous Indian/Hinglish speech."
                 )
-            voice_scores = result.get("voice_emotion_distribution") or {}
-            if voice_scores:
-                st.caption(
-                    "Vocal-model score distribution. Close scores mean the top "
-                    "label is not clearly separated from alternatives."
-                )
-                st.table([
-                    {"Signal": str(label).title(), "Model score": f"{float(score):.3f}"}
-                    for label, score in sorted(
-                        voice_scores.items(), key=lambda item: float(item[1]), reverse=True
-                    )
-                ])
-
             st.divider()
             st.subheader("Overall emotional context")
             st.write(
@@ -269,6 +248,8 @@ if audio_source is not None:
                     "language_source": result.get("language_source"),
                     "language_detection_score": result.get("language_detection_score"),
                     "asr_quality_score": result.get("asr_quality_score"),
+                    "asr_quality_status": result.get("asr_quality_status"),
+                    "asr_quality_note": result.get("asr_quality_note"),
                     "asr_quality_method": result.get("asr_quality_method"),
                     "asr_avg_logprob": result.get("asr_avg_logprob"),
                     "asr_avg_no_speech_prob": result.get("asr_avg_no_speech_prob"),
