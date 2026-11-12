@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    HF_HOME=/data/huggingface \
+    HF_HOME=/app/.cache/huggingface \
     PORT=7860
 
 WORKDIR /app
