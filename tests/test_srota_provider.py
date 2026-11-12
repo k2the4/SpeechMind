@@ -64,7 +64,7 @@ class SrotaWorkerConfigTests(unittest.TestCase):
         )
         self.assertIn('"max_new_tokens": 256', source)
         self.assertIn("max_new_tokens=256", source)
-        self.assertNotIn("max_new_tokens": 512", source)
+        self.assertNotIn('"max_new_tokens": 512', source)
 
 
 class SrotaModelSelectionTests(unittest.TestCase):
