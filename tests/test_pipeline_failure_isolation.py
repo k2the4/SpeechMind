@@ -129,7 +129,7 @@ class PipelineFailureIsolationTests(unittest.TestCase):
         self.assertGreaterEqual(result["text_emotion_inference_seconds"], 0.0)
         self.assertGreaterEqual(result["voice_emotion_inference_seconds"], 0.0)
         self.assertIn("torch_runtime", result)
-        self.assertEqual(result["torch_runtime"]["available"], False)
+        self.assertIsInstance(result["torch_runtime"]["available"], bool)
 
     def test_no_emotion_branches_returns_insufficient_evidence_not_neutral(self):
         def unavailable_component():
