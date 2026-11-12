@@ -120,6 +120,17 @@ class PipelineFailureIsolationTests(unittest.TestCase):
         self.assertEqual(result["interpretation_status"], "single_branch")
         self.assertEqual(result["overall_emotion"], "joy")
 
+    def test_pipeline_reports_independent_model_branch_timings(self):
+        result = self._run_with_patched_components()
+
+        self.assertIn("text_emotion", result["timings_sec"])
+        self.assertIn("voice_emotion", result["timings_sec"])
+        self.assertIn("translation", result["timings_sec"])
+        self.assertGreaterEqual(result["text_emotion_inference_seconds"], 0.0)
+        self.assertGreaterEqual(result["voice_emotion_inference_seconds"], 0.0)
+        self.assertIn("torch_runtime", result)
+        self.assertEqual(result["torch_runtime"]["available"], False)
+
     def test_no_emotion_branches_returns_insufficient_evidence_not_neutral(self):
         def unavailable_component():
             raise RuntimeError("component unavailable")
