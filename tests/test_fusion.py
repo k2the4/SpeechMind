@@ -89,6 +89,35 @@ class FusionTests(unittest.TestCase):
         self.assertIn("Text signals joy; vocal signals sadness", result["branch_comparison"])
         self.assertIn("No combined emotion has been assigned", result["overall_interpretation"])
 
+    def test_near_tied_voice_scores_are_reported_as_uncertain(self):
+        result = fuse(
+            text_result={
+                "emotion": "neutral",
+                "distribution": {"neutral": 1.0},
+            },
+            voice_result={
+                "emotion": "fear",
+                "distribution": {
+                    "fear": 0.260,
+                    "disgust": 0.257,
+                    "sadness": 0.179,
+                    "neutral": 0.128,
+                    "joy": 0.096,
+                    "anger": 0.063,
+                    "surprise": 0.017,
+                },
+            },
+            asr_confidence=None,
+        )
+        self.assertEqual(result["voice_emotion"], "uncertain")
+        self.assertTrue(result["branch_disagreement"])
+        self.assertEqual(result["overall_emotion"], "unresolved")
+        self.assertIn("does not clearly separate fear", result["branch_comparison"])
+        self.assertIn(
+            "Voice model top-two scores are too close to support a stable label",
+            result["uncertainty_reasons"],
+        )
+
     def test_both_branches_unavailable_returns_insufficient_evidence(self):
         result = fuse(
             text_result={"emotion": "unavailable", "available": False},
