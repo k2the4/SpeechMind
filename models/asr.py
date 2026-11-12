@@ -9,8 +9,6 @@ Hindi/Hinglish evidence. Pure-Hindi and clear-English routes retain their
 specialists.
 """
 
-import time
-
 import torch
 import whisper
 from transformers import AutoModel
@@ -171,7 +169,7 @@ class SpeechRecognizer:
             return result
 
     def _infer_srota_context(self, audio_numpy):
-        """Use a short English-forced Whisper tail pass to scout known terms."""
+        """Use an auto-detected Whisper tail pass to scout known English terms."""
         context_info = infer_hinglish_context_from_audio_tail(
             audio_numpy, self.whisper, sample_rate=16000, tail_seconds=5.0
         )
