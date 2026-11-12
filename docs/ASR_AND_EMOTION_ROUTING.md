@@ -39,6 +39,12 @@ Example: compare the local recognizers on the reference clip. The default runs W
 
 Add `--include-indicconformer` to include the existing IndicConformer Hindi recognizer. The model may need to load its weights on first use. Lower WER/CER is better; a single clip is diagnostic, not a general quality claim. The conversational Srota specialist remains optional because its CPU startup previously timed out on the development machine.
 
+## Automatic Hinglish vocabulary context
+
+When the local router selects Srota, SpeechMind uses Whisper-small on only the final five seconds as a vocabulary scout. It forces English for this short probe, then extracts only exact matches from a small local allow-list (for example, `layout`, `Figma`, `interface`, or `Python`). The scout transcript is never used as the final transcript. If no allow-listed term is heard, Srota receives an empty context and runs normally. The chosen context, scout transcript, and probe duration are available in diagnostics. This avoids a manual hint field and avoids sending a long instruction prompt to Srota.
+
+The reference benchmark uses the same automatic context by default. Use `--no-auto-context` to measure Srota without the vocabulary scout.
+
 ## Srota runtime
 
 The isolated worker follows the model's normal 512-token generation budget. Lowering this ceiling is not an accuracy fix and can truncate the remaining transcript. The inference wrapper also avoids injecting a long custom instruction prompt: the default request uses an empty context, matching the published model-card example.
