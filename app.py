@@ -41,9 +41,53 @@ uploaded_file = st.file_uploader(
 recorded_audio = st.audio_input("Or record directly")
 audio_source = uploaded_file or recorded_audio
 
+
+def get_sarvam_api_key():
+    key = os.getenv("SARVAM_API_KEY") or os.getenv("SARVAM_API_SUBSCRIPTION_KEY")
+    if key:
+        return key
+    try:
+        return (
+            st.secrets.get("SARVAM_API_KEY")
+            or st.secrets.get("SARVAM_API_SUBSCRIPTION_KEY")
+        )
+    except Exception:
+        return None
+
+
+selected_asr_provider = "local"
+sarvam_api_key = get_sarvam_api_key()
+sarvam_consent = False
+if audio_source is not None and sarvam_api_key:
+    provider_choice = st.radio(
+        "Speech recognition engine",
+        [
+            "Local models (audio stays on this machine)",
+            "Hosted Saaras v4 (external processing)",
+        ],
+        index=0,
+        help=(
+            "Local uses SpeechMind's Whisper/Srota/IndicConformer routes. "
+            "Hosted uses Sarvam Saaras v4 in code-mixed mode."
+        ),
+    )
+    if provider_choice.startswith("Hosted"):
+        selected_asr_provider = "sarvam"
+        st.warning(
+            "Hosted transcription sends this recording to Sarvam AI. "
+            "Use it only if you are comfortable with external audio processing."
+        )
+        sarvam_consent = st.checkbox(
+            "I agree to send this recording to Sarvam AI for transcription."
+        )
+
 if audio_source is not None:
     st.audio(audio_source)
-    if st.button("Analyze", type="primary"):
+    if st.button(
+        "Analyze",
+        type="primary",
+        disabled=(selected_asr_provider == "sarvam" and not sarvam_consent),
+    ):
         tmp_path = None
         try:
             with st.spinner("Loading models if needed and analyzing audio..."):
@@ -57,8 +101,12 @@ if audio_source is not None:
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
+                if sarvam_api_key and selected_asr_provider == "sarvam":
+                    # Keep the secret server-side; never expose it in the UI.
+                    os.environ["SARVAM_API_KEY"] = sarvam_api_key
                 result = pipeline.run(
-                    tmp_path
+                    tmp_path,
+                    asr_provider=selected_asr_provider,
                 )
                 result["model_init_time_sec"] = model_init_time
         except Exception as error:
@@ -245,6 +293,7 @@ if audio_source is not None:
                 st.json({
                     "stage_timings_sec": result.get("timings_sec", {}),
                     "asr_model": result.get("asr_model"),
+                    "asr_provider": result.get("asr_provider"),
                     "asr_error": result.get("asr_error"),
                     "code_switch_detected": result.get("code_switch_detected"),
                     "language_spans": result.get("language_spans"),
