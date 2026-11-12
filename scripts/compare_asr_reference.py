@@ -12,6 +12,14 @@ import argparse
 import re
 import unicodedata
 from pathlib import Path
+import sys
+
+# When a script is launched by path, Python puts scripts/ rather than the
+# repository root on sys.path. Add the project root so package imports work
+# from a normal Windows PowerShell invocation.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 import torch
