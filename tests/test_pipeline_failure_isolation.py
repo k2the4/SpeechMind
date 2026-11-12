@@ -135,7 +135,7 @@ class PipelineFailureIsolationTests(unittest.TestCase):
         self.assertEqual(result["text_emotion"], "unavailable")
         self.assertEqual(result["voice_emotion"], "unavailable")
         self.assertEqual(result["fusion_weights"], {"text": 0.0, "voice": 0.0})
-        self.assertEqual(result["confidence"], 0.0)
+        self.assertIsNone(result["confidence"])
         self.assertFalse(result["text_branch_available"])
         self.assertFalse(result["voice_branch_available"])
 
