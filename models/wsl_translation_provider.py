@@ -187,6 +187,7 @@ class WslIndicTransProvider:
                 "model", "ai4bharat/indictrans2-indic-en-dist-200M"
             ),
             "inference_seconds": response.get("inference_seconds"),
+            "cache_used": response.get("cache_used"),
             "worker_response": response,
         }
 
