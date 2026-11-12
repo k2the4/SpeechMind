@@ -162,18 +162,20 @@ class SrotaASRProvider:
         if not path.is_file():
             raise FileNotFoundError(f"Audio file not found: {path}")
 
+        base_context = (
+            "This is natural Hindi-English (Hinglish) speech. "
+            "Keep Hindi words in Devanagari and English words in Latin script. "
+            "Transcribe exactly what is spoken; do not translate or paraphrase."
+        )
+        vocabulary = str(context or "").strip()
+        final_context = base_context
+        if vocabulary:
+            final_context += " Possible names or technical terms: " + vocabulary
+
         response = self._request({
             "action": "transcribe",
             "audio_path": str(path),
-            "context": (
-                context.strip() if isinstance(context, str) and context.strip()
-                else (
-                    "This is natural Hindi-English (Hinglish) speech. "
-                    "Keep Hindi words in Devanagari and English words in Latin "
-                    "script. Transcribe exactly what is spoken; do not translate "
-                    "or paraphrase."
-                )
-            ),
+            "context": final_context,
         })
         transcript = str(response.get("transcript") or "").strip()
         if not transcript:
