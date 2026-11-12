@@ -24,6 +24,7 @@ if str(PROJECT_ROOT) not in sys.path:
 import numpy as np
 import torch
 import whisper
+from transformers import AutoModel
 
 from models.srota_provider import SrotaASRProvider
 from utils.audio_utils import preprocess
@@ -101,6 +102,11 @@ def main() -> int:
         help="Skip Whisper passes when testing a Srota variant only.",
     )
     parser.add_argument(
+        "--include-indicconformer",
+        action="store_true",
+        help="Also run the existing IndicConformer Hindi CTC recognizer.",
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=600.0,
@@ -147,6 +153,22 @@ def main() -> int:
                 whisper_result.get("text") or ""
             ).strip()
 
+    indic_text = ""
+    if args.include_indicconformer:
+        print("[ASR benchmark] Loading IndicConformer-600M (Hindi CTC)...")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        indic_model = AutoModel.from_pretrained(
+            "ai4bharat/indic-conformer-600m-multilingual",
+            trust_remote_code=True,
+        )
+        indic_model.eval().to(device)
+        waveform = torch.tensor(audio, dtype=torch.float32).unsqueeze(0).to(device)
+        with torch.inference_mode():
+            indic_result = indic_model(waveform, "hi", "ctc")
+        if isinstance(indic_result, (list, tuple)):
+            indic_result = indic_result[0] if indic_result else ""
+        indic_text = str(indic_result).strip()
+
     print(f"[ASR benchmark] Running Srota model: {args.srota_model}...")
     srota = SrotaASRProvider(
         model_name=args.srota_model,
@@ -173,6 +195,10 @@ def main() -> int:
             print(f"\n========== WHISPER-SMALL / {label.upper()} ==========")
             print(transcript or "[empty transcript]")
             print(error_rates(args.reference, transcript))
+    if args.include_indicconformer:
+        print("\n========== INDICCONFORMER-600M / FORCED HINDI ==========")
+        print(indic_text or "[empty transcript]")
+        print(error_rates(args.reference, indic_text))
     print(f"\n========== SROTA / {args.srota_model} ==========")
     print(srota_text or "[empty transcript]")
     print(error_rates(args.reference, srota_text))
