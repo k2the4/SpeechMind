@@ -30,6 +30,9 @@ def get_pipeline():
 st.caption(
     "Record directly or upload a clip. SpeechMind automatically identifies the spoken language, transcribes the original speech, analyses text and vocal emotion in parallel, and presents the meaning in English."
 )
+st.caption(
+    "Language support is component-specific. An emotion branch is only run when its installed checkpoint declares support for the detected language; unsupported analysis is marked unavailable rather than guessed."
+)
 
 uploaded_file = st.file_uploader(
     "Upload your speech (WAV/MP3/M4A), or record directly",
@@ -245,6 +248,7 @@ if audio_source is not None:
                     "asr_candidate_inference_seconds": result.get(
                         "asr_candidate_inference_seconds"
                     ),
+                    "asr_inference_device": result.get("asr_inference_device"),
                     "language_source": result.get("language_source"),
                     "language_detection_score": result.get("language_detection_score"),
                     "asr_quality_score": result.get("asr_quality_score"),
