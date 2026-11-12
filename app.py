@@ -8,6 +8,7 @@ import time
 
 import streamlit as st
 from pipeline import SpeechMindPipeline
+from models.deployment_checkpoints import ensure_deployment_checkpoints
 
 st.set_page_config(page_title="SpeechMind", page_icon="🎙️", layout="centered")
 st.title("SpeechMind")
@@ -22,6 +23,7 @@ st.warning(
 
 @st.cache_resource(show_spinner="Loading core models (first run only)...")
 def get_pipeline():
+    ensure_deployment_checkpoints()
     return SpeechMindPipeline()
 
 
