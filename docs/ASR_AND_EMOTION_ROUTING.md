@@ -34,7 +34,7 @@ Do not start new ASR fine-tuning based on one recording. First build a held-out 
 Example: run the conversational specialist on the reference clip without changing the production model:
 
 ```powershell
-.venv\Scripts\python.exe scripts\compare_asr_reference.py --srota-model moorlee/qwen3-asr-0.6b-hinglish-hiacc-v1
+.venv\Scripts\python.exe scripts\compare_asr_reference.py --srota-model moorlee/qwen3-asr-0.6b-hinglish-hiacc-v1 --skip-whisper
 ```
 
 The script prompts for an audio path when `--audio` is omitted. Lower WER/CER is better; a single clip is diagnostic, not a general quality claim.
