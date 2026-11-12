@@ -62,6 +62,17 @@ Important: manifest-level speaker separation does not prove that a pretrained/fi
 
 The runner's successful exit means the evaluation completed. It does **not** mean the quality thresholds have passed. Record the output summary and the manifest revision alongside any claim about accuracy.
 
+## Next: compare ASR candidates on identical audio
+
+After completing this full-pipeline evaluation, run `COMPARE_ASR_MODELS_HIACC.bat`.
+It uses the newest full-pipeline `predictions.csv` by default and runs Srota
+with and without automatic vocabulary context, IndicConformer forced to Hindi,
+and Whisper with automatic language detection against the same selected clips.
+The existing production-router transcript is retained as a paired historical
+baseline. See [PAIRED_ASR_BENCHMARK.md](PAIRED_ASR_BENCHMARK.md) for sampling,
+scoring, failure handling, and timing details.
+
+
 ## Current evidence and remaining work
 
 The project has a working upload/record → transcription → English meaning → text/voice emotion → uncertainty-aware interpretation path. A reference Hinglish clip has passed exact transcript comparison and its English meaning is correct. The latest warm app run took about 15.7 seconds end-to-end on the current CPU setup; ASR was still the largest stage. That is a single clip and a warm run, not a general latency guarantee.
