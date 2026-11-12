@@ -120,8 +120,6 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 )
                 self.assertEqual(second["transcript"], "मेरा image है")
                 self.assertEqual(second["worker_response"]["count"], 2)
-                self.assertIn("Possible names or technical terms: layout, Figma", second["worker_response"]["context"])
-                self.assertIn("natural Hindi-English", first["worker_response"]["context"])
                 self.assertEqual(first["worker_response"]["context"], "")
                 self.assertEqual(
                     second["worker_response"]["context"],
