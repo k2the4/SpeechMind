@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 import traceback
@@ -66,53 +65,20 @@ def get_components():
 
 
 
-def generate_translation_with_cache(model, inputs, torch, environ=None):
-    """Prefer decoder KV caching; retry without it only for cache incompatibility."""
-    environment = os.environ if environ is None else environ
-    cache_setting = str(
-        environment.get("SPEECHMIND_INDIC_TRANS_USE_CACHE", "0")
-    ).strip().lower()
-    requested_cache = cache_setting not in {"0", "false", "no", "off"}
 
-    def generate(use_cache):
-        with torch.inference_mode():
-            return model.generate(
-                **inputs,
-                use_cache=use_cache,
-                min_length=0,
-                max_length=256,
-                num_beams=4,
-                num_return_sequences=1,
-            )
-
-    try:
-        return generate(requested_cache), requested_cache
-    except Exception as error:
-        # The IndicTrans2 custom model can surface a cache incompatibility as
-        # an AttributeError ("NoneType has no attribute shape"). Include the
-        # traceback so the failing past_key_values access is recognized.
-        error_message = str(error).casefold()
-        error_traceback = traceback.format_exc().casefold()
-        # Do not search for the generic word "cache" in the traceback:
-        # this worker's own source lines contain use_cache even for unrelated
-        # exceptions. Match the concrete custom-decoder failure signatures.
-        cache_incompatibility = (
-            "past_key_values" in error_message
-            or "cache_position" in error_message
-            or (
-                "past_key_values" in error_traceback
-                or "cache_position" in error_traceback
-            )
-            or ("nonetype" in error_message and "shape" in error_message)
+def generate_translation_without_cache(model, inputs, torch):
+    """Run IndicTrans2 with the known-compatible no-cache generation path."""
+    with torch.inference_mode():
+        return model.generate(
+            **inputs,
+            use_cache=False,
+            min_length=0,
+            max_length=256,
+            num_beams=4,
+            num_return_sequences=1,
         )
-        if not requested_cache or not cache_incompatibility:
-            raise
-        # Some model/Transformers combinations expose generate() without a
-        # compatible cache implementation. Preserve translation availability.
-        return generate(False), False
 
-
-def translate_to_english(text: str, src_lang: str) -> tuple[str, bool]:
+def translate_to_english(text: str, src_lang: str) -> str:
     stage = "input validation"
     try:
         if not text.strip():
@@ -147,9 +113,7 @@ def translate_to_english(text: str, src_lang: str) -> tuple[str, bool]:
         inputs = inputs.to("cpu")
 
         stage = "sequence generation"
-        generated, cache_used = generate_translation_with_cache(
-            model, inputs, torch
-        )
+        generated = generate_translation_without_cache(model, inputs, torch)
 
         stage = "token decoding"
         decoded = tokenizer.batch_decode(
@@ -165,7 +129,7 @@ def translate_to_english(text: str, src_lang: str) -> tuple[str, bool]:
         result = str(translated[0]).strip() if translated else ""
         if not result:
             raise RuntimeError("IndicTrans2 returned an empty English translation.")
-        return result, cache_used
+        return result
     except Exception as error:
         detail = traceback.format_exc()
         raise RuntimeError(
@@ -183,7 +147,7 @@ def main() -> int:
             if action != "translate":
                 raise ValueError(f"Unknown worker action: {action}")
             started = time.perf_counter()
-            translated, cache_used = translate_to_english(
+            translated = translate_to_english(
                 str(request.get("text") or ""),
                 str(request.get("src_lang") or ""),
             )
@@ -192,7 +156,7 @@ def main() -> int:
                 "translated_text": translated,
                 "inference_seconds": round(time.perf_counter() - started, 3),
                 "model": MODEL_NAME,
-                "cache_used": cache_used,
+                "cache_used": False,
             })
         except Exception as error:
             emit({"ok": False, "error": f"{type(error).__name__}: {error}"})
