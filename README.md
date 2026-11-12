@@ -10,9 +10,11 @@ pinned: false
 
 # SpeechMind
 
-SpeechMind is an experimental multilingual speech-understanding application for natural English, Hindi and Hinglish speech.
+SpeechMind is an experimental multilingual speech-understanding application for natural English, Hindi, Hindi-English (Hinglish), Bengali, Tamil, Telugu and Marathi speech.
 
-It keeps the original transcript, English meaning, semantic text analysis and vocal analysis as separate outputs. It does not diagnose medical or psychological conditions.
+It identifies the spoken language, preserves the original transcript, produces an English meaning, analyses emotion from the original words and voice in parallel, and presents a confidence-aware interpretation. Feature availability is checkpoint-dependent: a text-emotion model is used only for languages it explicitly declares as supported. Unsupported analysis is reported as unavailable rather than guessed. SpeechMind is descriptive and does not diagnose medical or psychological conditions.
+
+See [docs/ASR_AND_EMOTION_ROUTING.md](docs/ASR_AND_EMOTION_ROUTING.md) for current model routing, uncertainty handling, evaluation policy and hosted-ASR considerations.
 
 ## Hosted deployment
 
