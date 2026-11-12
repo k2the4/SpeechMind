@@ -34,6 +34,11 @@ uploaded_file = st.file_uploader(
     "Upload an audio clip (WAV/MP3/M4A), or record one below",
     type=["wav", "mp3", "m4a"],
 )
+recognition_hints = st.text_input(
+    "Optional recognition hints",
+    placeholder="e.g. layout, Figma, product names or technical terms",
+    help="Optional vocabulary only. SpeechMind still detects the spoken languages automatically.",
+)
 recorded_audio = st.audio_input("Or record directly")
 audio_source = uploaded_file or recorded_audio
 
@@ -53,7 +58,9 @@ if audio_source is not None:
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
-                result = pipeline.run(tmp_path)
+                result = pipeline.run(
+                    tmp_path, asr_context=recognition_hints.strip() or None
+                )
                 result["model_init_time_sec"] = model_init_time
         except Exception as error:
             st.error(f"Analysis failed: {error}")
