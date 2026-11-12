@@ -62,7 +62,7 @@ class HinglishContextTests(unittest.TestCase):
         self.assertEqual(result["transcript"], "not sure about the layout")
         self.assertEqual(model.sample_count, 3 * 16000)
         self.assertIsNone(model.kwargs["language"])
-        self.assertEqual(model.kwargs["beam_size"], 3)
+        self.assertEqual(model.kwargs["beam_size"], 1)
 
     def test_whisper_tail_probe_does_not_add_context_for_generic_english(self):
         class FakeWhisper:
