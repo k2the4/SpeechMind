@@ -139,6 +139,16 @@ class BenchmarkEntrypointTests(unittest.TestCase):
         self.assertIn('"ai4bharat/indic-conformer-600m-multilingual"', source)
         self.assertIn("SrotaASRProvider", source)
 
+    def test_reference_benchmark_uses_production_auto_context_by_default(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "scripts" / "compare_asr_reference.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"--no-auto-context"', source)
+        self.assertIn("infer_hinglish_context_from_audio_tail", source)
+        self.assertIn("context=selected_context", source)
+        self.assertIn("Automatic context:", source)
+
     def test_saved_route_metrics_can_be_recomputed_without_asr_inference(self):
         root = Path(__file__).resolve().parents[1]
         source = (root / "scripts" / "check_hinglish_english_route.py").read_text(
