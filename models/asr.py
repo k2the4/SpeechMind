@@ -171,7 +171,7 @@ class SpeechRecognizer:
     def _infer_srota_context(self, audio_numpy):
         """Use an auto-detected Whisper tail pass to scout known English terms."""
         context_info = infer_hinglish_context_from_audio_tail(
-            audio_numpy, self.whisper, sample_rate=16000, tail_seconds=5.0
+            audio_numpy, self.whisper, sample_rate=16000, tail_seconds=3.0
         )
         if context_info["context"]:
             print(
