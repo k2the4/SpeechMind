@@ -72,7 +72,11 @@ def read_records(path: Path) -> list[dict]:
         row["reference_transcript"] = reference
         row["speaker_id"] = speaker or f"unknown-row-{index}"
         row["age_group"] = row.get("age_group") or "unknown"
-        row["dataset"] = row.get("dataset") or "hiacc"
+        dataset_value = row.get("dataset") or "hiacc"
+        row["dataset"] = (
+            "hiacc" if dataset_value.casefold() in {"unspecified", "unknown"}
+            else dataset_value
+        )
         row["production_hypothesis"] = (
             row.get("hypothesis_transcript")
             or row.get("hypothesis")
@@ -196,8 +200,7 @@ def aggregate_predictions(rows: list[dict], hypothesis_key: str) -> dict:
         "successful_samples": len(scored),
         "failed_samples": len(rows) - len(scored),
         "micro": aggregate_error_counts(scored) if scored else None,
-        "median_warm_inference_seconds": optional_median(times[1:] if len(times) > 1 else times),
-        "median_inference_seconds_including_first_call": optional_median(times),
+        "median_inference_seconds": optional_median(times),
     }
 
 
@@ -343,6 +346,7 @@ def main() -> int:
             recognizer._load_indic_model()
             indic_initialization_seconds = time.perf_counter() - indic_started
 
+        srota_startup_and_warmup_seconds = None
         if not args.skip_srota:
             srota_provider = SrotaASRProvider(project_root=PROJECT_ROOT)
             if not srota_provider.available:
@@ -350,6 +354,18 @@ def main() -> int:
                     "Srota worker environment is not installed. Run "
                     "SETUP_HINGLISH_ASR_ENV.bat before this benchmark."
                 )
+            warmup_audio = load_audio(selected[0]["_resolved_audio_path"])
+            warmup_started = time.perf_counter()
+            warmup_result = srota_provider.transcribe_audio(
+                warmup_audio, sample_rate=16000, context=None
+            )
+            if not str(warmup_result.get("transcript") or "").strip():
+                raise RuntimeError("Srota warm-up returned an empty transcript.")
+            srota_startup_and_warmup_seconds = time.perf_counter() - warmup_started
+            print(
+                "[PairedASR] Srota worker/model startup + warm-up: "
+                f"{srota_startup_and_warmup_seconds:.1f}s (not scored)"
+            )
 
         output_rows = []
         for index, row in enumerate(selected, start=1):
@@ -392,6 +408,10 @@ def main() -> int:
                         output[f"{key}_hypothesis"] = hypothesis
                         output[f"{key}_status"] = "ok"
                         output[f"{key}_seconds"] = round(seconds, 3)
+                        if key == "srota_auto":
+                            output["srota_auto_total_seconds"] = round(
+                                seconds + float(probe_seconds or 0.0), 3
+                            )
                     except Exception as error:
                         output[f"{key}_hypothesis"] = ""
                         output[f"{key}_status"] = "error"
@@ -490,10 +510,9 @@ def main() -> int:
                     round(indic_initialization_seconds, 3)
                     if indic_initialization_seconds is not None else None
                 ),
-                "srota": (
-                    "Srota first-call duration includes isolated worker/model startup; "
-                    "per-clip first-call time is retained in predictions.csv."
-                    if not args.skip_srota else None
+                "srota_worker_and_model_startup_plus_warmup_seconds": (
+                    round(srota_startup_and_warmup_seconds, 3)
+                    if srota_startup_and_warmup_seconds is not None else None
                 ),
             },
             "models": model_results,
@@ -518,6 +537,8 @@ def main() -> int:
             "notes": [
                 "Srota auto-context mirrors production's Whisper tail vocabulary scout.",
                 "Srota native disables vocabulary context to measure the context contribution.",
+                "The Srota worker/model is warmed on the first selected clip before any scored runs; the warm-up is timed separately and excluded from ASR scores.",
+                "Srota auto-context effective per-clip latency includes both the Whisper context scout and Srota inference; both components are retained separately in predictions.csv.",
                 "IndicConformer is forced to the supplied Hindi code; this is a diagnostic on Hinglish, not a claim that it is a Hinglish specialist.",
                 "Whisper uses automatic language detection and transcription.",
                 "All candidates are scored against identical references selected once at the start.",
