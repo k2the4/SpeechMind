@@ -153,9 +153,15 @@ class SrotaASRProvider:
             daemon=True,
         ).start()
 
-        ready = self._receive(self.startup_timeout)
-        if not ready.get("ready"):
-            raise RuntimeError(ready.get("error") or "Srota worker did not become ready.")
+        try:
+            ready = self._receive(self.startup_timeout)
+            if not ready.get("ready"):
+                raise RuntimeError(ready.get("error") or "Srota worker did not become ready.")
+        except Exception:
+            # Do not leave a half-started worker or an open stderr handle behind
+            # when initialization fails before the request loop begins.
+            self.close()
+            raise
 
     def _request(self, payload: dict, timeout: float | None = None) -> dict:
         with self._lock:
