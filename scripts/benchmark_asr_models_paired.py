@@ -163,18 +163,34 @@ def optional_median(values: list[float]) -> float | None:
     return round(statistics.median(values), 3) if values else None
 
 
+def status_key_for_hypothesis(hypothesis_key: str) -> str:
+    suffix = "_hypothesis"
+    if not hypothesis_key.endswith(suffix):
+        raise ValueError(f"Unexpected hypothesis column: {hypothesis_key}")
+    return hypothesis_key[:-len(suffix)] + "_status"
+
+
+def seconds_key_for_hypothesis(hypothesis_key: str) -> str:
+    suffix = "_hypothesis"
+    if not hypothesis_key.endswith(suffix):
+        raise ValueError(f"Unexpected hypothesis column: {hypothesis_key}")
+    return hypothesis_key[:-len(suffix)] + "_seconds"
+
+
 def aggregate_predictions(rows: list[dict], hypothesis_key: str) -> dict:
+    status_key = status_key_for_hypothesis(hypothesis_key)
+    seconds_key = seconds_key_for_hypothesis(hypothesis_key)
     scored = [
         error_counts_multi_reference(
             row["reference_transcript"], str(row.get(hypothesis_key) or "")
         )
-        for row in rows if row.get(f"{hypothesis_key}_status") == "ok"
+        for row in rows if row.get(status_key) == "ok"
     ]
     times = [
-        float(row[f"{hypothesis_key}_seconds"])
+        float(row[seconds_key])
         for row in rows
-        if row.get(f"{hypothesis_key}_status") == "ok"
-        and row.get(f"{hypothesis_key}_seconds") not in (None, "")
+        if row.get(status_key) == "ok"
+        and row.get(seconds_key) not in (None, "")
     ]
     return {
         "successful_samples": len(scored),
@@ -195,7 +211,7 @@ def grouped_metrics(rows: list[dict], hypothesis_key: str, group_key: str) -> di
             error_counts_multi_reference(
                 row["reference_transcript"], str(row.get(hypothesis_key) or "")
             )
-            for row in values if row.get(f"{hypothesis_key}_status") == "ok"
+            for row in values if row.get(status_key_for_hypothesis(hypothesis_key)) == "ok"
         ]
         output[group] = aggregate_error_counts(scored) if scored else None
     return output
@@ -304,6 +320,14 @@ def main() -> int:
             "[PairedASR] Candidate models: Srota auto-context, Srota no-context, "
             "IndicConformer forced language, Whisper auto-language."
         )
+
+        import torch
+
+        torch.set_num_threads(4)
+        try:
+            torch.set_num_interop_threads(2)
+        except RuntimeError:
+            pass
 
         from models.asr import SpeechRecognizer
         from models.srota_provider import SrotaASRProvider
