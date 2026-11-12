@@ -105,6 +105,7 @@ class SpeechMindPipeline:
             "note": route["note"],
             "error": route["error"],
             "duration_sec": 0.0,
+            "cache_used": None,
         }
         try:
             if not transcript:
@@ -130,6 +131,7 @@ class SpeechMindPipeline:
                     text=translated,
                     available=True,
                     source=translator.model_name,
+                    cache_used=getattr(translator, "last_cache_used", None),
                 )
         except Exception as error:
             result["error"] = f"{type(error).__name__}: {error}"
@@ -414,6 +416,7 @@ class SpeechMindPipeline:
                 getattr(self.translator, "last_inference_seconds", None)
                 if self.translator is not None else None
             ),
+            "translation_cache_used": translation_result.get("cache_used"),
             "translator_error": translation_result["error"],
         }
 
