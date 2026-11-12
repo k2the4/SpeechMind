@@ -76,6 +76,25 @@ Romanized Hindi is not passed directly to IndicTrans2. A transliteration stage i
 
 All model scores and fusion weights remain uncalibrated until validated on paired, held-out Indian-language speech with human emotion annotations. Emotion output is descriptive and is not a diagnosis.
 
+## Local CPU runtime tuning and diagnostics
+
+The main SpeechMind process configures PyTorch before model imports with a default
+CPU intra-op thread limit of 4 and an inter-op limit of 2. This reduces thread
+oversubscription when text emotion, voice emotion, and translation execute
+concurrently. Override the intra-op limit before launching the app:
+
+```powershell
+$env:SPEECHMIND_TORCH_THREADS = "2"
+.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+The app reports separate ASR, text-emotion, voice-emotion, translation, and
+parallel wall-clock timings. Voice diagnostics also expose the two highest
+raw class scores and their margin. These are uncalibrated model scores; they
+are for diagnosing ambiguity, not for converting uncertain predictions into
+confident labels. Compare timings on the same recording after a fresh app
+restart before deciding whether a thread setting improves throughput.
+
 ## Runtime policy
 
 All ASR inference in this branch is local: Whisper-small, Srota, and IndicConformer. No API keys, external speech services, or paid inference are required.
