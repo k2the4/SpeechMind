@@ -276,6 +276,36 @@ def paired_vs_production(rows: list[dict], hypothesis_key: str) -> dict | None:
     }
 
 
+def paired_model_comparison(
+    rows: list[dict], candidate_key: str, reference_key: str
+) -> dict | None:
+    """Compare two hypotheses on identical rows, counting failures as empty text."""
+    if not rows:
+        return None
+    deltas = []
+    for row in rows:
+        candidate = error_counts_multi_reference(
+            row["reference_transcript"], str(row.get(candidate_key) or "")
+        )
+        reference = error_counts_multi_reference(
+            row["reference_transcript"], str(row.get(reference_key) or "")
+        )
+        deltas.append((candidate["wer"], reference["wer"]))
+    improved = sum(candidate < reference for candidate, reference in deltas)
+    worsened = sum(candidate > reference for candidate, reference in deltas)
+    tied = len(deltas) - improved - worsened
+    return {
+        "paired_samples": len(deltas),
+        "candidate_better": improved,
+        "candidate_worse": worsened,
+        "tied": tied,
+        "mean_clip_wer_delta": round(
+            statistics.mean(candidate - reference for candidate, reference in deltas), 4
+        ),
+        "note": "Negative delta favours the candidate; failed hypotheses are scored as empty.",
+    }
+
+
 def write_predictions(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -524,6 +554,14 @@ def main() -> int:
             )
             model_results["srota_auto"]["median_context_scout_seconds"] = (
                 optional_median(probe_times)
+            )
+            model_results["srota_auto"]["paired_vs_srota_native"] = (
+                paired_model_comparison(
+                    output_rows,
+                    "srota_auto_hypothesis",
+                    "srota_native_hypothesis",
+                )
+                if "srota_native" in model_results else None
             )
 
         summary = {
