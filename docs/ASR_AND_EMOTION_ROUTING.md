@@ -78,22 +78,35 @@ All model scores and fusion weights remain uncalibrated until validated on paire
 
 ## Local CPU runtime tuning and diagnostics
 
-The main SpeechMind process configures PyTorch before model imports with a default
-CPU intra-op thread limit of 4 and an inter-op limit of 2. This reduces thread
-oversubscription when text emotion, voice emotion, and translation execute
-concurrently. Override the intra-op limit before launching the app:
+The main SpeechMind process configures PyTorch when the pipeline is
+constructed, before model weights are loaded. Its default CPU intra-op thread
+limit is 4 and inter-op limit is 2. Override the main-process limit before
+launching the app:
 
 ```powershell
 $env:SPEECHMIND_TORCH_THREADS = "2"
+$env:SPEECHMIND_SROTA_TORCH_THREADS = "6"
 .venv\Scripts\python.exe -m streamlit run app.py
 ```
 
+The Srota ASR worker has its own thread pool because it runs in an isolated
+Python process. Its default is 4 threads; `SPEECHMIND_SROTA_TORCH_THREADS`
+accepts values from 1 to 16. Change it only for a controlled timing comparison.
+
+IndicTrans2 now requests decoder KV caching by default to avoid recomputing
+decoder states at every generation step. If the installed Transformers/model
+combination reports a cache-related compatibility error, the worker retries
+that request without caching. The selected behavior is returned as
+`translation_cache_used` in app diagnostics. Set
+`SPEECHMIND_INDIC_TRANS_USE_CACHE=0` inside the WSL worker environment to
+force the compatibility path without caching.
+
 The app reports separate ASR, text-emotion, voice-emotion, translation, and
-parallel wall-clock timings. Voice diagnostics also expose the two highest
-raw class scores and their margin. These are uncalibrated model scores; they
-are for diagnosing ambiguity, not for converting uncertain predictions into
-confident labels. Compare timings on the same recording after a fresh app
-restart before deciding whether a thread setting improves throughput.
+parallel wall-clock timings. Voice diagnostics expose the two highest raw
+class scores and their margin. These are uncalibrated model scores; they are
+for diagnosing ambiguity, not for converting uncertain predictions into
+confident labels. Compare the same recording after a fresh app restart and
+after a warm second run before deciding whether a setting improves throughput.
 
 ## Runtime policy
 
