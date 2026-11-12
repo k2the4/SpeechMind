@@ -18,6 +18,8 @@ See [docs/ASR_AND_EMOTION_ROUTING.md](docs/ASR_AND_EMOTION_ROUTING.md) for curre
 
 For multi-recording production evaluation, see [docs/MULTI_RECORDING_EVALUATION.md](docs/MULTI_RECORDING_EVALUATION.md) and run `EVALUATE_SPEECHMIND_HIACC.bat` after preparing the HiACC manifest.
 
+For a controlled same-audio comparison of the ASR candidates, see [docs/PAIRED_ASR_BENCHMARK.md](docs/PAIRED_ASR_BENCHMARK.md) and run `COMPARE_ASR_MODELS_HIACC.bat` after completing a full-pipeline evaluation.
+
 
 ## Hosted deployment
 
