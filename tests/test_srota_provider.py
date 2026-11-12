@@ -19,6 +19,43 @@ class SrotaScriptDetectionTests(unittest.TestCase):
 
 
 
+class SrotaTimeoutTests(unittest.TestCase):
+    def test_timeout_stops_worker_and_preserves_stderr_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / "scripts" / "srota_asr_worker.py"
+            script.parent.mkdir(parents=True)
+            script.write_text(
+                "import json, sys, time\\n"
+                "print(json.dumps({'ready': True}), flush=True)\\n"
+                "for line in sys.stdin:\\n"
+                " print('simulated model loading diagnostic', file=sys.stderr, flush=True)\\n"
+                " time.sleep(2)\\n"
+                " print(json.dumps({'ok': True, 'transcript': 'late response'}), flush=True)\\n",
+                encoding="utf-8",
+            )
+            audio = root / "sample.wav"
+            audio.write_bytes(b"placeholder")
+            provider = SrotaASRProvider(
+                root,
+                startup_timeout=2,
+                request_timeout=0.1,
+                python_executable=sys.executable,
+                worker_script=script,
+            )
+            try:
+                with self.assertRaisesRegex(TimeoutError, "stderr log"):
+                    provider.transcribe_file(audio)
+                self.assertIsNone(provider._process)
+                self.assertTrue(provider.stderr_log_path.is_file())
+                self.assertIn(
+                    "simulated model loading diagnostic",
+                    provider.stderr_log_path.read_text(encoding="utf-8"),
+                )
+            finally:
+                provider.close()
+
+
 class SrotaModelSelectionTests(unittest.TestCase):
     def test_general_model_remains_the_default(self):
         provider = SrotaASRProvider()
