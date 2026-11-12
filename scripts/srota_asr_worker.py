@@ -6,8 +6,10 @@ Transformers 4.46.3 pin. Models are loaded lazily on first request.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
+from importlib.util import find_spec
 from contextlib import redirect_stdout
 from io import StringIO
 
@@ -19,6 +21,7 @@ for stream in (sys.stdin, sys.stdout, sys.stderr):
 
 _srota_model = None
 _srota_model_name = None
+_srota_device = None
 _translation_components = None
 _torch = None
 
@@ -54,7 +57,7 @@ def extract_text(result) -> str:
 
 
 def get_srota_model(model_name: str):
-    global _srota_model, _srota_model_name
+    global _srota_model, _srota_model_name, _srota_device
     requested_name = str(model_name or "moorlee/qwen3-asr-0.6b-hinglish").strip()
     if not requested_name:
         raise ValueError("Srota request is missing a valid model_name.")
@@ -65,16 +68,61 @@ def get_srota_model(model_name: str):
         )
     if _srota_model is None:
         torch = get_torch()
+        preference = os.environ.get("SPEECHMIND_SROTA_DEVICE", "auto").strip().lower()
+        if preference not in {"auto", "cpu", "cuda"}:
+            raise ValueError(
+                "SPEECHMIND_SROTA_DEVICE must be one of: auto, cpu, cuda."
+            )
+        cuda_available = bool(torch.cuda.is_available())
+        if preference == "cuda" and not cuda_available:
+            raise RuntimeError(
+                "SPEECHMIND_SROTA_DEVICE=cuda was requested, but CUDA is unavailable."
+            )
+        use_cuda = cuda_available and preference != "cpu"
+        device_map = "cuda:0" if use_cuda else "cpu"
+        dtype = (
+            torch.bfloat16
+            if use_cuda and torch.cuda.is_bf16_supported()
+            else torch.float16 if use_cuda else torch.float32
+        )
+        model_kwargs = {
+            "dtype": dtype,
+            "device_map": device_map,
+            "max_inference_batch_size": 1,
+            "max_new_tokens": 512,
+        }
+        if use_cuda:
+            try:
+                if find_spec("flash_attn") is not None:
+                    model_kwargs["attn_implementation"] = "flash_attention_2"
+            except (ImportError, ValueError):
+                pass
+
         with redirect_stdout(StringIO()):
             from qwen_asr import Qwen3ASRModel
-            _srota_model = Qwen3ASRModel.from_pretrained(
-                requested_name,
-                dtype=torch.float32,
-                device_map="cpu",
-                max_inference_batch_size=1,
-                max_new_tokens=512,
-            )
+            try:
+                _srota_model = Qwen3ASRModel.from_pretrained(
+                    requested_name, **model_kwargs
+                )
+            except Exception:
+                # In auto mode, a GPU load failure (e.g. unsupported attention
+                # kernels or insufficient VRAM) falls back to CPU.
+                if not use_cuda or preference != "auto":
+                    raise
+                try:
+                    torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                _srota_model = Qwen3ASRModel.from_pretrained(
+                    requested_name,
+                    dtype=torch.float32,
+                    device_map="cpu",
+                    max_inference_batch_size=1,
+                    max_new_tokens=512,
+                )
+                device_map = "cpu"
         _srota_model_name = requested_name
+        _srota_device = device_map
     return _srota_model
 
 
@@ -158,6 +206,7 @@ def main() -> int:
                     "transcript": transcript,
                     "inference_seconds": round(time.perf_counter() - started, 3),
                     "model": model_name,
+                    "device": _srota_device,
                 })
 
             elif action == "translate":
