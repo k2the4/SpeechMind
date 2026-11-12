@@ -86,9 +86,19 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--whisper-languages",
+        nargs="+",
+        choices=("auto", "hi", "en"),
+        default=("auto", "hi"),
+        help=(
+            "Whisper-small decoding modes to compare. 'hi' forces Hindi decoding; "
+            "use 'auto' for language detection. Default: auto hi."
+        ),
+    )
+    parser.add_argument(
         "--skip-whisper",
         action="store_true",
-        help="Skip the Whisper pass when testing a Srota variant only.",
+        help="Skip Whisper passes when testing a Srota variant only.",
     )
     parser.add_argument(
         "--timeout",
@@ -111,19 +121,32 @@ def main() -> int:
     if not isinstance(audio, np.ndarray) or audio.ndim != 1 or audio.size == 0:
         raise RuntimeError("Audio preprocessing did not produce a non-empty mono waveform.")
 
-    whisper_text = ""
+    whisper_results = {}
     if args.skip_whisper:
         print("[ASR benchmark] Skipping Whisper as requested.")
     else:
-        print("[ASR benchmark] Running Whisper-small (automatic language)...")
         device = "cuda" if torch.cuda.is_available() else "cpu"
         whisper_model = whisper.load_model("small", device=device)
-        whisper_result = whisper_model.transcribe(
-            audio, task="transcribe", language=None, fp16=False, verbose=False,
-            beam_size=5, condition_on_previous_text=False,
-        )
-        whisper_text = str(whisper_result.get("text") or "").strip()
-    
+        for mode in args.whisper_languages:
+            language = None if mode == "auto" else mode
+            print(
+                "[ASR benchmark] Running Whisper-small "
+                + ("(automatic language)" if mode == "auto" else f"(forced {mode})")
+                + "..."
+            )
+            whisper_result = whisper_model.transcribe(
+                audio,
+                task="transcribe",
+                language=language,
+                fp16=False,
+                verbose=False,
+                beam_size=5,
+                condition_on_previous_text=False,
+            )
+            whisper_results[mode] = str(
+                whisper_result.get("text") or ""
+            ).strip()
+
     print(f"[ASR benchmark] Running Srota model: {args.srota_model}...")
     srota = SrotaASRProvider(
         model_name=args.srota_model,
@@ -145,9 +168,11 @@ def main() -> int:
     print("\n========== REFERENCE ==========")
     print(args.reference)
     if not args.skip_whisper:
-        print("\n========== WHISPER-SMALL ==========")
-        print(whisper_text or "[empty transcript]")
-        print(error_rates(args.reference, whisper_text))
+        for mode, transcript in whisper_results.items():
+            label = "automatic" if mode == "auto" else f"forced {mode}"
+            print(f"\n========== WHISPER-SMALL / {label.upper()} ==========")
+            print(transcript or "[empty transcript]")
+            print(error_rates(args.reference, transcript))
     print(f"\n========== SROTA / {args.srota_model} ==========")
     print(srota_text or "[empty transcript]")
     print(error_rates(args.reference, srota_text))
