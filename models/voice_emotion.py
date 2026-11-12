@@ -236,9 +236,22 @@ class VoiceEmotionRecognizer:
             label: value / max(total, 1.0)
             for label, value in weighted.items()
         }
-        emotion = max(distribution, key=distribution.get)
+        ranked = sorted(
+            distribution.items(), key=lambda item: item[1], reverse=True
+        )
+        emotion = ranked[0][0]
+        top_two = [
+            {"label": label, "score": round(float(score), 4)}
+            for label, score in ranked[:2]
+        ]
+        top_two_margin = (
+            float(ranked[0][1] - ranked[1][1]) if len(ranked) > 1 else 1.0
+        )
         return {
+            "available": True,
             "emotion": emotion,
+            "top_two": top_two,
+            "top_two_margin": round(top_two_margin, 4),
             "confidence": round(float(distribution[emotion]), 3),
             "distribution": distribution,
             "arousal": "Not assessed",
