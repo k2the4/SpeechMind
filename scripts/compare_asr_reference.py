@@ -129,9 +129,17 @@ def main() -> int:
         model_name=args.srota_model,
         request_timeout=args.timeout,
     )
-    srota_result = srota.transcribe_audio(
-        audio, sample_rate=16000, context=args.context
-    )
+    try:
+        srota_result = srota.transcribe_audio(
+            audio, sample_rate=16000, context=args.context
+        )
+    except TimeoutError as error:
+        print(f"[ASR benchmark] {error}")
+        print("[ASR benchmark] Check the worker stderr log for the underlying load or inference error.")
+        return 2
+    finally:
+        # Close the worker even if inference fails or times out.
+        srota.close()
     srota_text = str(srota_result.get("transcript") or "").strip()
 
     print("\n========== REFERENCE ==========")
@@ -146,7 +154,6 @@ def main() -> int:
     print(f"[ASR benchmark] Srota inference device: {srota_result.get('worker_response', {}).get('device', 'unknown')}")
     print("\n[ASR benchmark] Lower WER/CER is better. Scores are diagnostic for this clip,")
     print("not a general model-quality claim. Production routing was not changed.")
-    srota.close()
     return 0
 
 
