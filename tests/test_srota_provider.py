@@ -17,6 +17,21 @@ class SrotaScriptDetectionTests(unittest.TestCase):
         self.assertFalse(has_mixed_devanagari_latin("I like this story"))
 
 
+
+
+class SrotaModelSelectionTests(unittest.TestCase):
+    def test_general_model_remains_the_default(self):
+        provider = SrotaASRProvider()
+        self.assertEqual(provider.model_name, SrotaASRProvider.MODEL_NAME)
+
+    def test_conversational_specialist_can_be_selected(self):
+        provider = SrotaASRProvider(
+            model_name=SrotaASRProvider.CONVERSATIONAL_MODEL_NAME
+        )
+        self.assertEqual(
+            provider.model_name, SrotaASRProvider.CONVERSATIONAL_MODEL_NAME
+        )
+
 class SrotaWorkerProtocolTests(unittest.TestCase):
     def test_worker_is_persistent_and_uses_jsonl_protocol(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -45,14 +60,15 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 request_timeout=5,
                 python_executable=sys.executable,
                 worker_script=script,
+                model_name=SrotaASRProvider.CONVERSATIONAL_MODEL_NAME,
             )
             try:
                 first = provider.transcribe_file(audio)
                 second = provider.transcribe_file(audio, context="layout, Figma")
                 self.assertEqual(first["transcript"], "मेरा image है")
-                self.assertEqual(first["asr_model"], provider.MODEL_NAME)
+                self.assertEqual(first["asr_model"], provider.CONVERSATIONAL_MODEL_NAME)
                 self.assertEqual(
-                    first["worker_response"]["model_name"], provider.MODEL_NAME
+                    first["worker_response"]["model_name"], provider.CONVERSATIONAL_MODEL_NAME
                 )
                 self.assertEqual(second["transcript"], "मेरा image है")
                 self.assertEqual(second["worker_response"]["count"], 2)
