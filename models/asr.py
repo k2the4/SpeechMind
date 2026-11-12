@@ -9,11 +9,14 @@ Hindi/Hinglish evidence. Pure-Hindi and clear-English routes retain their
 specialists.
 """
 
+import time
+
 import torch
 import whisper
 from transformers import AutoModel
 
 from models.asr_quality import estimate_whisper_quality
+from models.hinglish_context import build_hinglish_context
 from models.srota_provider import SrotaASRProvider
 from models.language_spans import annotate_language_spans
 from models.asr_routing import (
@@ -164,6 +167,55 @@ class SpeechRecognizer:
             result["asr_requested_model"] = "indic-conformer-600m"
             return result
 
+    def _infer_srota_context(self, audio_numpy):
+        """Use a short English-forced Whisper tail pass to scout known terms.
+
+        Whisper is not used as the Hinglish transcript here. Only exact matches
+        from the local allow-list are passed to Srota as vocabulary context.
+        """
+        tail_samples = min(int(audio_numpy.size), 5 * 16000)
+        if tail_samples < 16000:
+            return "", "whisper_tail_too_short", 0.0, ""
+
+        started = time.perf_counter()
+        try:
+            tail_audio = audio_numpy[-tail_samples:]
+            scout_result = self._decode_with_whisper(
+                tail_audio, language="en"
+            )
+            scout_transcript = str(
+                scout_result.get("text") or ""
+            ).strip()
+            context = build_hinglish_context(scout_transcript)
+            source = (
+                "whisper_tail_vocabulary"
+                if context else "whisper_tail_no_allowlisted_terms"
+            )
+            if context:
+                print(f"[ASR] Automatic Srota vocabulary context: {context}")
+            else:
+                print(
+                    "[ASR] Whisper tail scout found no allow-listed "
+                    "technical vocabulary; using native Srota decoding."
+                )
+            return (
+                context,
+                source,
+                round(time.perf_counter() - started, 3),
+                scout_transcript,
+            )
+        except Exception as error:
+            print(
+                "[ASR] Whisper vocabulary scout unavailable; using native "
+                f"Srota decoding: {type(error).__name__}: {error}"
+            )
+            return (
+                "",
+                "whisper_tail_probe_failed",
+                round(time.perf_counter() - started, 3),
+                "",
+            )
+
     def _try_srota_code_switch(
         self, audio_numpy, language_score=None, primary_language=None,
         probe_source="whisper_detection",
@@ -192,10 +244,25 @@ class SpeechRecognizer:
                 )
                 print(f"[ASR] {self.srota_provider_error}")
                 return None
+            context_probe_seconds = 0.0
+            context_probe_transcript = ""
+            if context is None:
+                (
+                    context,
+                    context_source,
+                    context_probe_seconds,
+                    context_probe_transcript,
+                ) = self._infer_srota_context(audio_numpy)
+            else:
+                context = str(context).strip()
+                context_source = (
+                    "explicit_context" if context else "explicit_empty_context"
+                )
+
             result = self.srota_provider.transcribe_audio(
                 audio_numpy,
                 sample_rate=16000,
-                context=context,
+                context=context or None,
             )
             transcript = str(result.get("transcript") or "").strip()
             annotation = annotate_language_spans(transcript, primary_language)
@@ -237,6 +304,10 @@ class SpeechRecognizer:
                     "asr_model", SrotaASRProvider.MODEL_NAME
                 ),
                 "asr_candidate_inference_seconds": result.get("inference_seconds"),
+                "asr_context_terms": context or "",
+                "asr_context_source": context_source,
+                "asr_context_probe_seconds": context_probe_seconds,
+                "asr_context_probe_transcript": context_probe_transcript,
                 "asr_inference_device": (
                     result.get("worker_response", {}).get("device")
                     if isinstance(result.get("worker_response"), dict) else None
@@ -377,7 +448,12 @@ class SpeechRecognizer:
                     audio_numpy, language_score=language_score,
                     primary_language=detected_language,
                     probe_source="whisper_transcript",
-                    context=context,
+                    context=(
+                        context if context is not None
+                        else build_hinglish_context(
+                            whisper_result.get("transcript", "")
+                        ) or None
+                    ),
                 )
                 if srota_result is not None:
                     return srota_result
