@@ -47,7 +47,7 @@ class FusionReliabilityTests(unittest.TestCase):
             {"available": False, "emotion": "unavailable", "distribution": {}},
             {
                 "emotion": "fear",
-                "distribution": {"fear": 0.260, "disgust": 0.257, "neutral": 0.483},
+                "distribution": {"fear": 0.260, "disgust": 0.257, "sadness": 0.179, "neutral": 0.128, "joy": 0.096, "anger": 0.063, "surprise": 0.017},
             },
             asr_confidence=None,
         )
