@@ -23,10 +23,22 @@ class FakeModel:
 
 
 class TranslationWorkerCacheTests(unittest.TestCase):
-    def test_cache_is_enabled_by_default(self):
+    def test_cache_is_disabled_by_default_for_custom_indictrans_decoder(self):
         model = FakeModel()
         output, cache_used = generate_translation_with_cache(
             model, {"input_ids": [1]}, FakeTorch(), environ={}
+        )
+        self.assertEqual(output, ["generated"])
+        self.assertFalse(cache_used)
+        self.assertEqual(model.calls, [False])
+
+    def test_cache_can_be_enabled_explicitly(self):
+        model = FakeModel()
+        output, cache_used = generate_translation_with_cache(
+            model,
+            {"input_ids": [1]},
+            FakeTorch(),
+            environ={"SPEECHMIND_INDIC_TRANS_USE_CACHE": "1"},
         )
         self.assertEqual(output, ["generated"])
         self.assertTrue(cache_used)
@@ -47,7 +59,10 @@ class TranslationWorkerCacheTests(unittest.TestCase):
     def test_cache_incompatibility_retries_without_cache(self):
         model = FakeModel("past_key_values is not supported")
         output, cache_used = generate_translation_with_cache(
-            model, {"input_ids": [1]}, FakeTorch(), environ={}
+            model,
+            {"input_ids": [1]},
+            FakeTorch(),
+            environ={"SPEECHMIND_INDIC_TRANS_USE_CACHE": "1"},
         )
         self.assertEqual(output, ["generated"])
         self.assertFalse(cache_used)
