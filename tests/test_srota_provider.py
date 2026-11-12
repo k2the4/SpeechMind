@@ -33,7 +33,7 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 " if request.get('action') == 'translate':\n"
                 "  response = {'ok': True, 'translated_text': 'This is our thought about this image.', 'count': count}\n"
                 " else:\n"
-                "  response = {'ok': True, 'transcript': 'मेरा image है', 'count': count, 'context': request.get('context')}\n"
+                "  response = {'ok': True, 'transcript': 'मेरा image है', 'count': count, 'context': request.get('context'), 'model_name': request.get('model_name')}\n"
                 " print(json.dumps(response, ensure_ascii=True), flush=True)\n",
                 encoding="utf-8",
             )
@@ -50,6 +50,10 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 first = provider.transcribe_file(audio)
                 second = provider.transcribe_file(audio, context="layout, Figma")
                 self.assertEqual(first["transcript"], "मेरा image है")
+                self.assertEqual(first["asr_model"], provider.MODEL_NAME)
+                self.assertEqual(
+                    first["worker_response"]["model_name"], provider.MODEL_NAME
+                )
                 self.assertEqual(second["transcript"], "मेरा image है")
                 self.assertEqual(second["worker_response"]["count"], 2)
                 self.assertIn("Possible names or technical terms: layout, Figma", second["worker_response"]["context"])
