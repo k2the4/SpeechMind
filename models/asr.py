@@ -292,6 +292,10 @@ class SpeechRecognizer:
                     result.get("worker_response", {}).get("device")
                     if isinstance(result.get("worker_response"), dict) else None
                 ),
+                "asr_worker_torch_threads": (
+                    result.get("worker_response", {}).get("torch_threads")
+                    if isinstance(result.get("worker_response"), dict) else None
+                ),
                 "code_switch_detected": bool(
                     annotation["code_switch_detected"] or annotation["mixed_script_detected"]
                 ),
