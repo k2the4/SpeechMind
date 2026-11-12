@@ -27,6 +27,7 @@ import whisper
 from transformers import AutoModel
 
 from models.srota_provider import SrotaASRProvider
+from models.hinglish_context import infer_hinglish_context_from_audio_tail
 from utils.audio_utils import preprocess
 
 
@@ -112,6 +113,11 @@ def main() -> int:
         default=600.0,
         help="Srota worker request timeout in seconds (default: 600).",
     )
+    parser.add_argument(
+        "--no-auto-context",
+        action="store_true",
+        help="Disable the automatic Whisper tail vocabulary scout.",
+    )
     args = parser.parse_args()
 
     audio_value = args.audio or input("Enter the audio file path: ").strip().strip('"')
@@ -169,6 +175,30 @@ def main() -> int:
             indic_result = indic_result[0] if indic_result else ""
         indic_text = str(indic_result).strip()
 
+    selected_context = args.context
+    context_info = {
+        "context": selected_context or "",
+        "source": "manual_context" if selected_context else "disabled",
+        "probe_seconds": 0.0,
+        "transcript": "",
+    }
+    if selected_context is None and not args.no_auto_context:
+        scout_device = "cuda" if torch.cuda.is_available() else "cpu"
+        if "whisper_model" not in locals():
+            print("[ASR benchmark] Loading Whisper-small for automatic vocabulary scouting...")
+            whisper_model = whisper.load_model("small", device=scout_device)
+        context_info = infer_hinglish_context_from_audio_tail(
+            audio, whisper_model, sample_rate=16000, tail_seconds=5.0
+        )
+        selected_context = context_info["context"] or None
+    print(
+        "[ASR benchmark] Automatic context: "
+        + (selected_context if selected_context else "[none]")
+        + f" ({context_info['source']}, {context_info['probe_seconds']}s)"
+    )
+    if context_info["transcript"]:
+        print("[ASR benchmark] Whisper tail scout: " + context_info["transcript"])
+
     print(f"[ASR benchmark] Running Srota model: {args.srota_model}...")
     srota = SrotaASRProvider(
         model_name=args.srota_model,
@@ -176,7 +206,7 @@ def main() -> int:
     )
     try:
         srota_result = srota.transcribe_audio(
-            audio, sample_rate=16000, context=args.context
+            audio, sample_rate=16000, context=selected_context
         )
     except TimeoutError as error:
         print(f"[ASR benchmark] {error}")
