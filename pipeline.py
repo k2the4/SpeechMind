@@ -310,6 +310,7 @@ class SpeechMindPipeline:
             "asr_candidate_inference_seconds": asr_result.get(
                 "asr_candidate_inference_seconds"
             ),
+            "asr_inference_device": asr_result.get("asr_inference_device"),
             "asr_confidence": round(asr_confidence, 3) if asr_confidence is not None else None,
             "asr_quality_score": (
                 round(asr_confidence, 3) if asr_confidence is not None else None
