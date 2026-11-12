@@ -169,7 +169,7 @@ class AsrRouterIntegrationPolicyTests(unittest.TestCase):
         self.assertLess(scout_line, provider_line)
         self.assertIn('context=context or None', method)
 
-    def test_tail_vocabulary_scout_is_limited_and_forces_english(self):
+    def test_tail_vocabulary_scout_is_limited_and_language_gated(self):
         self.assertIn('tail_seconds=5.0', self.source)
         helper = (
             Path(__file__).resolve().parents[1]
