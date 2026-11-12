@@ -13,7 +13,7 @@ from models.deployment_checkpoints import ensure_deployment_checkpoints
 st.set_page_config(page_title="SpeechMind", page_icon="🎙️", layout="centered")
 st.title("SpeechMind")
 st.caption(
-    "Understand natural Indian speech — English, Hindi, Hinglish and selected Indian languages."
+    "Speak naturally in Hindi, English, Hinglish and supported Indian languages. SpeechMind explains both what was said and the emotion conveyed through words and voice."
 )
 st.warning(
     "SpeechMind describes linguistic and vocal patterns. It does not diagnose "
@@ -28,18 +28,12 @@ def get_pipeline():
 
 
 st.caption(
-    "No language selection is needed. Speak naturally; SpeechMind attempts to "
-    "recognize the languages used in your recording."
+    "Record directly or upload a clip. SpeechMind automatically identifies the spoken language, transcribes the original speech, analyses text and vocal emotion in parallel, and presents the meaning in English."
 )
 
 uploaded_file = st.file_uploader(
-    "Upload an audio clip (WAV/MP3/M4A), or record one below",
+    "Upload your speech (WAV/MP3/M4A), or record directly",
     type=["wav", "mp3", "m4a"],
-)
-recognition_hints = st.text_input(
-    "Optional recognition hints",
-    placeholder="e.g. layout, Figma, product names or technical terms",
-    help="Optional vocabulary only. SpeechMind still detects the spoken languages automatically.",
 )
 recorded_audio = st.audio_input("Or record directly")
 audio_source = uploaded_file or recorded_audio
@@ -61,7 +55,7 @@ if audio_source is not None:
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
                 result = pipeline.run(
-                    tmp_path, asr_context=recognition_hints.strip() or None
+                    tmp_path
                 )
                 result["model_init_time_sec"] = model_init_time
         except Exception as error:
@@ -147,7 +141,7 @@ if audio_source is not None:
                 )
 
             st.divider()
-            st.subheader("Text analysis")
+            st.subheader("Emotion conveyed through words")
             st.metric(
                 "Semantic emotion",
                 str(result.get("text_emotion", "unavailable")).title()
@@ -176,7 +170,7 @@ if audio_source is not None:
                     )
                 ])
 
-            st.subheader("Voice analysis")
+            st.subheader("Emotion conveyed through voice")
             st.metric(
                 "Vocal emotion",
                 str(result.get("voice_emotion", "unavailable")).title()
@@ -209,7 +203,7 @@ if audio_source is not None:
                 ])
 
             st.divider()
-            st.subheader("Combined interpretation")
+            st.subheader("Overall emotional context")
             st.write(
                 result.get(
                     "overall_interpretation",
