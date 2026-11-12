@@ -101,7 +101,7 @@ def infer_hinglish_context_from_audio_tail(
     whisper_model,
     *,
     sample_rate: int = 16000,
-    tail_seconds: float = 5.0,
+    tail_seconds: float = 3.0,
 ) -> dict:
     """Auto-detect the final speech segment and extract terms only if it is English."""
     if sample_rate <= 0 or tail_seconds <= 0:
