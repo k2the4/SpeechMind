@@ -168,6 +168,16 @@ if audio_source is not None:
                 "Vocal emotion",
                 str(result.get("voice_emotion", "unavailable")).title()
             )
+            voice_candidates = result.get("voice_top_two") or []
+            if len(voice_candidates) >= 2:
+                st.caption(
+                    "Top vocal model scores (uncalibrated): "
+                    + " vs. ".join(
+                        f"{item['label'].title()} {item['score']:.3f}"
+                        for item in voice_candidates
+                    )
+                    + f" | margin {float(result.get('voice_top_two_margin') or 0.0):.3f}"
+                )
             st.caption(
                 "Arousal: not assessed. SpeechMind does not yet have a separately "
                 "validated acoustic arousal estimator."
@@ -242,6 +252,15 @@ if audio_source is not None:
                 )
                 st.json({
                     "stage_timings_sec": result.get("timings_sec", {}),
+                    "text_emotion_inference_seconds": result.get(
+                        "text_emotion_inference_seconds"
+                    ),
+                    "voice_emotion_inference_seconds": result.get(
+                        "voice_emotion_inference_seconds"
+                    ),
+                    "voice_top_two": result.get("voice_top_two"),
+                    "voice_top_two_margin": result.get("voice_top_two_margin"),
+                    "torch_runtime": result.get("torch_runtime"),
                     "asr_model": result.get("asr_model"),
                     "asr_error": result.get("asr_error"),
                     "code_switch_detected": result.get("code_switch_detected"),
