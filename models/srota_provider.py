@@ -36,6 +36,7 @@ def has_mixed_devanagari_latin(text: str) -> bool:
 
 class SrotaASRProvider:
     MODEL_NAME = "moorlee/qwen3-asr-0.6b-hinglish"
+    CONVERSATIONAL_MODEL_NAME = "moorlee/qwen3-asr-0.6b-hinglish-hiacc-v1"
     MAX_CLIP_SECONDS = 30.0
 
     def __init__(
@@ -45,6 +46,7 @@ class SrotaASRProvider:
         request_timeout: float = 180.0,
         python_executable: str | Path | None = None,
         worker_script: str | Path | None = None,
+        model_name: str | None = None,
     ) -> None:
         self.project_root = Path(project_root or Path(__file__).resolve().parents[1])
         self.worker_script = Path(
@@ -62,6 +64,9 @@ class SrotaASRProvider:
             )
         self.startup_timeout = startup_timeout
         self.request_timeout = request_timeout
+        self.model_name = str(model_name or self.MODEL_NAME).strip()
+        if not self.model_name:
+            raise ValueError("Srota model_name must be a non-empty Hugging Face model ID.")
         self._process: subprocess.Popen[str] | None = None
         self._responses: queue.Queue[str | None] = queue.Queue()
         self._lock = threading.Lock()
@@ -176,13 +181,14 @@ class SrotaASRProvider:
             "action": "transcribe",
             "audio_path": str(path),
             "context": final_context,
+            "model_name": self.model_name,
         })
         transcript = str(response.get("transcript") or "").strip()
         if not transcript:
             raise RuntimeError("Srota returned an empty transcript.")
         return {
             "transcript": transcript,
-            "asr_model": self.MODEL_NAME,
+            "asr_model": str(response.get("model") or self.model_name),
             "inference_seconds": response.get("inference_seconds"),
             "worker_response": response,
         }
