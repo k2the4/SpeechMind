@@ -90,6 +90,12 @@ def main() -> int:
         action="store_true",
         help="Skip the Whisper pass when testing a Srota variant only.",
     )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=600.0,
+        help="Srota worker request timeout in seconds (default: 600).",
+    )
     args = parser.parse_args()
 
     audio_value = args.audio or input("Enter the audio file path: ").strip().strip('"')
@@ -119,7 +125,10 @@ def main() -> int:
         whisper_text = str(whisper_result.get("text") or "").strip()
     
     print(f"[ASR benchmark] Running Srota model: {args.srota_model}...")
-    srota = SrotaASRProvider(model_name=args.srota_model)
+    srota = SrotaASRProvider(
+        model_name=args.srota_model,
+        request_timeout=args.timeout,
+    )
     srota_result = srota.transcribe_audio(
         audio, sample_rate=16000, context=args.context
     )
@@ -134,6 +143,7 @@ def main() -> int:
     print(f"\n========== SROTA / {args.srota_model} ==========")
     print(srota_text or "[empty transcript]")
     print(error_rates(args.reference, srota_text))
+    print(f"[ASR benchmark] Srota inference device: {srota_result.get('worker_response', {}).get('device', 'unknown')}")
     print("\n[ASR benchmark] Lower WER/CER is better. Scores are diagnostic for this clip,")
     print("not a general model-quality claim. Production routing was not changed.")
     srota.close()
