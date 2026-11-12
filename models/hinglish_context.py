@@ -104,9 +104,16 @@ def infer_hinglish_context_from_audio_tail(
     tail_seconds: float = 5.0,
 ) -> dict:
     """Auto-detect the final speech segment and extract terms only if it is English."""
+    if sample_rate <= 0 or tail_seconds <= 0:
+        return {
+            "context": "",
+            "source": "whisper_tail_too_short",
+            "probe_seconds": 0.0,
+            "transcript": "",
+        }
     sample_count = int(getattr(audio, "size", len(audio)))
     tail_samples = min(sample_count, int(sample_rate * tail_seconds))
-    if sample_rate <= 0 or tail_seconds <= 0 or tail_samples < sample_rate:
+    if tail_samples < sample_rate:
         return {
             "context": "",
             "source": "whisper_tail_too_short",
