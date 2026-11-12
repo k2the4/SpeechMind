@@ -100,7 +100,7 @@ def main() -> int:
     parser.add_argument(
         "--skip-whisper",
         action="store_true",
-        help="Skip Whisper passes when testing a Srota variant only.",
+        help="Skip Whisper comparison transcripts; automatic vocabulary scouting remains enabled unless disabled.",
     )
     parser.add_argument(
         "--include-indicconformer",
