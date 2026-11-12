@@ -9,6 +9,11 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+from utils.runtime_config import configure_torch_runtime
+
+# Apply CPU limits before importing modules that initialize PyTorch models.
+TORCH_RUNTIME_CONFIG = configure_torch_runtime()
+
 from utils.audio_utils import preprocess
 from models.asr import SpeechRecognizer
 from models.text_emotion import TextEmotionClassifier
@@ -20,6 +25,15 @@ from fusion_layer import fuse
 TRANSLATABLE_LANGUAGES = {
     "hi", "bn", "ta", "te", "mr", "gu", "pa", "ml", "kn", "ur"
 }
+
+
+
+
+def _run_timed(function, *args, **kwargs):
+    """Run one inference branch and return its own elapsed time."""
+    started = time.perf_counter()
+    result = function(*args, **kwargs)
+    return result, round(time.perf_counter() - started, 3)
 
 
 def _unavailable_branch(reason: str) -> dict:
@@ -254,18 +268,23 @@ class SpeechMindPipeline:
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=3) as executor:
             text_future = executor.submit(
-                self._predict_text_emotion, transcript, language, asr_result
+                _run_timed, self._predict_text_emotion,
+                transcript, language, asr_result
             )
-            voice_future = executor.submit(self._predict_voice_emotion, audio)
+            voice_future = executor.submit(
+                _run_timed, self._predict_voice_emotion, audio
+            )
             translation_future = executor.submit(
                 self._translate, transcript, asr_result
             )
-            text_result = text_future.result()
-            voice_result = voice_future.result()
+            text_result, text_duration = text_future.result()
+            voice_result, voice_duration = voice_future.result()
             translation_result = translation_future.result()
         timings["parallel_analysis_and_translation"] = round(
             time.perf_counter() - stage_start, 3
         )
+        timings["text_emotion"] = text_duration
+        timings["voice_emotion"] = voice_duration
         timings["translation"] = translation_result["duration_sec"]
 
         stage_start = time.perf_counter()
@@ -353,7 +372,12 @@ class SpeechMindPipeline:
             "voice_model_source": voice_result.get("model_source"),
             "voice_inference_device": voice_result.get("inference_device"),
             "voice_inference_windows": voice_result.get("inference_windows"),
+            "voice_top_two": voice_result.get("top_two", []),
+            "voice_top_two_margin": voice_result.get("top_two_margin"),
             "voice_validation_macro_f1": voice_result.get("validation_macro_f1"),
+            "text_emotion_inference_seconds": text_duration,
+            "voice_emotion_inference_seconds": voice_duration,
+            "torch_runtime": TORCH_RUNTIME_CONFIG,
             "valence": fused["valence"],
             "arousal": fused["arousal"],
             "arousal_available": fused["arousal_available"],
