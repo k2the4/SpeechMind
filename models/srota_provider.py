@@ -198,9 +198,16 @@ class SrotaASRProvider:
             raise FileNotFoundError(f"Audio file not found: {path}")
 
         base_context = (
-            "This is natural Hindi-English (Hinglish) speech. "
+            "Transcribe natural Hindi-English (Hinglish) speech exactly as spoken. "
             "Keep Hindi words in Devanagari and English words in Latin script. "
-            "Transcribe exactly what is spoken; do not translate or paraphrase."
+            "Preserve English words and phrases inside Hindi sentences; do not "
+            "translate an English phrase into a Hindi explanation. Do not expand, "
+            "complete, summarize, or infer words that are not clearly audible. "
+            "For code-switched speech, keep short English phrases in Latin script "
+            "even when surrounded by Hindi. Common technical words may include "
+            "project, design, layout, interface, screen, app, website, UI, UX, "
+            "Figma, prototype, code, model, research, audio, video, and file; "
+            "include one only when it is actually spoken."
         )
         vocabulary = str(context or "").strip()
         final_context = base_context
