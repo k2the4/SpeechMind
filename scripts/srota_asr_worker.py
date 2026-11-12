@@ -24,6 +24,17 @@ _srota_model_name = None
 _srota_device = None
 _translation_components = None
 _torch = None
+_srota_torch_threads = 4
+
+
+def configured_cpu_threads(environ=None) -> int:
+    """Read a bounded CPU thread count for the isolated Srota worker."""
+    values = os.environ if environ is None else environ
+    try:
+        requested = int(values.get("SPEECHMIND_SROTA_TORCH_THREADS", "4"))
+    except (TypeError, ValueError):
+        requested = 4
+    return max(1, min(requested, 16))
 
 
 def emit(payload: dict) -> None:
@@ -32,11 +43,12 @@ def emit(payload: dict) -> None:
 
 
 def get_torch():
-    global _torch
+    global _torch, _srota_torch_threads
     if _torch is None:
         import torch
         _torch = torch
-        torch.set_num_threads(4)
+        _srota_torch_threads = configured_cpu_threads()
+        torch.set_num_threads(_srota_torch_threads)
         try:
             torch.set_num_interop_threads(2)
         except RuntimeError:
@@ -207,6 +219,7 @@ def main() -> int:
                     "inference_seconds": round(time.perf_counter() - started, 3),
                     "model": model_name,
                     "device": _srota_device,
+                    "torch_threads": _srota_torch_threads,
                 })
 
             elif action == "translate":
