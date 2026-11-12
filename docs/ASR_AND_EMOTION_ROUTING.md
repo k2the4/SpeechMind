@@ -41,7 +41,7 @@ Add `--include-indicconformer` to include the existing IndicConformer Hindi reco
 
 ## Automatic Hinglish vocabulary context
 
-When the local router selects Srota, SpeechMind uses Whisper-small on only the final five seconds as a vocabulary scout. It forces English for this short probe, then extracts only exact matches from a small local allow-list (for example, `layout`, `Figma`, `interface`, or `Python`). The scout transcript is never used as the final transcript. If no allow-listed term is heard, Srota receives an empty context and runs normally. The chosen context, scout transcript, and probe duration are available in diagnostics. This avoids a manual hint field and avoids sending a long instruction prompt to Srota.
+When the local router selects Srota, SpeechMind uses Whisper-small on only the final five seconds as a vocabulary scout. It lets Whisper auto-detect the tail language and only extracts exact matches when the tail is detected as English, using a small local allow-list (for example, `layout`, `Figma`, `interface`, or `Python`). The scout transcript is never used as the final transcript. If no allow-listed term is heard, Srota receives an empty context and runs normally. The chosen context, scout transcript, and probe duration are available in diagnostics. This avoids a manual hint field and avoids sending a long instruction prompt to Srota.
 
 The reference benchmark uses the same automatic context by default. Use `--no-auto-context` to measure Srota without the vocabulary scout.
 
