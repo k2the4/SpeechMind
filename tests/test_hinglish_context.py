@@ -55,13 +55,18 @@ class HinglishContextTests(unittest.TestCase):
 
         audio = [0.0] * (9 * 16000)
         model = FakeWhisper()
-        result = infer_hinglish_context_from_audio_tail(audio, model)
+        result = infer_hinglish_context_from_audio_tail(
+            audio, model,
+            language_detector=lambda tail: ("en", 0.94, {"en": 0.94}),
+        )
 
         self.assertEqual(result["context"], "layout")
         self.assertEqual(result["source"], "whisper_tail_vocabulary")
         self.assertEqual(result["transcript"], "not sure about the layout")
         self.assertEqual(model.sample_count, 3 * 16000)
-        self.assertIsNone(model.kwargs["language"])
+        self.assertEqual(model.kwargs["language"], "en")
+        self.assertEqual(result["detected_language"], "en")
+        self.assertEqual(result["language_score"], 0.94)
         self.assertEqual(model.kwargs["beam_size"], 1)
 
     def test_whisper_tail_probe_does_not_add_context_for_generic_english(self):
@@ -70,21 +75,47 @@ class HinglishContextTests(unittest.TestCase):
                 return {"text": "I am not sure what to do next", "language": "en"}
 
         result = infer_hinglish_context_from_audio_tail(
-            [0.0] * (8 * 16000), FakeWhisper()
+            [0.0] * (8 * 16000),
+            FakeWhisper(),
+            language_detector=lambda tail: ("en", 0.91, {"en": 0.91}),
         )
         self.assertEqual(result["context"], "")
         self.assertEqual(result["source"], "whisper_tail_no_allowlisted_terms")
 
-    def test_hindi_tail_does_not_supply_english_vocabulary_context(self):
+    def test_hindi_tail_skips_autoregressive_whisper_decode(self):
         class FakeWhisper:
-            def transcribe(self, audio, **kwargs):
-                return {"text": "मुझे यह समझ नहीं आया layout", "language": "hi"}
+            def __init__(self):
+                self.transcribe_called = False
 
+            def transcribe(self, audio, **kwargs):
+                self.transcribe_called = True
+                raise AssertionError("Hindi tails should not be decoded for context")
+
+        model = FakeWhisper()
         result = infer_hinglish_context_from_audio_tail(
-            [0.0] * (8 * 16000), FakeWhisper()
+            [0.0] * (8 * 16000),
+            model,
+            language_detector=lambda tail: ("hi", 0.97, {"hi": 0.97}),
         )
         self.assertEqual(result["context"], "")
         self.assertEqual(result["source"], "whisper_tail_not_english")
+        self.assertEqual(result["detected_language"], "hi")
+        self.assertFalse(model.transcribe_called)
+
+    def test_uncertain_english_tail_skips_vocabulary_decode(self):
+        class FakeWhisper:
+            def transcribe(self, audio, **kwargs):
+                raise AssertionError("Uncertain tails should not be decoded")
+
+        result = infer_hinglish_context_from_audio_tail(
+            [0.0] * (8 * 16000),
+            FakeWhisper(),
+            language_detector=lambda tail: ("en", 0.42, {"en": 0.42}),
+            min_english_score=0.55,
+        )
+        self.assertEqual(result["context"], "")
+        self.assertEqual(result["source"], "whisper_tail_language_uncertain")
+        self.assertEqual(result["language_score"], 0.42)
 
     def test_whisper_tail_probe_skips_very_short_audio(self):
         class FakeWhisper:
