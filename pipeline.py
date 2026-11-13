@@ -416,6 +416,8 @@ class SpeechMindPipeline:
             "text_emotion_routing_note": text_result.get("routing_note"),
             "text_emotion_secondary": text_result.get("secondary_emotions", []),
             "text_emotion_multi_label_scores": text_result.get("multi_label_scores"),
+            "text_emotion_decision_thresholds": text_result.get("decision_thresholds"),
+            "text_emotion_active_labels": text_result.get("active_emotions"),
             "text_emotion_task_type": text_result.get("task_type"),
             "text_emotion_languages": sorted(
                 getattr(self.text_emotion, "supported_languages", []) or []
