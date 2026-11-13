@@ -145,9 +145,14 @@ def main() -> int:
         "--speaker", action="append",
         help="Speaker label matching each --audio argument, in the same order.",
     )
-    parser.add_argument(
+    reference_group = parser.add_mutually_exclusive_group()
+    reference_group.add_argument(
         "--reference", default=DEFAULT_REFERENCE,
         help="Correct human transcript shared by all supplied recordings.",
+    )
+    reference_group.add_argument(
+        "--reference-file",
+        help="UTF-8 text file containing the correct human transcript.",
     )
     parser.add_argument(
         "--context", default=None,
@@ -191,6 +196,16 @@ def main() -> int:
         help="Append rows to an existing CSV instead of replacing it.",
     )
     args = parser.parse_args()
+
+    if args.reference_file:
+        reference_path = Path(args.reference_file).expanduser()
+        if not reference_path.is_absolute():
+            reference_path = Path.cwd() / reference_path
+        if not reference_path.is_file():
+            parser.error(f"Reference file not found: {reference_path}")
+        args.reference = reference_path.read_text(encoding="utf-8-sig").strip()
+        if not args.reference:
+            parser.error(f"Reference file is empty: {reference_path}")
 
     audio_values = args.audio or [
         input("Enter the audio file path: ").strip().strip('"')
