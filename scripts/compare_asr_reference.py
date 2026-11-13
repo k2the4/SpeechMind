@@ -40,7 +40,7 @@ DEFAULT_REFERENCE = (
 CSV_FIELDS = [
     "speaker", "audio_file", "audio_duration_seconds", "model", "model_id",
     "reference", "hypothesis", "WER", "CER", "inference_seconds",
-    "initialization_seconds", "elapsed_seconds", "device", "status", "error",
+    "initialization_seconds", "elapsed_seconds", "chunk_count", "device", "status", "error",
 ]
 
 
@@ -103,6 +103,7 @@ def make_row(
     device: str,
     status: str = "ok",
     error: str = "",
+    chunk_count: int = 1,
 ) -> dict:
     scores = error_rates(reference, hypothesis)
     return {
@@ -127,6 +128,7 @@ def make_row(
             round(float(elapsed_seconds), 3)
             if elapsed_seconds is not None else ""
         ),
+        "chunk_count": chunk_count,
         "device": device or "unknown",
         "status": status,
         "error": error,
@@ -339,6 +341,7 @@ def main() -> int:
                     srota_result.get("inference_seconds"),
                     srota_result.get("worker_initialization_seconds"),
                     srota_elapsed, srota_device,
+                    chunk_count=int(srota_result.get("chunk_count", 1)),
                 ))
                 print(srota_text or "[empty transcript]")
                 print(error_rates(args.reference, srota_text))
