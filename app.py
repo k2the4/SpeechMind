@@ -48,8 +48,7 @@ if audio_source is not None:
     audio_digest = hashlib.sha256(audio_bytes).hexdigest()
     if st.session_state.get("speechmind_audio_digest") != audio_digest:
         st.session_state["speechmind_audio_digest"] = audio_digest
-        st.session_state["speechmind_edit_version"] = 0
-        for key in ("speechmind_prepared", "speechmind_result", "speechmind_model_init_time"):
+        for key in ("speechmind_result", "speechmind_model_init_time"):
             st.session_state.pop(key, None)
     st.audio(audio_source)
     if st.button("Analyze", type="primary"):
@@ -66,20 +65,14 @@ if audio_source is not None:
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
-                prepared = pipeline.prepare(tmp_path)
-                result = pipeline.analyze_prepared(prepared)
+                result = pipeline.run(tmp_path)
                 result["model_init_time_sec"] = model_init_time
-                st.session_state["speechmind_prepared"] = prepared
                 st.session_state["speechmind_result"] = result
                 st.session_state["speechmind_model_init_time"] = model_init_time
-                st.session_state["speechmind_edit_version"] = (
-                    st.session_state.get("speechmind_edit_version", 0) + 1
-                )
         except Exception as error:
             st.error(f"Analysis failed: {error}")
             st.exception(error)
             result = None
-            st.session_state.pop("speechmind_prepared", None)
             st.session_state.pop("speechmind_result", None)
         finally:
             if tmp_path and os.path.exists(tmp_path):
@@ -90,33 +83,6 @@ if audio_source is not None:
 
     result = st.session_state.get("speechmind_result")
     if result is not None:
-        st.subheader("Review and correct transcript")
-        edit_version = st.session_state.get("speechmind_edit_version", 0)
-        edited_transcript = st.text_area(
-            "Edit the recognized words before regenerating meaning and text emotion",
-            value=result.get("transcript", ""),
-            key=f"speechmind_transcript_{audio_digest}_{edit_version}",
-            height=120,
-        )
-        transcript_changed = edited_transcript.strip() != str(result.get("transcript") or "").strip()
-        if st.button(
-            "Apply correction and rerun meaning + text analysis",
-            key=f"speechmind_apply_{audio_digest}",
-            disabled=(not transcript_changed or not edited_transcript.strip()
-                       or st.session_state.get("speechmind_prepared") is None),
-        ):
-            pipeline = get_pipeline()
-            corrected = pipeline.analyze_prepared(
-                st.session_state["speechmind_prepared"],
-                transcript_override=edited_transcript,
-            )
-            corrected["model_init_time_sec"] = st.session_state.get(
-                "speechmind_model_init_time", 0.0
-            )
-            st.session_state["speechmind_result"] = corrected
-            st.session_state["speechmind_edit_version"] = edit_version + 1
-            st.rerun()
-
         st.download_button(
             "Download complete analysis (JSON)",
             data=json.dumps(result, ensure_ascii=False, indent=2, default=str),
