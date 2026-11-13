@@ -97,7 +97,22 @@ IndicTrans2 uses the known-compatible decoder generation path with
 `use_cache=False`, four-beam search, and a maximum output length of 256 tokens.
 The model's custom decoder crashed when KV caching was enabled, so the cache
 optimisation has been removed entirely rather than left as a runtime option.
-The worker reports `translation_cache_used: false` for transparency.
+IndicTrans2 keeps `use_cache=False`; this is separate from a bounded
+application-level cache of completed translations. Identical text/language/beam
+requests can reuse the prior completed result without running the model again.
+
+The WSL provider defaults to four-beam search. For a controlled CPU speed test,
+set the optional beam count before starting Streamlit:
+
+```powershell
+$env:SPEECHMIND_TRANSLATION_BEAMS = "2"
+.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+Allowed values are `1`, `2`, and `4`; the default remains `4`. Lower beam
+counts may change translation quality. Compare the meaning on the same
+recording and return to four beams if important wording or negation changes.
+The active beam count and result-cache status are shown in diagnostics.
 
 Validate the installed WSL model after updating the repository with:
 
