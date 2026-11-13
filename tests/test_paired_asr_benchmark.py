@@ -5,6 +5,7 @@ from pathlib import Path
 
 from scripts.benchmark_asr_models_paired import (
     aggregate_predictions,
+    default_run_output_dir,
     grouped_metrics,
     paired_model_comparison,
     paired_vs_production,
@@ -24,6 +25,19 @@ class PairedASRBenchmarkTests(unittest.TestCase):
             "dataset": "hiacc",
             "production_hypothesis": "मुझे इस project के लिए",
         }
+
+    def test_default_output_directory_is_timestamped_and_preserves_runs(self):
+        from datetime import datetime, timezone
+
+        first = default_run_output_dir(
+            datetime(2026, 11, 13, 14, 30, tzinfo=timezone.utc)
+        )
+        second = default_run_output_dir(
+            datetime(2026, 11, 13, 14, 31, tzinfo=timezone.utc)
+        )
+        self.assertEqual(first.name, "run-20261113T143000Z")
+        self.assertEqual(second.name, "run-20261113T143100Z")
+        self.assertNotEqual(first, second)
 
     def test_reader_accepts_full_pipeline_prediction_schema(self):
         with tempfile.TemporaryDirectory() as directory:
