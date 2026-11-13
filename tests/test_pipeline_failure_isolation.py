@@ -198,6 +198,12 @@ class PipelineFailureIsolationTests(unittest.TestCase):
         self.assertEqual(corrected["asr_quality_status"], "manual_review")
         self.assertIsNone(corrected["asr_quality_score"])
         self.assertEqual(text_calls[-1], "I am genuinely happy today")
+        self.assertEqual(corrected["timings_sec"]["asr"], 0.0)
+        self.assertEqual(corrected["timings_sec"]["preprocessing"], 0.0)
+        self.assertIn("asr", corrected["timings_sec"]["reused_stages"])
+        self.assertIn("voice_emotion", corrected["timings_sec"]["reused_stages"])
+        self.assertIn("original_stage_timings_sec", corrected["timings_sec"])
+        self.assertGreaterEqual(corrected["timings_sec"]["original_stage_timings_sec"]["asr"], 0.0)
 
 
 if __name__ == "__main__":
