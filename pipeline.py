@@ -339,6 +339,23 @@ class SpeechMindPipeline:
                 f"{existing_note} {asr_quality_note}"
                 if existing_note else asr_quality_note
             )
+        if manual_transcript:
+            # Report work performed for this correction separately from work
+            # already completed during the original recording analysis.
+            original_stage_timings = {
+                "preprocessing": timings.get("preprocessing", 0.0),
+                "asr": timings.get("asr", 0.0),
+                "voice_emotion": timings.get("voice_emotion", 0.0),
+            }
+            reused_stages = ["preprocessing", "asr"]
+            timings["preprocessing"] = 0.0
+            timings["asr"] = 0.0
+            if "_voice_result" in prepared:
+                reused_stages.append("voice_emotion")
+                timings["voice_emotion"] = 0.0
+            timings["original_stage_timings_sec"] = original_stage_timings
+            timings["reused_stages"] = reused_stages
+
         timings["total"] = round(sum(timings.get(k, 0.0) for k in (
             "preprocessing", "asr", "parallel_analysis_and_translation", "fusion"
         )), 3)
