@@ -9,8 +9,6 @@ Hindi/Hinglish evidence. Pure-Hindi and clear-English routes retain their
 specialists.
 """
 
-import os
-
 import torch
 import whisper
 from transformers import AutoModel
@@ -24,6 +22,7 @@ from models.srota_provider import SrotaASRProvider
 from models.language_spans import annotate_language_spans
 from models.asr_routing import (
     audio_language_suggests_hindi,
+    automatic_context_scout_enabled,
     srota_candidate_valid_for_route,
     srota_supports_duration,
     whisper_transcript_suggests_hinglish,
@@ -37,16 +36,6 @@ MIN_WHISPER_LANGUAGE_LOCK_SCORE = 0.70
 # High-confidence English is probed only when its Whisper transcript suggests
 # Hinglish. The detector score is not a calibrated probability.
 MIN_SROTA_PROBE_ENGLISH_SCORE = 0.90
-ASR_CONTEXT_SCOUT_ENV = "SPEECHMIND_ENABLE_ASR_CONTEXT_SCOUT"
-
-
-def automatic_context_scout_enabled() -> bool:
-    """The extra Whisper tail scout is opt-in; native Srota context is default."""
-    return os.environ.get(ASR_CONTEXT_SCOUT_ENV, "0").strip().lower() in {
-        "1", "true", "yes", "on"
-    }
-
-
 INDIC_LANGUAGES = {
     "as": "Assamese", "bn": "Bengali", "brx": "Bodo", "doi": "Dogri",
     "gu": "Gujarati", "hi": "Hindi", "kn": "Kannada", "kok": "Konkani",
