@@ -243,6 +243,29 @@ if audio_source is not None:
                 "Additional text signals: "
                 + ", ".join(str(label).title() for label in secondary_text_emotions)
             )
+        raw_text_scores = result.get("text_emotion_multi_label_scores") or {}
+        if raw_text_scores:
+            thresholds = result.get("text_emotion_decision_thresholds") or {}
+            ranked_text_scores = sorted(
+                raw_text_scores.items(), key=lambda item: float(item[1]), reverse=True
+            )[:3]
+            score_notes = []
+            for label, score in ranked_text_scores:
+                threshold = thresholds.get(label)
+                cutoff = (
+                    f" (decision threshold {float(threshold):.2f})"
+                    if threshold is not None else ""
+                )
+                score_notes.append(f"{str(label).title()} {float(score):.3f}{cutoff}")
+            st.caption(
+                "Top raw text-emotion scores (uncalibrated): "
+                + " · ".join(score_notes)
+            )
+            if not result.get("text_emotion_active_labels"):
+                st.caption(
+                    "No non-neutral class crossed its decision threshold, so "
+                    "the classifier reports Neutral. Raw scores are not final labels."
+                )
         if not result.get("text_emotion_available", False):
             st.warning(
                 "Text-emotion analysis is unavailable. "
@@ -394,6 +417,10 @@ if audio_source is not None:
                 "text_emotion_multi_label_scores": result.get(
                     "text_emotion_multi_label_scores"
                 ),
+                "text_emotion_decision_thresholds": result.get(
+                    "text_emotion_decision_thresholds"
+                ),
+                "text_emotion_active_labels": result.get("text_emotion_active_labels"),
                 "text_emotion_task_type": result.get("text_emotion_task_type"),
                 "voice_model_source": result.get("voice_model_source"),
                 "voice_emotion_available": result.get("voice_emotion_available"),
