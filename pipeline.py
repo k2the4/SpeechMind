@@ -11,7 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from utils.runtime_config import configure_torch_runtime
 
-from utils.audio_utils import preprocess
+from utils.audio_utils import preprocess_with_quality
+from models.language_spans import annotate_language_spans
 from models.asr import SpeechRecognizer
 from models.text_emotion import TextEmotionClassifier
 from models.voice_emotion import VoiceEmotionRecognizer
@@ -89,50 +90,56 @@ class SpeechMindPipeline:
 
     def _translate(self, transcript: str, asr_result: dict) -> dict:
         started = time.perf_counter()
+        translation_text = transcript
+        transliteration = {"available": None, "text": None, "replacements": 0,
+                           "model": None, "error": None}
         route = resolve_translation_route(
             detected_language=asr_result.get("language"),
             language_spans=asr_result.get("language_spans"),
-            romanized_hindi_detected=asr_result.get(
-                "romanized_hindi_detected", False
-            ),
+            romanized_hindi_detected=asr_result.get("romanized_hindi_detected", False),
         )
+        if route["method"] == "romanized_hindi_transliteration_required":
+            from models.romanized_hindi import transliterate_romanized_hindi
+            transliteration = transliterate_romanized_hindi(
+                transcript, asr_result.get("language_spans", [])
+            )
+            if transliteration["available"]:
+                translation_text = transliteration["text"]
+                converted = annotate_language_spans(translation_text, "hi")
+                route = resolve_translation_route(
+                    "hi", converted["language_spans"], romanized_hindi_detected=False
+                )
+                route["method"] = "indicxlit_then_indictrans2"
+                route["note"] = (
+                    "Romanized-Hindi words were transliterated locally for translation; "
+                    "the original transcript remains unchanged."
+                )
+            else:
+                route["error"] = transliteration["error"]
         result = {
-            "text": transcript,
-            "available": False,
-            "source": None,
-            "source_language": route["source_language"],
-            "method": route["method"],
-            "note": route["note"],
-            "error": route["error"],
-            "duration_sec": 0.0,
-            "cache_used": None,
+            "text": transcript, "available": False, "source": None,
+            "source_language": route["source_language"], "method": route["method"],
+            "note": route["note"], "error": route["error"], "duration_sec": 0.0,
+            "cache_used": None, "translation_input_text": translation_text,
+            "transliteration_available": transliteration["available"],
+            "transliterated_text": transliteration["text"],
+            "transliteration_replacements": transliteration["replacements"],
+            "transliteration_model": transliteration["model"],
+            "transliteration_error": transliteration["error"],
         }
         try:
             if not transcript:
                 result["error"] = "No transcript was produced."
-            elif not route["available"]:
-                # Do not call a Hindi-only MT model with Romanized Hindi and
-                # display its output as if meaning preservation were supported.
-                pass
-            elif route["source_language"] == "en":
-                result.update(
-                    text=transcript,
-                    available=True,
-                    source="original_english_transcript",
-                )
-            elif not self.translator_enabled:
+            elif route["available"] and route["source_language"] == "en":
+                result.update(text=transcript, available=True,
+                              source="original_english_transcript")
+            elif route["available"] and not self.translator_enabled:
                 result["error"] = "Translation is disabled."
-            else:
+            elif route["available"]:
                 translator = self._get_translator()
-                translated = translator.to_english(
-                    transcript, route["source_language"]
-                )
-                result.update(
-                    text=translated,
-                    available=True,
-                    source=translator.model_name,
-                    cache_used=getattr(translator, "last_cache_used", None),
-                )
+                translated = translator.to_english(translation_text, route["source_language"])
+                result.update(text=translated, available=True, source=translator.model_name,
+                              cache_used=getattr(translator, "last_cache_used", None))
         except Exception as error:
             result["error"] = f"{type(error).__name__}: {error}"
             print(f"[Pipeline] Translation unavailable: {result['error']}")
@@ -207,45 +214,61 @@ class SpeechMindPipeline:
             print(f"[Pipeline] Voice-emotion analysis unavailable: {reason}")
             return _unavailable_branch(reason)
 
-    def run(
-        self, audio_path: str, language_hint: str = None, asr_context: str = None
-    ) -> dict:
-        total_start = time.perf_counter()
+    def prepare(self, audio_path: str, language_hint: str = None,
+                asr_context: str = None) -> dict:
+        """Decode and transcribe once; keep the prepared waveform for later edits."""
         timings = {}
-
-        stage_start = time.perf_counter()
-        audio = preprocess(audio_path)
-        timings["preprocessing"] = round(time.perf_counter() - stage_start, 3)
-
-        stage_start = time.perf_counter()
-        asr_error = None
+        started = time.perf_counter()
+        audio, quality = preprocess_with_quality(audio_path)
+        timings["preprocessing"] = round(time.perf_counter() - started, 3)
+        started = time.perf_counter()
+        error = None
         if self.asr is None:
-            asr_error = self.component_errors.get(
-                "asr", "Speech-recognition model is unavailable."
-            )
-            asr_result = {}
+            error = self.component_errors.get("asr", "Speech-recognition model is unavailable.")
+            result = {}
         else:
             try:
                 if asr_context and asr_context.strip():
-                    asr_result = self.asr.transcribe(
-                        audio, language_hint=language_hint, context=asr_context
-                    )
+                    result = self.asr.transcribe(audio, language_hint=language_hint,
+                                                 context=asr_context)
                 else:
-                    asr_result = self.asr.transcribe(
-                        audio, language_hint=language_hint
-                    )
-                if not isinstance(asr_result, dict):
+                    result = self.asr.transcribe(audio, language_hint=language_hint)
+                if not isinstance(result, dict):
                     raise TypeError("ASR returned an invalid result.")
-            except Exception as error:
-                asr_error = f"{type(error).__name__}: {error}"
-                print(f"[Pipeline] ASR unavailable for this clip: {asr_error}")
-                asr_result = {}
-        timings["asr"] = round(time.perf_counter() - stage_start, 3)
+            except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                print(f"[Pipeline] ASR unavailable for this clip: {error}")
+                result = {}
+        timings["asr"] = round(time.perf_counter() - started, 3)
+        return {"audio": audio, "audio_quality": quality, "asr_result": result,
+                "asr_error": error, "timings_sec": timings}
 
-        transcript = str(asr_result.get("transcript") or "").strip()
+    def analyze_prepared(self, prepared: dict, transcript_override=None) -> dict:
+        """Analyze prepared audio; corrected text never triggers another ASR call."""
+        if not isinstance(prepared, dict) or "audio" not in prepared:
+            raise ValueError("Prepared SpeechMind audio is missing or invalid.")
+        audio = prepared["audio"]
+        audio_quality = prepared.get("audio_quality") or {}
+        asr_result = dict(prepared.get("asr_result") or {})
+        asr_error = prepared.get("asr_error")
+        timings = dict(prepared.get("timings_sec") or {})
+        manual_transcript = transcript_override is not None
+        transcript = (str(transcript_override or "").strip() if manual_transcript
+                      else str(asr_result.get("transcript") or "").strip())
+        if manual_transcript:
+            asr_result["transcript"] = transcript
+            annotation = annotate_language_spans(transcript, asr_result.get("language"))
+            asr_result.update(annotation)
+            asr_result["code_switch_detected"] = bool(
+                annotation["code_switch_detected"] or annotation["mixed_script_detected"]
+            )
+            asr_result["romanized_hindi_detected"] = bool(annotation["romanized_hindi_detected"])
+            if len(annotation["languages_present"]) == 1:
+                asr_result["language"] = annotation["languages_present"][0]
+
         language = str(asr_result.get("language") or "unknown").lower().strip()
-        quality_value = asr_result.get("quality_score")
-        if quality_value is None:
+        quality_value = None if manual_transcript else asr_result.get("quality_score")
+        if quality_value is None and not manual_transcript:
             quality_value = asr_result.get("confidence")
         try:
             asr_confidence = (
@@ -256,17 +279,21 @@ class SpeechMindPipeline:
             asr_confidence = None
 
         asr_quality_status = (
-            "unavailable" if asr_confidence is None
-            else "uncalibrated_estimate"
+            "manual_review" if manual_transcript else
+            ("unavailable" if asr_confidence is None else "uncalibrated_estimate")
         )
-        asr_quality_note = (
-            "The selected recognizer does not expose a usable transcript-quality "
-            "score. Check the original transcript before relying on its English "
-            "meaning or text-emotion result."
-            if asr_confidence is None else
-            "The transcript-quality value is an uncalibrated model heuristic, "
-            "not a probability that every recognised word is correct."
-        )
+        if manual_transcript:
+            asr_quality_note = "The transcript was manually corrected; the original ASR score does not apply."
+        elif asr_confidence is None:
+            asr_quality_note = (
+                "The selected recognizer does not expose a usable transcript-quality "
+                "score. Check the original transcript before relying on its English meaning."
+            )
+        else:
+            asr_quality_note = (
+                "The transcript-quality value is an uncalibrated model heuristic, "
+                "not a probability that every recognised word is correct."
+            )
 
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=3) as executor:
@@ -274,14 +301,20 @@ class SpeechMindPipeline:
                 _run_timed, self._predict_text_emotion,
                 transcript, language, asr_result
             )
-            voice_future = executor.submit(
-                _run_timed, self._predict_voice_emotion, audio
-            )
+            voice_future = None
+            if "_voice_result" not in prepared:
+                voice_future = executor.submit(_run_timed, self._predict_voice_emotion, audio)
             translation_future = executor.submit(
                 self._translate, transcript, asr_result
             )
             text_result, text_duration = text_future.result()
-            voice_result, voice_duration = voice_future.result()
+            if voice_future is None:
+                voice_result = prepared["_voice_result"]
+                voice_duration = prepared.get("_voice_duration", 0.0)
+            else:
+                voice_result, voice_duration = voice_future.result()
+                prepared["_voice_result"] = voice_result
+                prepared["_voice_duration"] = voice_duration
             translation_result = translation_future.result()
         timings["parallel_analysis_and_translation"] = round(
             time.perf_counter() - stage_start, 3
@@ -305,9 +338,13 @@ class SpeechMindPipeline:
                 f"{existing_note} {asr_quality_note}"
                 if existing_note else asr_quality_note
             )
-        timings["total"] = round(time.perf_counter() - total_start, 3)
+        timings["total"] = round(sum(timings.get(k, 0.0) for k in (
+            "preprocessing", "asr", "parallel_analysis_and_translation", "fusion"
+        )), 3)
 
         return {
+            "transcript_source": "manual_correction" if manual_transcript else "automatic_asr",
+            "audio_quality": audio_quality,
             "language": language,
             "language_detection_score": asr_result.get("language_detection_score"),
             "language_source": asr_result.get("language_source"),
@@ -359,6 +396,12 @@ class SpeechMindPipeline:
             "asr_avg_no_speech_prob": asr_result.get("avg_no_speech_prob"),
             "asr_avg_compression_ratio": asr_result.get("avg_compression_ratio"),
             "meaning_en": english_meaning,
+            "translation_input_text": translation_result.get("translation_input_text"),
+            "transliteration_available": translation_result.get("transliteration_available"),
+            "transliterated_transcript": translation_result.get("transliterated_text"),
+            "transliteration_replacements": translation_result.get("transliteration_replacements", 0),
+            "transliteration_model": translation_result.get("transliteration_model"),
+            "transliteration_error": translation_result.get("transliteration_error"),
             "meaning_en_available": translation_result["available"],
             "meaning_en_source": translation_result["source"],
             "meaning_en_source_language": translation_result["source_language"],
@@ -426,6 +469,13 @@ class SpeechMindPipeline:
             "translation_cache_used": translation_result.get("cache_used"),
             "translator_error": translation_result["error"],
         }
+
+    def run(self, audio_path: str, language_hint: str = None,
+            asr_context: str = None) -> dict:
+        """Backward-compatible one-call API."""
+        prepared = self.prepare(audio_path, language_hint=language_hint,
+                                asr_context=asr_context)
+        return self.analyze_prepared(prepared)
 
 
 if __name__ == "__main__":
