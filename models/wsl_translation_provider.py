@@ -177,25 +177,38 @@ class WslIndicTransProvider:
         if not src_lang or not src_lang.strip():
             raise ValueError("Translation source language is missing.")
 
-        cached = self._translation_cache.get(text, src_lang)
+        try:
+            num_beams = int(os.environ.get("SPEECHMIND_TRANSLATION_BEAMS", "4"))
+        except (TypeError, ValueError):
+            num_beams = 4
+        if num_beams not in {1, 2, 4}:
+            raise ValueError(
+                "SPEECHMIND_TRANSLATION_BEAMS must be one of: 1, 2, 4."
+            )
+        # Cache key includes decoding settings so a 4-beam result is never
+        # returned for a later 2-beam comparison (or vice versa).
+        cache_language_key = f"{src_lang}|beams={num_beams}"
+        cached = self._translation_cache.get(text, cache_language_key)
         if cached is not None:
             return {
                 "translated_text": cached,
                 "model": "ai4bharat/indictrans2-indic-en-dist-200M",
                 "inference_seconds": 0.0,
                 "cache_used": True,
-                "worker_response": {"cache_hit": True},
+                "num_beams": num_beams,
+                "worker_response": {"cache_hit": True, "num_beams": num_beams},
             }
 
         response = self._request({
             "action": "translate",
             "text": text,
             "src_lang": src_lang,
+            "num_beams": num_beams,
         })
         translated = str(response.get("translated_text") or "").strip()
         if not translated:
             raise RuntimeError("IndicTrans2 returned an empty translation.")
-        self._translation_cache.put(text, src_lang, translated)
+        self._translation_cache.put(text, cache_language_key, translated)
         return {
             "translated_text": translated,
             "model": response.get(
@@ -203,6 +216,7 @@ class WslIndicTransProvider:
             ),
             "inference_seconds": response.get("inference_seconds"),
             "cache_used": False,
+            "num_beams": int(response.get("num_beams", num_beams)),
             "worker_response": response,
         }
 
