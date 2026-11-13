@@ -75,6 +75,28 @@ If the selected ASR does not expose a usable transcript-quality score, the appli
 
 Romanized Hindi is not passed directly to IndicTrans2. A transliteration stage is required before that route can be claimed as supported.
 
+## Runtime diagnostics
+
+The isolated Srota worker reports model/runtime initialization separately from
+the timed `model.transcribe` call. Diagnostics expose
+`asr_candidate_initialization_seconds`, `asr_candidate_inference_seconds`,
+and `asr_candidate_worker_request_seconds`. The inference field now excludes
+first-load model initialization.
+
+The IndicTrans2 WSL worker reports initialization, input preparation, sequence
+generation, postprocessing and complete worker-request time separately:
+`translator_initialization_seconds`, `translator_preparation_seconds`,
+`translator_generation_seconds`, `translator_postprocessing_seconds`,
+and `translator_worker_request_seconds`. Existing `translator_inference_seconds`
+remains the end-to-end translation-function duration for backward comparison.
+Older diagnostics used broader timers that included model loading; do not treat
+those historical values as pure generation latency.
+
+The transcript language-span lexicon includes common spoken product/design
+terms (for example, team, college, dashboard, feedback, wireframes, navigation,
+features and prototype). These are conservative lexical hints, not a general
+language-identification model; unknown terms may remain `und`.
+
 ## Emotion branches and fusion
 
 - **Text branch:** MuRIL analyses the original transcript, not the English translation. The route is gated by checkpoint-declared language support.
