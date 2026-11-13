@@ -387,6 +387,12 @@ class SpeechMindPipeline:
             "asr_candidate_inference_seconds": asr_result.get(
                 "asr_candidate_inference_seconds"
             ),
+            "asr_candidate_initialization_seconds": asr_result.get(
+                "asr_candidate_initialization_seconds"
+            ),
+            "asr_candidate_worker_request_seconds": asr_result.get(
+                "asr_candidate_worker_request_seconds"
+            ),
             "asr_context_terms": asr_result.get("asr_context_terms", ""),
             "asr_context_source": asr_result.get("asr_context_source", "none"),
             "asr_context_probe_seconds": asr_result.get(
