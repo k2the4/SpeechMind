@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+from datetime import datetime, timezone
 import random
 import statistics
 import sys
@@ -375,7 +376,12 @@ def main() -> int:
              "When omitted, the newest data/benchmarks/full_pipeline/run-*/predictions.csv is used.",
     )
     parser.add_argument("--audio-root", type=Path, default=DATA_ROOT)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Default: data/hiacc/benchmarks/paired_asr/run-<UTC timestamp>.",
+    )
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-per-speaker", type=int, default=1)
@@ -384,6 +390,9 @@ def main() -> int:
     parser.add_argument("--skip-indicconformer", action="store_true")
     parser.add_argument("--skip-srota", action="store_true")
     args = parser.parse_args()
+    if args.output_dir is None:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        args.output_dir = DEFAULT_OUTPUT / f"run-{timestamp}"
 
     started = time.perf_counter()
     recognizer = None
