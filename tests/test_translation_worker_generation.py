@@ -60,5 +60,27 @@ class TranslationWorkerGenerationTests(unittest.TestCase):
 
 
 
+    def test_worker_reports_model_initialization_separately_from_generation(self):
+        from pathlib import Path
+
+        source = (
+            Path(__file__).resolve().parents[1] / "scripts" / "indictrans_wsl_worker.py"
+        ).read_text(encoding="utf-8")
+        function_start = source.index("def translate_to_english(")
+        main_start = source.index("def main()", function_start)
+        function = source[function_start:main_start]
+        init_end = function.index("initialization_seconds = time.perf_counter() - initialization_started")
+        prep_start = function.index("preparation_started = time.perf_counter()")
+        generation_start = function.index("generation_started = time.perf_counter()")
+        generation_end = function.index("generation_seconds = time.perf_counter() - generation_started")
+        post_start = function.index("postprocessing_started = time.perf_counter()")
+        self.assertLess(init_end, prep_start)
+        self.assertLess(prep_start, generation_start)
+        self.assertLess(generation_start, generation_end)
+        self.assertLess(generation_end, post_start)
+        self.assertIn('"initialization_seconds": round(initialization_seconds, 3)', function)
+        self.assertIn('"generation_seconds": round(generation_seconds, 3)', function)
+
+
 if __name__ == "__main__":
     unittest.main()
