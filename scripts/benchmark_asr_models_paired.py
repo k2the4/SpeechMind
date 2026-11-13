@@ -177,6 +177,12 @@ def optional_median(values: list[float]) -> float | None:
     return round(statistics.median(values), 3) if values else None
 
 
+def default_run_output_dir(now: datetime | None = None) -> Path:
+    """Return a unique UTC-stamped directory so earlier results are preserved."""
+    timestamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    return DEFAULT_OUTPUT / f"run-{timestamp}"
+
+
 def status_key_for_hypothesis(hypothesis_key: str) -> str:
     suffix = "_hypothesis"
     if not hypothesis_key.endswith(suffix):
@@ -391,8 +397,7 @@ def main() -> int:
     parser.add_argument("--skip-srota", action="store_true")
     args = parser.parse_args()
     if args.output_dir is None:
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        args.output_dir = DEFAULT_OUTPUT / f"run-{timestamp}"
+        args.output_dir = default_run_output_dir()
 
     started = time.perf_counter()
     recognizer = None
