@@ -238,12 +238,22 @@ class TextEmotionClassifier:
                 for index, label in enumerate(labels)
             }
             formatted = format_multilabel_scores(scores, self.thresholds)
+            decision_thresholds = {
+                label: float(self.thresholds.get(label, 0.5))
+                for label in labels
+            }
+            active_emotions = [
+                label for label, score in scores.items()
+                if score >= decision_thresholds[label]
+            ]
             return {
                 "emotion": formatted["emotion"],
                 "confidence": float(formatted["confidence"]),
                 "distribution": formatted["distribution"],
                 "secondary_emotions": formatted["secondary_emotions"],
                 "multi_label_scores": formatted["multi_label_scores"],
+                "decision_thresholds": decision_thresholds,
+                "active_emotions": active_emotions,
                 "available": True,
                 "reason": None,
                 "model_source": model_source,
