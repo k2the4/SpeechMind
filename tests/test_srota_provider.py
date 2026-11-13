@@ -1,7 +1,10 @@
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
+
+import numpy as np
 
 from models.srota_provider import SrotaASRProvider, has_mixed_devanagari_latin
 
@@ -16,6 +19,67 @@ class SrotaScriptDetectionTests(unittest.TestCase):
     def test_does_not_classify_pure_english_as_mixed(self):
         self.assertFalse(has_mixed_devanagari_latin("I like this story"))
 
+
+
+
+class SrotaLongAudioChunkingTests(unittest.TestCase):
+    def test_long_audio_chunks_stay_under_model_limit_with_overlap(self):
+        sample_rate = 16000
+        waveform = np.zeros(int(32.2 * sample_rate), dtype=np.float32)
+        ranges = SrotaASRProvider._chunk_audio(waveform, sample_rate)
+        self.assertEqual(len(ranges), 2)
+        self.assertTrue(all(
+            end - start <= int(SrotaASRProvider.MAX_CLIP_SECONDS * sample_rate)
+            for start, end in ranges
+        ))
+        self.assertEqual(ranges[0][0], 0)
+        self.assertEqual(ranges[1][0], int(26 * sample_rate))
+        self.assertEqual(ranges[-1][1], waveform.size)
+
+    def test_chunk_transcripts_remove_repeated_overlap_words(self):
+        merged = SrotaASRProvider._merge_chunk_transcripts([
+            "कल हमारी team ने college project",
+            "ने college project के लिए नया dashboard",
+        ])
+        self.assertEqual(
+            merged,
+            "कल हमारी team ने college project के लिए नया dashboard",
+        )
+
+    def test_long_audio_is_transcribed_in_multiple_chunks(self):
+        provider = SrotaASRProvider()
+        provider.transcribe_file = mock.Mock(side_effect=[
+            {
+                "transcript": "कल हमारी team ने college project",
+                "inference_seconds": 1.0,
+                "worker_initialization_seconds": 2.0,
+                "worker_request_seconds": 3.0,
+                "worker_response": {"device": "cpu"},
+            },
+            {
+                "transcript": "ने college project के लिए नया dashboard",
+                "inference_seconds": 0.5,
+                "worker_initialization_seconds": 0.0,
+                "worker_request_seconds": 0.6,
+                "worker_response": {"device": "cpu"},
+            },
+        ])
+        try:
+            result = provider.transcribe_audio(
+                np.zeros(int(32.2 * 16000), dtype=np.float32),
+                sample_rate=16000,
+            )
+        finally:
+            provider.close()
+        self.assertEqual(provider.transcribe_file.call_count, 2)
+        self.assertEqual(result["chunk_count"], 2)
+        self.assertEqual(
+            result["transcript"],
+            "कल हमारी team ने college project के लिए नया dashboard",
+        )
+        self.assertEqual(result["inference_seconds"], 1.5)
+        self.assertEqual(result["worker_initialization_seconds"], 2.0)
+        self.assertEqual(result["worker_request_seconds"], 3.6)
 
 
 
