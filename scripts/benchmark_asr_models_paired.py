@@ -487,13 +487,20 @@ def main() -> int:
             }
 
             if not args.skip_srota:
-                context, context_source, probe_seconds, probe_transcript = (
-                    recognizer._infer_srota_context(audio)
-                )
+                (
+                    context,
+                    context_source,
+                    probe_seconds,
+                    probe_transcript,
+                    probe_language,
+                    probe_language_score,
+                ) = recognizer._infer_srota_context(audio)
                 output["srota_context_terms"] = context
                 output["srota_context_source"] = context_source
                 output["srota_context_probe_seconds"] = round(float(probe_seconds or 0.0), 3)
                 output["srota_context_probe_transcript"] = probe_transcript
+                output["srota_context_probe_language"] = probe_language
+                output["srota_context_probe_language_score"] = probe_language_score
 
                 variant_results, shared_no_context_call = run_srota_variants(
                     srota_provider, audio, context
