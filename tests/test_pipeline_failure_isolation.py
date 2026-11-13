@@ -10,6 +10,9 @@ from unittest.mock import patch
 # factories with deterministic fakes and exercises the real orchestration code.
 _audio_module = types.ModuleType("utils.audio_utils")
 _audio_module.preprocess = lambda _path: [0.1, 0.2, 0.1]
+_audio_module.preprocess_with_quality = lambda _path: (
+    [0.1, 0.2, 0.1], {"status": "good", "duration_seconds": 1.0, "flags": []}
+)
 _asr_module = types.ModuleType("models.asr")
 _asr_module.SpeechRecognizer = object
 _text_module = types.ModuleType("models.text_emotion")
@@ -70,8 +73,11 @@ class PipelineFailureIsolationTests(unittest.TestCase):
             patch.object(pipeline_module, "TextEmotionClassifier", text_factory),
             patch.object(pipeline_module, "VoiceEmotionRecognizer", voice_factory),
             patch.object(
-                pipeline_module, "preprocess",
-                return_value=[0.1, 0.2, 0.1]
+                pipeline_module, "preprocess_with_quality",
+                return_value=(
+                    [0.1, 0.2, 0.1],
+                    {"status": "good", "duration_seconds": 1.0, "flags": []},
+                )
             ),
         ):
             pipeline = pipeline_module.SpeechMindPipeline(load_translator=False)
@@ -149,6 +155,49 @@ class PipelineFailureIsolationTests(unittest.TestCase):
         self.assertIsNone(result["confidence"])
         self.assertFalse(result["text_branch_available"])
         self.assertFalse(result["voice_branch_available"])
+
+
+    def test_transcript_correction_does_not_repeat_asr_or_voice(self):
+        class CountingASR:
+            def __init__(self): self.calls = 0
+            def transcribe(self, audio, language_hint=None):
+                self.calls += 1
+                return {"transcript": "I am happy today", "language": "en",
+                        "quality_score": 0.9, "asr_model": "fake-asr"}
+
+        asr = CountingASR()
+        voice_calls, text_calls = [], []
+        class Text(FakeTextEmotion):
+            def predict(self, transcript, language):
+                text_calls.append(transcript)
+                return super().predict(transcript, language)
+        class Voice(FakeVoiceEmotion):
+            def predict(self, audio):
+                voice_calls.append(True)
+                return super().predict(audio)
+
+        with (
+            patch.object(pipeline_module, "SpeechRecognizer", return_value=asr),
+            patch.object(pipeline_module, "TextEmotionClassifier", Text),
+            patch.object(pipeline_module, "VoiceEmotionRecognizer", Voice),
+            patch.object(pipeline_module, "preprocess_with_quality",
+                         return_value=([0.1, 0.2, 0.1],
+                         {"status": "good", "duration_seconds": 1.0, "flags": []})),
+        ):
+            pipeline = pipeline_module.SpeechMindPipeline(load_translator=False)
+            prepared = pipeline.prepare("unused.wav")
+            first = pipeline.analyze_prepared(prepared)
+            corrected = pipeline.analyze_prepared(
+                prepared, transcript_override="I am genuinely happy today"
+            )
+        self.assertEqual(asr.calls, 1)
+        self.assertEqual(len(voice_calls), 1)
+        self.assertEqual(first["transcript_source"], "automatic_asr")
+        self.assertEqual(corrected["transcript_source"], "manual_correction")
+        self.assertEqual(corrected["transcript"], "I am genuinely happy today")
+        self.assertEqual(corrected["asr_quality_status"], "manual_review")
+        self.assertIsNone(corrected["asr_quality_score"])
+        self.assertEqual(text_calls[-1], "I am genuinely happy today")
 
 
 if __name__ == "__main__":
