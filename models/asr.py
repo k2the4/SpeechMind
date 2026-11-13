@@ -300,6 +300,12 @@ class SpeechRecognizer:
                     "asr_model", SrotaASRProvider.MODEL_NAME
                 ),
                 "asr_candidate_inference_seconds": result.get("inference_seconds"),
+                "asr_candidate_initialization_seconds": result.get(
+                    "worker_initialization_seconds"
+                ),
+                "asr_candidate_worker_request_seconds": result.get(
+                    "worker_request_seconds"
+                ),
                 "asr_context_terms": context or "",
                 "asr_context_source": context_source,
                 "asr_context_probe_seconds": context_probe_seconds,
