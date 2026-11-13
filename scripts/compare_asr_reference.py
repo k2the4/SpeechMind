@@ -373,7 +373,7 @@ def main() -> int:
             writer.writeheader()
         writer.writerows(rows)
 
-    print(f"\\n[ASR benchmark] Saved {len(rows)} model results to: {output_path}")
+    print(f"\n[ASR benchmark] Saved {len(rows)} model results to: {output_path}")
     print("[ASR benchmark] Lower WER/CER is better. These are diagnostic clip-level scores.")
     print("[ASR benchmark] Production routing was not changed.")
     return 0
