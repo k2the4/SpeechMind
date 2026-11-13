@@ -39,5 +39,25 @@ class WslTranslationCacheTests(unittest.TestCase):
         self.assertEqual(request.call_count, 2)
 
 
+    def test_cache_is_separate_for_each_beam_setting(self):
+        provider = WslIndicTransProvider(project_root=".")
+        request = Mock(side_effect=[
+            {"ok": True, "translated_text": "Four beam", "num_beams": 4},
+            {"ok": True, "translated_text": "Two beam", "num_beams": 2},
+        ])
+        provider._request = request
+
+        with unittest.mock.patch.dict("os.environ", {"SPEECHMIND_TRANSLATION_BEAMS": "4"}):
+            four = provider.translate_to_english("same input", "hin_Deva")
+        with unittest.mock.patch.dict("os.environ", {"SPEECHMIND_TRANSLATION_BEAMS": "2"}):
+            two = provider.translate_to_english("same input", "hin_Deva")
+
+        self.assertEqual(four["num_beams"], 4)
+        self.assertEqual(two["num_beams"], 2)
+        self.assertFalse(two["cache_used"])
+        self.assertEqual(request.call_count, 2)
+
+
+
 if __name__ == "__main__":
     unittest.main()
