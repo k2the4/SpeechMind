@@ -101,6 +101,7 @@ ENGLISH_WORDS = {
     "off", "on", "one", "only", "or", "other", "our", "out", "over", "people",
     "please", "project", "really", "say", "see", "she", "should", "so", "some",
     "something", "story", "take", "than", "that", "the", "their", "them", "then",
+    "design", "designer", "layout", "sure", "interface", "figma", "python",
     "there", "these", "they", "thing", "think", "this", "those", "thought", "time", "to",
     "today", "too", "up", "us", "use", "very", "was", "we", "were", "what",
     "when", "where", "which", "who", "will", "with", "work", "would", "yeah",
