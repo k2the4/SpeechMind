@@ -66,19 +66,21 @@ def get_components():
 
 
 
-def generate_translation_without_cache(model, inputs, torch):
-    """Run IndicTrans2 with the known-compatible no-cache generation path."""
+def generate_translation_without_cache(model, inputs, torch, num_beams: int = 4):
+    """Run IndicTrans2 without KV cache; allow controlled 1/2/4-beam CPU trials."""
+    if num_beams not in {1, 2, 4}:
+        raise ValueError("num_beams must be one of: 1, 2, 4.")
     with torch.inference_mode():
         return model.generate(
             **inputs,
             use_cache=False,
             min_length=0,
             max_length=256,
-            num_beams=4,
+            num_beams=num_beams,
             num_return_sequences=1,
         )
 
-def translate_to_english(text: str, src_lang: str) -> str:
+def translate_to_english(text: str, src_lang: str, num_beams: int = 4) -> str:
     stage = "input validation"
     try:
         if not text.strip():
@@ -113,7 +115,9 @@ def translate_to_english(text: str, src_lang: str) -> str:
         inputs = inputs.to("cpu")
 
         stage = "sequence generation"
-        generated = generate_translation_without_cache(model, inputs, torch)
+        generated = generate_translation_without_cache(
+            model, inputs, torch, num_beams=num_beams
+        )
 
         stage = "token decoding"
         decoded = tokenizer.batch_decode(
@@ -147,15 +151,20 @@ def main() -> int:
             if action != "translate":
                 raise ValueError(f"Unknown worker action: {action}")
             started = time.perf_counter()
+            num_beams = int(request.get("num_beams", 4))
+            if num_beams not in {1, 2, 4}:
+                raise ValueError("num_beams must be one of: 1, 2, 4.")
             translated = translate_to_english(
                 str(request.get("text") or ""),
                 str(request.get("src_lang") or ""),
+                num_beams=num_beams,
             )
             emit({
                 "ok": True,
                 "translated_text": translated,
                 "inference_seconds": round(time.perf_counter() - started, 3),
                 "model": MODEL_NAME,
+                "num_beams": num_beams,
                 "cache_used": False,
             })
         except Exception as error:
