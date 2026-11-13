@@ -72,6 +72,9 @@ if audio_source is not None:
                 st.session_state["speechmind_prepared"] = prepared
                 st.session_state["speechmind_result"] = result
                 st.session_state["speechmind_model_init_time"] = model_init_time
+                st.session_state["speechmind_edit_version"] = (
+                    st.session_state.get("speechmind_edit_version", 0) + 1
+                )
         except Exception as error:
             st.error(f"Analysis failed: {error}")
             st.exception(error)
@@ -99,7 +102,8 @@ if audio_source is not None:
         if st.button(
             "Apply correction and rerun meaning + text analysis",
             key=f"speechmind_apply_{audio_digest}",
-            disabled=not transcript_changed or st.session_state.get("speechmind_prepared") is None,
+            disabled=(not transcript_changed or not edited_transcript.strip()
+                       or st.session_state.get("speechmind_prepared") is None),
         ):
             pipeline = get_pipeline()
             corrected = pipeline.analyze_prepared(
