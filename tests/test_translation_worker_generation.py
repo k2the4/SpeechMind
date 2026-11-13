@@ -44,5 +44,21 @@ class TranslationWorkerGenerationTests(unittest.TestCase):
             )
 
 
+    def test_two_beam_mode_is_supported_without_enabling_kv_cache(self):
+        model = FakeModel()
+        generate_translation_without_cache(
+            model, {"input_ids": [1]}, FakeTorch(), num_beams=2
+        )
+        self.assertEqual(model.calls[0]["num_beams"], 2)
+        self.assertFalse(model.calls[0]["use_cache"])
+
+    def test_unsupported_beam_count_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "num_beams"):
+            generate_translation_without_cache(
+                FakeModel(), {"input_ids": [1]}, FakeTorch(), num_beams=3
+            )
+
+
+
 if __name__ == "__main__":
     unittest.main()
