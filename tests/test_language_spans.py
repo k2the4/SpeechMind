@@ -156,6 +156,26 @@ class LanguageSpanTests(unittest.TestCase):
         self.assertIn("wireframe", english_tokens)
         self.assertIn("prototype", english_tokens)
 
+    def test_common_hinglish_product_terms_are_classified_as_english(self):
+        text = (
+            "team college dashboard users feedback frames navigation simple "
+            "important features test final improve"
+        )
+        result = annotate_language_spans(text, "hi")
+        english_tokens = {
+            token
+            for span in result["language_spans"]
+            for token in span["tokens"]
+            if span["language"] == "en"
+        }
+        for term in (
+            "team", "college", "dashboard", "users", "feedback", "frames",
+            "navigation", "simple", "important", "features", "test", "final",
+            "improve",
+        ):
+            with self.subTest(term=term):
+                self.assertIn(term, english_tokens)
+
 
 
 if __name__ == "__main__":
