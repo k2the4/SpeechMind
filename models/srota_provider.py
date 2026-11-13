@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import queue
 import subprocess
 import tempfile
@@ -244,6 +245,49 @@ class SrotaASRProvider:
             "worker_response": response,
         }
 
+    @staticmethod
+    def _chunk_audio(
+        waveform: np.ndarray,
+        sample_rate: int,
+        chunk_seconds: float = 28.0,
+        overlap_seconds: float = 2.0,
+    ) -> list[tuple[int, int]]:
+        """Return sample ranges no longer than the model limit, with overlap."""
+        chunk_samples = max(1, int(chunk_seconds * sample_rate))
+        overlap_samples = max(0, int(overlap_seconds * sample_rate))
+        step_samples = max(1, chunk_samples - overlap_samples)
+        ranges = []
+        start = 0
+        while start < waveform.size:
+            end = min(waveform.size, start + chunk_samples)
+            ranges.append((start, end))
+            if end >= waveform.size:
+                break
+            start += step_samples
+        return ranges
+
+    @staticmethod
+    def _merge_chunk_transcripts(transcripts: list[str]) -> str:
+        """Join chunk outputs while removing duplicated words from overlap."""
+        merged: list[str] = []
+        for transcript in transcripts:
+            words = re.findall(r"\\w+", str(transcript or ""), flags=re.UNICODE)
+            if not words:
+                continue
+            normalized = [word.casefold() for word in words]
+            overlap = 0
+            max_overlap = min(len(merged), len(words), 20)
+            for size in range(max_overlap, 1, -1):
+                if [word.casefold() for word in merged[-size:]] == normalized[:size]:
+                    overlap = size
+                    break
+            if overlap == 0 and merged and words:
+                # A single long technical term can be a complete overlap on its own.
+                if len(merged[-1]) >= 8 and merged[-1].casefold() == normalized[0]:
+                    overlap = 1
+            merged.extend(words[overlap:])
+        return " ".join(merged)
+
     def transcribe_audio(
         self,
         audio: np.ndarray,
@@ -255,26 +299,80 @@ class SrotaASRProvider:
             raise ValueError("Srota expects non-empty mono audio.")
         if sample_rate <= 0:
             raise ValueError("sample_rate must be positive.")
-        duration = waveform.size / float(sample_rate)
-        if duration > self.MAX_CLIP_SECONDS:
-            raise ValueError(
-                f"Srota currently accepts clips up to {self.MAX_CLIP_SECONDS:.0f} "
-                f"seconds; received {duration:.1f} seconds."
-            )
         if not np.isfinite(waveform).all():
             raise ValueError("Audio contains non-finite samples.")
 
-        handle = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        temp_path = Path(handle.name)
-        handle.close()
-        try:
-            sf.write(str(temp_path), waveform, sample_rate, subtype="PCM_16")
-            return self.transcribe_file(temp_path, context=context)
-        finally:
+        duration = waveform.size / float(sample_rate)
+        if duration <= self.MAX_CLIP_SECONDS:
+            handle = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            temp_path = Path(handle.name)
+            handle.close()
             try:
-                temp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+                sf.write(str(temp_path), waveform, sample_rate, subtype="PCM_16")
+                result = self.transcribe_file(temp_path, context=context)
+                result["chunk_count"] = 1
+                result["audio_duration_seconds"] = round(duration, 3)
+                return result
+            finally:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        # Keep every request below the Qwen3-ASR 30-second limit. A two-second
+        # overlap protects words at boundaries; duplicate words are removed
+        # when the chunk transcripts are stitched back together.
+        ranges = self._chunk_audio(waveform, sample_rate)
+        chunk_results = []
+        transcripts = []
+        for chunk_index, (start, end) in enumerate(ranges, start=1):
+            chunk = waveform[start:end]
+            handle = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            temp_path = Path(handle.name)
+            handle.close()
+            try:
+                sf.write(str(temp_path), chunk, sample_rate, subtype="PCM_16")
+                result = self.transcribe_file(temp_path, context=context)
+            finally:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            transcripts.append(result["transcript"])
+            chunk_results.append({
+                "chunk_index": chunk_index,
+                "start_seconds": round(start / float(sample_rate), 3),
+                "end_seconds": round(end / float(sample_rate), 3),
+                "duration_seconds": round((end - start) / float(sample_rate), 3),
+                "transcript": result["transcript"],
+                "inference_seconds": result.get("inference_seconds"),
+                "worker_initialization_seconds": result.get(
+                    "worker_initialization_seconds"
+                ),
+                "worker_request_seconds": result.get("worker_request_seconds"),
+            })
+
+        last_response = chunk_results and result.get("worker_response", {})
+        return {
+            "transcript": self._merge_chunk_transcripts(transcripts),
+            "asr_model": self.model_name,
+            "inference_seconds": round(sum(
+                float(item.get("inference_seconds") or 0.0)
+                for item in chunk_results
+            ), 3),
+            "worker_initialization_seconds": round(sum(
+                float(item.get("worker_initialization_seconds") or 0.0)
+                for item in chunk_results
+            ), 3),
+            "worker_request_seconds": round(sum(
+                float(item.get("worker_request_seconds") or 0.0)
+                for item in chunk_results
+            ), 3),
+            "worker_response": last_response,
+            "chunk_count": len(chunk_results),
+            "chunk_results": chunk_results,
+            "audio_duration_seconds": round(duration, 3),
+        }
 
     def close(self) -> None:
         process = self._process
