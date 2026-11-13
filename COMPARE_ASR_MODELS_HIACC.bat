@@ -29,6 +29,6 @@ if errorlevel 1 (
 
 echo.
 echo Paired ASR benchmark finished.
-echo See data\hiacc\benchmarks\paired_asr\summary.json
+echo See data\hiacc\benchmarks\paired_asr\run-<timestamp>\summary.json
 echo and predictions.csv.
 pause
