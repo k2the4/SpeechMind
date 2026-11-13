@@ -67,6 +67,21 @@ def error_rates(reference: str, hypothesis: str) -> dict[str, float]:
     return {"WER": wer, "CER": cer}
 
 
+def detect_whisper_language(audio: np.ndarray, model) -> tuple[str, float, dict]:
+    """Run Whisper's encoder language classifier without autoregressive decoding."""
+    padded = whisper.pad_or_trim(audio)
+    mel = whisper.log_mel_spectrogram(
+        padded, n_mels=model.dims.n_mels
+    ).to(model.device)
+    _, probabilities = model.detect_language(mel)
+    language = max(probabilities, key=probabilities.get)
+    normalized = {
+        str(code).lower().strip(): float(score)
+        for code, score in probabilities.items()
+    }
+    return str(language).lower().strip(), float(probabilities[language]), normalized
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--audio", required=False, help="Path to the reference WAV/audio file")
@@ -188,7 +203,14 @@ def main() -> int:
             print("[ASR benchmark] Loading Whisper-small for automatic vocabulary scouting...")
             whisper_model = whisper.load_model("small", device=scout_device)
         context_info = infer_hinglish_context_from_audio_tail(
-            audio, whisper_model, sample_rate=16000, tail_seconds=3.0
+            audio,
+            whisper_model,
+            sample_rate=16000,
+            tail_seconds=3.0,
+            language_detector=lambda tail: detect_whisper_language(
+                tail, whisper_model
+            ),
+            min_english_score=0.55,
         )
         selected_context = context_info["context"] or None
     print(
