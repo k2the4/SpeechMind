@@ -42,6 +42,7 @@ class Translator:
         self.model_name = MODEL_NAME
         self.last_inference_seconds = None
         self.last_cache_used = None
+        self.last_num_beams = None
 
     def to_english(self, text: str, src_lang: str) -> str:
         """Translate original Hindi/Indic text to English without mutating it."""
@@ -63,4 +64,5 @@ class Translator:
         self.loaded = True
         self.last_inference_seconds = result.get("inference_seconds")
         self.last_cache_used = result.get("cache_used")
+        self.last_num_beams = result.get("num_beams")
         return translated
