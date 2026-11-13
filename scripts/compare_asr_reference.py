@@ -46,7 +46,7 @@ CSV_FIELDS = [
 
 def normalize_text(text: str) -> str:
     text = unicodedata.normalize("NFC", str(text or "")).casefold()
-    text = re.sub(r"[^\\w\\s]", " ", text, flags=re.UNICODE)
+    text = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE)
     return " ".join(text.split())
 
 
@@ -233,7 +233,7 @@ def main() -> int:
     )
     try:
         for audio_path, speaker in zip(audio_paths, speakers):
-            print(f"\\n[ASR benchmark] Speaker: {speaker}")
+            print(f"\n[ASR benchmark] Speaker: {speaker}")
             print(f"[ASR benchmark] Audio: {audio_path}")
             print("[ASR benchmark] Loading the same 16 kHz mono waveform for all models...")
             audio = preprocess(str(audio_path))
