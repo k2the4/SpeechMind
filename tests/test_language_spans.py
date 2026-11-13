@@ -143,6 +143,19 @@ class LanguageSpanTests(unittest.TestCase):
         self.assertIn("design", english_tokens)
         self.assertFalse(result["romanized_hindi_detected"])
 
+    def test_wireframe_and_prototype_terms_are_classified_as_english(self):
+        result = annotate_language_spans(
+            "I am not sure about the wireframe prototype", "en"
+        )
+        english_tokens = [
+            token
+            for span in result["language_spans"]
+            for token in span["tokens"]
+            if span["language"] == "en"
+        ]
+        self.assertIn("wireframe", english_tokens)
+        self.assertIn("prototype", english_tokens)
+
 
 
 if __name__ == "__main__":
