@@ -1,6 +1,8 @@
 """Small, dependency-light routing signals for the ASR cascade."""
 from __future__ import annotations
 
+import os
+
 from models.language_spans import (
     annotate_language_spans,
     STRONG_ROMANIZED_HINDI_WORDS,
@@ -41,6 +43,13 @@ def whisper_transcript_suggests_hinglish(transcript: str,
         len(romanized_tokens) >= 2
         or bool(romanized_tokens & STRONG_ROMANIZED_HINDI_WORDS)
     )
+
+
+def automatic_context_scout_enabled(value: str | None = None) -> bool:
+    """Return whether the extra Whisper tail vocabulary scout is opted in."""
+    if value is None:
+        value = os.environ.get("SPEECHMIND_ENABLE_ASR_CONTEXT_SCOUT", "0")
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def audio_language_suggests_hindi(
