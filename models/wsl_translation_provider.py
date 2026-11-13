@@ -16,6 +16,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from utils.translation_cache import TranslationResultCache
+
 
 class WslIndicTransProvider:
     VENV_PATH = "~/.venvs/speechmind-indictrans"
@@ -35,6 +37,7 @@ class WslIndicTransProvider:
         self._responses: queue.Queue[str | None] = queue.Queue()
         self._lock = threading.Lock()
         self._wsl_project_root: str | None = None
+        self._translation_cache = TranslationResultCache(max_items=64)
         atexit.register(self.close)
 
     @property
@@ -173,6 +176,17 @@ class WslIndicTransProvider:
             raise ValueError("Translation input is empty.")
         if not src_lang or not src_lang.strip():
             raise ValueError("Translation source language is missing.")
+
+        cached = self._translation_cache.get(text, src_lang)
+        if cached is not None:
+            return {
+                "translated_text": cached,
+                "model": "ai4bharat/indictrans2-indic-en-dist-200M",
+                "inference_seconds": 0.0,
+                "cache_used": True,
+                "worker_response": {"cache_hit": True},
+            }
+
         response = self._request({
             "action": "translate",
             "text": text,
@@ -181,13 +195,14 @@ class WslIndicTransProvider:
         translated = str(response.get("translated_text") or "").strip()
         if not translated:
             raise RuntimeError("IndicTrans2 returned an empty translation.")
+        self._translation_cache.put(text, src_lang, translated)
         return {
             "translated_text": translated,
             "model": response.get(
                 "model", "ai4bharat/indictrans2-indic-en-dist-200M"
             ),
             "inference_seconds": response.get("inference_seconds"),
-            "cache_used": response.get("cache_used"),
+            "cache_used": False,
             "worker_response": response,
         }
 
