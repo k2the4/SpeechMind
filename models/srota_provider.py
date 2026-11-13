@@ -271,19 +271,26 @@ class SrotaASRProvider:
         """Join chunk outputs while removing duplicated words from overlap."""
         merged: list[str] = []
         for transcript in transcripts:
-            words = re.findall(r"\w+", str(transcript or ""), flags=re.UNICODE)
+            words = str(transcript or "").split()
             if not words:
                 continue
-            normalized = [word.casefold() for word in words]
+            normalized = [
+                re.sub(r"[^\w]", "", word, flags=re.UNICODE).casefold()
+                for word in words
+            ]
+            merged_normalized = [
+                re.sub(r"[^\w]", "", word, flags=re.UNICODE).casefold()
+                for word in merged
+            ]
             overlap = 0
             max_overlap = min(len(merged), len(words), 20)
             for size in range(max_overlap, 1, -1):
-                if [word.casefold() for word in merged[-size:]] == normalized[:size]:
+                if merged_normalized[-size:] == normalized[:size]:
                     overlap = size
                     break
             if overlap == 0 and merged and words:
                 # A single long technical term can be a complete overlap on its own.
-                if len(merged[-1]) >= 8 and merged[-1].casefold() == normalized[0]:
+                if len(merged_normalized[-1]) >= 8 and merged_normalized[-1] == normalized[0]:
                     overlap = 1
             merged.extend(words[overlap:])
         return " ".join(merged)
