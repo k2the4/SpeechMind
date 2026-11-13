@@ -492,6 +492,26 @@ class SpeechMindPipeline:
                 getattr(self.translator, "last_inference_seconds", None)
                 if self.translator is not None else None
             ),
+            "translator_initialization_seconds": (
+                getattr(self.translator, "last_initialization_seconds", None)
+                if self.translator is not None else None
+            ),
+            "translator_preparation_seconds": (
+                getattr(self.translator, "last_preparation_seconds", None)
+                if self.translator is not None else None
+            ),
+            "translator_generation_seconds": (
+                getattr(self.translator, "last_generation_seconds", None)
+                if self.translator is not None else None
+            ),
+            "translator_postprocessing_seconds": (
+                getattr(self.translator, "last_postprocessing_seconds", None)
+                if self.translator is not None else None
+            ),
+            "translator_worker_request_seconds": (
+                getattr(self.translator, "last_worker_request_seconds", None)
+                if self.translator is not None else None
+            ),
             "translation_cache_used": translation_result.get("cache_used"),
             "translation_num_beams": (
                 getattr(self.translator, "last_num_beams", None)
