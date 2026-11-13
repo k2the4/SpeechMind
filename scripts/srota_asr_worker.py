@@ -199,24 +199,38 @@ def main() -> int:
                 audio_path = request.get("audio_path")
                 if not audio_path:
                     raise ValueError("Transcription request is missing audio_path.")
-                started = time.perf_counter()
+
+                worker_request_started = time.perf_counter()
                 torch = get_torch()
                 model_name = str(
                     request.get("model_name") or "moorlee/qwen3-asr-0.6b-hinglish"
                 ).strip()
                 model = get_srota_model(model_name)
+                worker_initialization_seconds = (
+                    time.perf_counter() - worker_request_started
+                )
+
+                # Start the inference timer only after imports, runtime setup and
+                # model loading. The previous timer included all of those costs.
+                inference_started = time.perf_counter()
                 context = str(request.get("context") or "").strip()
                 with redirect_stdout(StringIO()), torch.inference_mode():
                     result = model.transcribe(
                         audio=str(audio_path), language=None, context=context
                     )
+                inference_seconds = time.perf_counter() - inference_started
+                worker_request_seconds = time.perf_counter() - worker_request_started
                 transcript = extract_text(result)
                 if not transcript:
                     raise RuntimeError("Srota returned an empty transcript.")
                 emit({
                     "ok": True,
                     "transcript": transcript,
-                    "inference_seconds": round(time.perf_counter() - started, 3),
+                    "inference_seconds": round(inference_seconds, 3),
+                    "worker_initialization_seconds": round(
+                        worker_initialization_seconds, 3
+                    ),
+                    "worker_request_seconds": round(worker_request_seconds, 3),
                     "model": model_name,
                     "device": _srota_device,
                     "torch_threads": _srota_torch_threads,
