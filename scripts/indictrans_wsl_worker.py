@@ -15,6 +15,7 @@ for stream in (sys.stdin, sys.stdout, sys.stderr):
 MODEL_NAME = "ai4bharat/indictrans2-indic-en-dist-200M"
 _torch = None
 _components = None
+_last_translation_timings = {}
 
 
 def emit(payload: dict) -> None:
@@ -81,6 +82,12 @@ def generate_translation_without_cache(model, inputs, torch, num_beams: int = 4)
         )
 
 def translate_to_english(text: str, src_lang: str, num_beams: int = 4) -> str:
+    global _last_translation_timings
+    request_started = time.perf_counter()
+    initialization_seconds = 0.0
+    preparation_seconds = 0.0
+    generation_seconds = 0.0
+    postprocessing_seconds = 0.0
     stage = "input validation"
     try:
         if not text.strip():
@@ -89,9 +96,14 @@ def translate_to_english(text: str, src_lang: str, num_beams: int = 4) -> str:
             raise ValueError("Translation source language is missing.")
 
         stage = "loading IndicTrans2 model/tokenizer"
+        components_were_loaded = _components is not None
+        initialization_started = time.perf_counter()
         torch = get_torch()
         tokenizer, model, processor = get_components()
+        if not components_were_loaded:
+            initialization_seconds = time.perf_counter() - initialization_started
 
+        preparation_started = time.perf_counter()
         stage = "IndicProcessor preprocessing"
         prepared = processor.preprocess_batch(
             [text], src_lang=src_lang, tgt_lang="eng_Latn"
@@ -113,12 +125,16 @@ def translate_to_english(text: str, src_lang: str, num_beams: int = 4) -> str:
         if "attention_mask" not in inputs or inputs["attention_mask"] is None:
             raise RuntimeError("Tokenizer did not return attention_mask.")
         inputs = inputs.to("cpu")
+        preparation_seconds = time.perf_counter() - preparation_started
 
         stage = "sequence generation"
+        generation_started = time.perf_counter()
         generated = generate_translation_without_cache(
             model, inputs, torch, num_beams=num_beams
         )
+        generation_seconds = time.perf_counter() - generation_started
 
+        postprocessing_started = time.perf_counter()
         stage = "token decoding"
         decoded = tokenizer.batch_decode(
             generated,
@@ -133,8 +149,23 @@ def translate_to_english(text: str, src_lang: str, num_beams: int = 4) -> str:
         result = str(translated[0]).strip() if translated else ""
         if not result:
             raise RuntimeError("IndicTrans2 returned an empty English translation.")
+        postprocessing_seconds = time.perf_counter() - postprocessing_started
+        _last_translation_timings = {
+            "initialization_seconds": round(initialization_seconds, 3),
+            "preparation_seconds": round(preparation_seconds, 3),
+            "generation_seconds": round(generation_seconds, 3),
+            "postprocessing_seconds": round(postprocessing_seconds, 3),
+            "inference_seconds": round(time.perf_counter() - request_started, 3),
+        }
         return result
     except Exception as error:
+        _last_translation_timings = {
+            "initialization_seconds": round(initialization_seconds, 3),
+            "preparation_seconds": round(preparation_seconds, 3),
+            "generation_seconds": round(generation_seconds, 3),
+            "postprocessing_seconds": round(postprocessing_seconds, 3),
+            "inference_seconds": round(time.perf_counter() - request_started, 3),
+        }
         detail = traceback.format_exc()
         raise RuntimeError(
             f"IndicTrans2 stage '{stage}' failed: "
@@ -150,7 +181,7 @@ def main() -> int:
             action = str(request.get("action") or "").lower()
             if action != "translate":
                 raise ValueError(f"Unknown worker action: {action}")
-            started = time.perf_counter()
+            worker_request_started = time.perf_counter()
             num_beams = int(request.get("num_beams", 4))
             if num_beams not in {1, 2, 4}:
                 raise ValueError("num_beams must be one of: 1, 2, 4.")
@@ -159,10 +190,14 @@ def main() -> int:
                 str(request.get("src_lang") or ""),
                 num_beams=num_beams,
             )
+            timings = dict(_last_translation_timings)
             emit({
                 "ok": True,
                 "translated_text": translated,
-                "inference_seconds": round(time.perf_counter() - started, 3),
+                **timings,
+                "worker_request_seconds": round(
+                    time.perf_counter() - worker_request_started, 3
+                ),
                 "model": MODEL_NAME,
                 "num_beams": num_beams,
                 "cache_used": False,
