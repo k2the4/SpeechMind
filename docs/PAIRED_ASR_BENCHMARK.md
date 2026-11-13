@@ -53,6 +53,22 @@ The benchmark writes:
 
 The Srota auto-context vs native comparison is especially important: it tells us whether the 3-second Whisper scout is worth its latency for the measured accuracy change.
 
+## First paired run findings (20 clips)
+
+The first uploaded paired run selected 20 clips (10 adult, 10 children). All model calls completed:
+- Srota with automatic context: 16.58% micro WER / 8.08% micro CER.
+- Srota without context: identical hypotheses and identical scores on all 20 clips.
+- IndicConformer forced Hindi: 38.86% micro WER / 33.56% micro CER overall; it performed much better on the 8 Devanagari-only references (8.45% WER / 4.06% CER) and poorly on mixed-script references (44.33% WER / 39.46% CER).
+- Whisper-small automatic: 52.85% micro WER / 33.33% micro CER.
+- Historical production-router output: 16.06% micro WER / 8.08% micro CER.
+
+The production router selected IndicConformer on 7 of 8 Devanagari-only clips, Srota on all 9 mixed-script clips, and Whisper on all 3 Latin-only clips. On this small sample this is a promising routing pattern, so it was deliberately left unchanged. The three Latin-only examples are too few for a reliable language-wide conclusion.
+
+The first context scout produced no allow-listed terms on any clip (14 tails were classified non-English, 4 had no allow-listed terms, 2 were too short). Auto-context and native Srota hypotheses were therefore identical on all 20 clips. The scout's median was 5.00 seconds, mean 9.53 seconds, 90th percentile 21.91 seconds and maximum 46.69 seconds. This was unnecessary overhead for this sample. The implementation now runs a fast tail-language check first and only transcribes confidently English tails; the paired benchmark also reuses a single Srota call when context is empty. A subsequent paired run is required to measure the real latency reduction.
+
+These results are an in-domain HiACC diagnostic, not unseen-speaker evidence: HiACC's released train/validation/test splits share speakers according to the dataset/model documentation. Do not generalize the 20-clip values to all Indian speakers or languages.
+
+
 ## Decision policy
 
 Do not automatically replace the production router based on a 20- or 40-clip sample. Review:
