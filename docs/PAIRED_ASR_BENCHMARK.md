@@ -102,6 +102,11 @@ WER, CER, inference time, initialization time, elapsed time, device and status.
 The CSV is UTF-8 with BOM for easier opening in Excel. By default the output is
 replaced; pass `--append-csv` to add more recordings to an existing report.
 
+To avoid PowerShell or terminal code-page corruption of Hindi references, save
+the verified reference transcript in a UTF-8 text file and pass
+`--reference-file "path\\to\\reference.txt"` instead of `--reference "..."`.
+The script reads UTF-8 (with or without a BOM) directly from the file.
+
 WER/CER values from different recordings are still affected by speaker, pace,
 recording conditions and content. Do not interpret a two-speaker sample as a
 gender-performance conclusion or as general model-quality evidence.
