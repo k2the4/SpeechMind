@@ -292,7 +292,10 @@ class SrotaASRProvider:
                 # A single long technical term can be a complete overlap on its own.
                 if len(merged_normalized[-1]) >= 8 and merged_normalized[-1] == normalized[0]:
                     overlap = 1
-            if overlap:\n                # Prefer punctuation from the later chunk for the shared words.\n                merged[-overlap:] = words[:overlap]\n            merged.extend(words[overlap:])
+            if overlap:
+                # Prefer punctuation from the later chunk for the shared words.
+                merged[-overlap:] = words[:overlap]
+            merged.extend(words[overlap:])
         return " ".join(merged)
 
     def transcribe_audio(
