@@ -285,6 +285,12 @@ if audio_source is not None:
                     "asr_context_probe_transcript": result.get(
                         "asr_context_probe_transcript"
                     ),
+                    "asr_context_probe_language": result.get(
+                        "asr_context_probe_language"
+                    ),
+                    "asr_context_probe_language_score": result.get(
+                        "asr_context_probe_language_score"
+                    ),
                     "asr_inference_device": result.get("asr_inference_device"),
                     "asr_worker_torch_threads": result.get("asr_worker_torch_threads"),
                     "language_source": result.get("language_source"),
