@@ -129,5 +129,21 @@ class LanguageSpanTests(unittest.TestCase):
         self.assertEqual(result["language_spans"][0]["char_start"], 0)
 
 
+    def test_common_design_vocabulary_is_classified_as_english(self):
+        text = "I am not sure about the layout and design"
+        result = annotate_language_spans(text, "en")
+        english_tokens = [
+            token
+            for span in result["language_spans"]
+            for token in span["tokens"]
+            if span["language"] == "en"
+        ]
+        self.assertIn("sure", english_tokens)
+        self.assertIn("layout", english_tokens)
+        self.assertIn("design", english_tokens)
+        self.assertFalse(result["romanized_hindi_detected"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
