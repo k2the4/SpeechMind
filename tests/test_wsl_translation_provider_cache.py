@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from models.wsl_translation_provider import WslIndicTransProvider
 
@@ -47,7 +47,7 @@ class WslTranslationCacheTests(unittest.TestCase):
         ])
         provider._request = request
 
-        with unittest.mock.patch.dict("os.environ", {"SPEECHMIND_TRANSLATION_BEAMS": "4"}):
+        with patch.dict("os.environ", {"SPEECHMIND_TRANSLATION_BEAMS": "4"}):
             four = provider.translate_to_english("same input", "hin_Deva")
         with unittest.mock.patch.dict("os.environ", {"SPEECHMIND_TRANSLATION_BEAMS": "2"}):
             two = provider.translate_to_english("same input", "hin_Deva")
