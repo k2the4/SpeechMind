@@ -192,7 +192,7 @@ class TextEmotionClassifier:
             "model_source": model_source,
         }
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def predict(self, text: str, language: str = None) -> dict:
         language_code = str(language or "unknown").lower().strip()
         if not text or not text.strip():
