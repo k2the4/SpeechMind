@@ -214,6 +214,10 @@ class SrotaASRProvider:
             "transcript": transcript,
             "asr_model": str(response.get("model") or self.model_name),
             "inference_seconds": response.get("inference_seconds"),
+            "worker_initialization_seconds": response.get(
+                "worker_initialization_seconds"
+            ),
+            "worker_request_seconds": response.get("worker_request_seconds"),
             "worker_response": response,
         }
 
