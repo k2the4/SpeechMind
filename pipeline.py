@@ -470,6 +470,10 @@ class SpeechMindPipeline:
                 if self.translator is not None else None
             ),
             "translation_cache_used": translation_result.get("cache_used"),
+            "translation_num_beams": (
+                getattr(self.translator, "last_num_beams", None)
+                if self.translator is not None else None
+            ),
             "translator_error": translation_result["error"],
         }
 
