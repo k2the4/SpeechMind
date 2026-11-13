@@ -1,0 +1,2 @@
+# Optional local Romanized-Hindi transliteration; not installed by default.
+ai4bharat-transliteration==1.1.3
