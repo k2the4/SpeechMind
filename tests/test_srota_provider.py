@@ -96,7 +96,7 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 " if request.get('action') == 'translate':\n"
                 "  response = {'ok': True, 'translated_text': 'This is our thought about this image.', 'count': count}\n"
                 " else:\n"
-                "  response = {'ok': True, 'transcript': 'मेरा image है', 'count': count, 'context': request.get('context'), 'model_name': request.get('model_name')}\n"
+                "  response = {'ok': True, 'transcript': 'मेरा image है', 'count': count, 'context': request.get('context'), 'model_name': request.get('model_name'), 'inference_seconds': 1.25, 'worker_initialization_seconds': 2.5, 'worker_request_seconds': 3.75}\n"
                 " print(json.dumps(response, ensure_ascii=True), flush=True)\n",
                 encoding="utf-8",
             )
@@ -114,6 +114,9 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 first = provider.transcribe_file(audio)
                 second = provider.transcribe_file(audio, context="layout, Figma")
                 self.assertEqual(first["transcript"], "मेरा image है")
+                self.assertEqual(first["inference_seconds"], 1.25)
+                self.assertEqual(first["worker_initialization_seconds"], 2.5)
+                self.assertEqual(first["worker_request_seconds"], 3.75)
                 self.assertEqual(first["asr_model"], provider.CONVERSATIONAL_MODEL_NAME)
                 self.assertEqual(
                     first["worker_response"]["model_name"], provider.CONVERSATIONAL_MODEL_NAME
@@ -135,6 +138,26 @@ class SrotaWorkerProtocolTests(unittest.TestCase):
                 self.assertEqual(translation["worker_response"]["count"], 3)
             finally:
                 provider.close()
+
+
+
+class SrotaWorkerTimingTests(unittest.TestCase):
+    def test_model_initialization_is_outside_inference_timer(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "scripts" / "srota_asr_worker.py").read_text(
+            encoding="utf-8"
+        )
+        start = source.index('if action == "transcribe":')
+        end = source.index('elif action == "translate":', start)
+        branch = source[start:end]
+        init_end = branch.index("worker_initialization_seconds =")
+        inference_timer = branch.index("inference_started = time.perf_counter()")
+        model_call = branch.index("result = model.transcribe(")
+        self.assertLess(init_end, inference_timer)
+        self.assertLess(inference_timer, model_call)
+        self.assertIn('"inference_seconds": round(inference_seconds, 3)', branch)
+        self.assertIn('"worker_initialization_seconds": round(', branch)
+        self.assertIn('"worker_request_seconds": round(worker_request_seconds, 3)', branch)
 
 
 if __name__ == "__main__":
