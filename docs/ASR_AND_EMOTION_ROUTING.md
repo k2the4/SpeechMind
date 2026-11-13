@@ -136,16 +136,20 @@ corrected text.
 
 ## Optional Romanized-Hindi transliteration
 
-When transcript annotation identifies Romanized-Hindi words, SpeechMind can
-optionally use AI4Bharat IndicXlit locally to convert only those words to
-Devanagari before the existing IndicTrans2 step. English and unclassified words
-remain unchanged and the visible transcript is never rewritten. Install only
-when needed:
+The code contains an optional local AI4Bharat IndicXlit adapter. It converts
+only transcript tokens already classified as Romanized Hindi; English and
+unclassified words remain unchanged, and the visible transcript is never
+rewritten.
 
-```powershell
-.venv\Scripts\python.exe -m pip install -r requirements_hinglish_transliteration.txt
-```
+**Do not install `requirements_hinglish_transliteration.txt` into the primary
+Windows `.venv`.** The published `ai4bharat-transliteration==1.1.3` package
+pulls the legacy `fairseq` build dependency. The current Windows installation
+attempt failed while building Fairseq, and the upstream project has a long-lived
+Windows installation issue. The package also depends on older OmegaConf
+metadata that current pip rejects. This path is therefore optional and is not
+currently enabled on the Windows development environment.
 
-This optional dependency is excluded from the base environment. If unavailable,
-the original transcript is retained and English meaning is marked unavailable.
-No hosted API is used.
+When the dependency is absent or fails, SpeechMind keeps the original
+transcript and reports the English-meaning step as unavailable for that
+Romanized-Hindi route. No hosted API is used. Do not change the main
+requirements or downgrade the primary environment's pip to work around this.
