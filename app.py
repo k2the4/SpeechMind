@@ -426,6 +426,21 @@ if audio_source is not None:
                 "translator_inference_seconds": result.get(
                     "translator_inference_seconds"
                 ),
+                "translator_initialization_seconds": result.get(
+                    "translator_initialization_seconds"
+                ),
+                "translator_preparation_seconds": result.get(
+                    "translator_preparation_seconds"
+                ),
+                "translator_generation_seconds": result.get(
+                    "translator_generation_seconds"
+                ),
+                "translator_postprocessing_seconds": result.get(
+                    "translator_postprocessing_seconds"
+                ),
+                "translator_worker_request_seconds": result.get(
+                    "translator_worker_request_seconds"
+                ),
                 "translation_cache_used": result.get("translation_cache_used"),
                 "translation_num_beams": result.get("translation_num_beams"),
                 "translator_error": result.get("translator_error"),
