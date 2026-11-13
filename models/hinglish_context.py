@@ -102,45 +102,91 @@ def infer_hinglish_context_from_audio_tail(
     *,
     sample_rate: int = 16000,
     tail_seconds: float = 3.0,
+    language_detector=None,
+    min_english_score: float = 0.55,
 ) -> dict:
-    """Auto-detect the final speech segment and extract terms only if it is English."""
+    """Probe the tail language first; decode vocabulary only for confident English.
+
+    The fast language detector avoids running a full autoregressive Whisper
+    transcription on Hindi tails. For confident English tails, the subsequent
+    transcription is forced to English, preserving the vocabulary-scout path
+    without repeating language detection inside Whisper.
+    """
+    empty_result = {
+        "context": "",
+        "source": "whisper_tail_too_short",
+        "probe_seconds": 0.0,
+        "transcript": "",
+        "detected_language": "",
+        "language_score": None,
+    }
     if sample_rate <= 0 or tail_seconds <= 0:
-        return {
-            "context": "",
-            "source": "whisper_tail_too_short",
-            "probe_seconds": 0.0,
-            "transcript": "",
-        }
-    sample_count = int(getattr(audio, "size", len(audio)))
+        return empty_result
+    try:
+        sample_count = int(getattr(audio, "size", len(audio)))
+    except (TypeError, ValueError):
+        sample_count = 0
     tail_samples = min(sample_count, int(sample_rate * tail_seconds))
     if tail_samples < sample_rate:
-        return {
-            "context": "",
-            "source": "whisper_tail_too_short",
-            "probe_seconds": 0.0,
-            "transcript": "",
-        }
+        return empty_result
 
     started = time.perf_counter()
+    detected_language = ""
+    language_score = None
     try:
         tail_audio = audio[-tail_samples:]
+        forced_language = None
+        if language_detector is not None:
+            detection = language_detector(tail_audio)
+            if not isinstance(detection, (tuple, list)) or len(detection) < 2:
+                raise ValueError(
+                    "language_detector must return (language, score[, probabilities])."
+                )
+            detected_language = str(detection[0] or "").lower().strip()
+            language_score = float(detection[1])
+            is_english = detected_language in {"en", "english"}
+            if not is_english:
+                return {
+                    "context": "",
+                    "source": "whisper_tail_not_english",
+                    "probe_seconds": round(time.perf_counter() - started, 3),
+                    "transcript": "",
+                    "detected_language": detected_language,
+                    "language_score": round(language_score, 4),
+                }
+            if language_score < min_english_score:
+                return {
+                    "context": "",
+                    "source": "whisper_tail_language_uncertain",
+                    "probe_seconds": round(time.perf_counter() - started, 3),
+                    "transcript": "",
+                    "detected_language": detected_language,
+                    "language_score": round(language_score, 4),
+                }
+            forced_language = "en"
+
         result = whisper_model.transcribe(
             tail_audio,
             task="transcribe",
-            language=None,
+            language=forced_language,
             fp16=False,
             verbose=False,
             beam_size=1,
             condition_on_previous_text=False,
         )
         transcript = str(result.get("text") or "").strip()
-        detected_language = str(result.get("language") or "").lower().strip()
+        if not detected_language:
+            detected_language = str(result.get("language") or "").lower().strip()
+        if language_score is None and isinstance(result, dict):
+            language_score = result.get("language_probability")
         if detected_language not in {"en", "english"}:
             return {
                 "context": "",
                 "source": "whisper_tail_not_english",
                 "probe_seconds": round(time.perf_counter() - started, 3),
                 "transcript": transcript,
+                "detected_language": detected_language,
+                "language_score": language_score,
             }
         context = build_hinglish_context(transcript)
         return {
@@ -151,6 +197,11 @@ def infer_hinglish_context_from_audio_tail(
             ),
             "probe_seconds": round(time.perf_counter() - started, 3),
             "transcript": transcript,
+            "detected_language": detected_language,
+            "language_score": (
+                round(float(language_score), 4)
+                if language_score is not None else None
+            ),
         }
     except Exception as error:
         return {
@@ -158,4 +209,6 @@ def infer_hinglish_context_from_audio_tail(
             "source": f"whisper_tail_probe_failed:{type(error).__name__}",
             "probe_seconds": round(time.perf_counter() - started, 3),
             "transcript": "",
+            "detected_language": detected_language,
+            "language_score": language_score,
         }
