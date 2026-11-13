@@ -1,7 +1,10 @@
+import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from models.asr_routing import (
+    automatic_context_scout_enabled,
     audio_language_suggests_hindi,
     srota_candidate_valid_for_route,
     srota_supports_duration,
@@ -11,6 +14,20 @@ from models.asr_routing import (
 
 
 class AsrRoutingSignalTests(unittest.TestCase):
+    def test_automatic_context_scout_is_disabled_without_opt_in(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(automatic_context_scout_enabled())
+
+    def test_automatic_context_scout_accepts_explicit_opt_in_values(self):
+        for value in ("1", "true", "yes", "on", " TRUE "):
+            with self.subTest(value=value):
+                self.assertTrue(automatic_context_scout_enabled(value))
+
+    def test_automatic_context_scout_rejects_false_or_unknown_values(self):
+        for value in ("0", "false", "no", "off", "", "enabled"):
+            with self.subTest(value=value):
+                self.assertFalse(automatic_context_scout_enabled(value))
+
     def test_clear_english_transcript_does_not_trigger_srota(self):
         self.assertFalse(
             whisper_transcript_suggests_hinglish(
@@ -170,8 +187,7 @@ class AsrRouterIntegrationPolicyTests(unittest.TestCase):
         self.assertIn('context is None and automatic_context_scout_enabled()', method)
         self.assertIn('context = ""', method)
         self.assertIn('context_source = "disabled_by_default"', method)
-        self.assertIn('ASR_CONTEXT_SCOUT_ENV = "SPEECHMIND_ENABLE_ASR_CONTEXT_SCOUT"', self.source)
-        self.assertIn('os.environ.get(ASR_CONTEXT_SCOUT_ENV, "0")', self.source)
+        self.assertIn('automatic_context_scout_enabled', self.source)
         self.assertIn('context=context or None', method)
 
     def test_tail_vocabulary_scout_is_limited_and_language_gated(self):
