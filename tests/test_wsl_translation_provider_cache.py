@@ -12,6 +12,11 @@ class WslTranslationCacheTests(unittest.TestCase):
             "translated_text": "I am not sure about the layout.",
             "model": "ai4bharat/indictrans2-indic-en-dist-200M",
             "inference_seconds": 12.5,
+            "initialization_seconds": 6.0,
+            "preparation_seconds": 0.5,
+            "generation_seconds": 4.0,
+            "postprocessing_seconds": 0.25,
+            "worker_request_seconds": 12.5,
         })
         provider._request = request
 
@@ -20,6 +25,11 @@ class WslTranslationCacheTests(unittest.TestCase):
 
         self.assertEqual(first["translated_text"], second["translated_text"])
         self.assertFalse(first["cache_used"])
+        self.assertEqual(first["initialization_seconds"], 6.0)
+        self.assertEqual(first["generation_seconds"], 4.0)
+        self.assertEqual(first["preparation_seconds"], 0.5)
+        self.assertEqual(first["postprocessing_seconds"], 0.25)
+        self.assertEqual(first["worker_request_seconds"], 12.5)
         self.assertTrue(second["cache_used"])
         self.assertEqual(second["inference_seconds"], 0.0)
         request.assert_called_once()
