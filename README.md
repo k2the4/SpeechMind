@@ -26,3 +26,5 @@ For a controlled same-audio comparison of the ASR candidates, see [docs/PAIRED_A
 See [docs/DEPLOY_HUGGINGFACE_SPACES.md](docs/DEPLOY_HUGGINGFACE_SPACES.md) for Docker Space setup, private checkpoint configuration and deployment instructions.
 
 The hosted CPU configuration may take around a minute or more to process short Hinglish recordings. Model predictions are experimental and should not be treated as verified emotional states. Do not upload private or sensitive recordings to a public demo.
+
+Audio-quality diagnostics, transcript correction with ASR/voice reuse, and JSON export are part of the app workflow. Optional local Romanized-Hindi transliteration is documented in the routing guide.
