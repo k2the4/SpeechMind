@@ -198,6 +198,8 @@ class SpeechRecognizer:
             context_info["source"],
             context_info["probe_seconds"],
             context_info["transcript"],
+            context_info.get("detected_language", ""),
+            context_info.get("language_score"),
         )
 
     def _try_srota_code_switch(
@@ -231,12 +233,16 @@ class SpeechRecognizer:
                 return None
             context_probe_seconds = 0.0
             context_probe_transcript = ""
+            context_probe_language = ""
+            context_probe_language_score = None
             if context is None:
                 (
                     context,
                     context_source,
                     context_probe_seconds,
                     context_probe_transcript,
+                    context_probe_language,
+                    context_probe_language_score,
                 ) = self._infer_srota_context(audio_numpy)
             else:
                 context = str(context).strip()
@@ -293,6 +299,8 @@ class SpeechRecognizer:
                 "asr_context_source": context_source,
                 "asr_context_probe_seconds": context_probe_seconds,
                 "asr_context_probe_transcript": context_probe_transcript,
+                "asr_context_probe_language": context_probe_language,
+                "asr_context_probe_language_score": context_probe_language_score,
                 "asr_inference_device": (
                     result.get("worker_response", {}).get("device")
                     if isinstance(result.get("worker_response"), dict) else None
