@@ -455,6 +455,7 @@ if audio_source is not None:
                     "translator_inference_seconds"
                 ),
                 "translation_cache_used": result.get("translation_cache_used"),
+                "translation_num_beams": result.get("translation_num_beams"),
                 "translator_error": result.get("translator_error"),
                 "full_result": result,
             })
