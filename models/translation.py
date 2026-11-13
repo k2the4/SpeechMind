@@ -41,6 +41,11 @@ class Translator:
         self.loaded = False
         self.model_name = MODEL_NAME
         self.last_inference_seconds = None
+        self.last_initialization_seconds = None
+        self.last_preparation_seconds = None
+        self.last_generation_seconds = None
+        self.last_postprocessing_seconds = None
+        self.last_worker_request_seconds = None
         self.last_cache_used = None
         self.last_num_beams = None
 
@@ -63,6 +68,11 @@ class Translator:
             raise RuntimeError("IndicTrans2 returned an empty translation.")
         self.loaded = True
         self.last_inference_seconds = result.get("inference_seconds")
+        self.last_initialization_seconds = result.get("initialization_seconds")
+        self.last_preparation_seconds = result.get("preparation_seconds")
+        self.last_generation_seconds = result.get("generation_seconds")
+        self.last_postprocessing_seconds = result.get("postprocessing_seconds")
+        self.last_worker_request_seconds = result.get("worker_request_seconds")
         self.last_cache_used = result.get("cache_used")
         self.last_num_beams = result.get("num_beams")
         return translated
