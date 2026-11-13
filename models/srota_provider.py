@@ -271,7 +271,7 @@ class SrotaASRProvider:
         """Join chunk outputs while removing duplicated words from overlap."""
         merged: list[str] = []
         for transcript in transcripts:
-            words = re.findall(r"\\w+", str(transcript or ""), flags=re.UNICODE)
+            words = re.findall(r"\w+", str(transcript or ""), flags=re.UNICODE)
             if not words:
                 continue
             normalized = [word.casefold() for word in words]
