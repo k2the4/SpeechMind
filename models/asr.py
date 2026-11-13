@@ -9,6 +9,8 @@ Hindi/Hinglish evidence. Pure-Hindi and clear-English routes retain their
 specialists.
 """
 
+import os
+
 import torch
 import whisper
 from transformers import AutoModel
@@ -35,6 +37,15 @@ MIN_WHISPER_LANGUAGE_LOCK_SCORE = 0.70
 # High-confidence English is probed only when its Whisper transcript suggests
 # Hinglish. The detector score is not a calibrated probability.
 MIN_SROTA_PROBE_ENGLISH_SCORE = 0.90
+ASR_CONTEXT_SCOUT_ENV = "SPEECHMIND_ENABLE_ASR_CONTEXT_SCOUT"
+
+
+def automatic_context_scout_enabled() -> bool:
+    """The extra Whisper tail scout is opt-in; native Srota context is default."""
+    return os.environ.get(ASR_CONTEXT_SCOUT_ENV, "0").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+
 
 INDIC_LANGUAGES = {
     "as": "Assamese", "bn": "Bengali", "brx": "Bodo", "doi": "Dogri",
@@ -235,7 +246,7 @@ class SpeechRecognizer:
             context_probe_transcript = ""
             context_probe_language = ""
             context_probe_language_score = None
-            if context is None:
+            if context is None and automatic_context_scout_enabled():
                 (
                     context,
                     context_source,
@@ -244,6 +255,11 @@ class SpeechRecognizer:
                     context_probe_language,
                     context_probe_language_score,
                 ) = self._infer_srota_context(audio_numpy)
+            elif context is None:
+                # No second Whisper pass for ordinary Srota requests. The
+                # model's native empty-context path is the production default.
+                context = ""
+                context_source = "disabled_by_default"
             else:
                 context = str(context).strip()
                 context_source = context_source or (
