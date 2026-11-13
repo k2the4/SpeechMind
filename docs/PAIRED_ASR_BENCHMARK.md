@@ -79,3 +79,29 @@ Do not automatically replace the production router based on a 20- or 40-clip sam
 5. failed inference count and median/p90 latency.
 
 Only then make a routing change, and rerun the unchanged reference set afterward. Keep the test split for final reporting; do not use it as a training set. HiACC has documented speaker overlap across its released splits, so this benchmark is not an unseen-speaker generalisation claim.
+
+
+## Quick paired benchmark for local recordings
+
+For a small set of recordings that share one manually prepared reference, the
+same comparison script can now benchmark multiple audio files in one run. Srota
+automatically splits recordings longer than 30 seconds into 28-second chunks
+with a two-second overlap, then stitches the chunk transcripts while removing
+duplicated overlap words. The original audio is not trimmed.
+
+Example for the Tanisha and Karan recordings:
+
+\`\`\`powershell
+.venv\Scripts\python.exe scripts\compare_asr_reference.py --audio "hinglish female 1.wav" --speaker "Tanisha" --audio "hinglish male 1.wav" --speaker "Karan" --reference "कल हमारी team ने college project के लिए एक नया dashboard design करने पर काम किया। पहले हमने users का feedback देखा, फिर Figma में दो wireframes बनाए। मुझे दूसरा layout बेहतर लगा क्योंकि उसका navigation simple है और सारे important features आसानी से मिल जाते हैं। अब हम prototype को कुछ users के साथ test करके final interface improve करेंगे।" --include-indicconformer --no-auto-context --csv-output "data\benchmarks\tanisha_karan_asr_comparison.csv"
+\`\`\`
+
+The command runs Whisper-small automatic and forced-Hindi decoding, IndicConformer
+forced Hindi, and Srota on each complete recording. It writes one row per
+recording/model to the CSV, including speaker, duration, reference and hypothesis,
+WER, CER, inference time, initialization time, elapsed time, device and status.
+The CSV is UTF-8 with BOM for easier opening in Excel. By default the output is
+replaced; pass \`--append-csv\` to add more recordings to an existing report.
+
+WER/CER values from different recordings are still affected by speaker, pace,
+recording conditions and content. Do not interpret a two-speaker sample as a
+gender-performance conclusion or as general model-quality evidence.
