@@ -39,11 +39,20 @@ Example: compare the local recognizers on the reference clip. The default runs W
 
 Add `--include-indicconformer` to include the existing IndicConformer Hindi recognizer. The model may need to load its weights on first use. Lower WER/CER is better; a single clip is diagnostic, not a general quality claim. The conversational Srota specialist remains optional because its CPU startup previously timed out on the development machine.
 
-## Automatic Hinglish vocabulary context
+## Hinglish vocabulary context policy
 
-When the local router selects Srota, SpeechMind examines only the final three seconds for vocabulary context. It first runs Whisper-small's language detector on that tail. If the detected language is not English, or the English score is below 0.55, it skips autoregressive Whisper transcription and gives Srota an empty context. Only a confidently English tail is transcribed (forced English, greedy decoding) to extract exact matches from a small local allow-list such as `layout`, `Figma`, `interface`, or `Python`. The scout transcript is never used as the final transcript. The context, detected tail language, language score, probe duration and source are available in diagnostics. This preserves the short English-tail vocabulary path while avoiding full Whisper decoding on Hindi tails.
+Automatic Whisper tail-vocabulary scouting is **disabled by default in the production app**. Hindi-dominant and uncertain-language Srota requests use the model's native empty-context path; they do not run an additional Whisper pass just to collect technical terms.
 
-The reference benchmark uses the same automatic context by default. Use `--no-auto-context` to measure Srota without the vocabulary scout.
+When the router has already decoded a Whisper transcript to check a high-confidence English result for Hinglish, it may extract exact allow-listed terms from that existing transcript before a Srota retry. This reuses work that has already happened and does not launch another Whisper inference.
+
+The extra three-second Whisper tail scout remains available for controlled experiments only. To opt in for a run, set this before launching Streamlit:
+
+```powershell
+$env:SPEECHMIND_ENABLE_ASR_CONTEXT_SCOUT = "1"
+.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+Leave the variable unset (or set it to `0`) for the production default. The scout first checks the tail language and transcribes it only when it is confidently English. Its output is used only as a small allow-listed vocabulary hint, never as the final transcript. The paired benchmark can still compare automatic-context and native-context Srota variants explicitly.
 
 ## Srota runtime
 
@@ -137,17 +146,16 @@ All ASR inference in this branch is local: Whisper-small, Srota, and IndicConfor
 Do not fine-tune a new ASR or emotion model during the three-day delivery sprint. Stabilise routing and reliability first. Train only after a versioned evaluation set exists, with speaker-separated train/validation/test splits and per-language reporting. Keep model improvements separate from UI changes so every result is reproducible.
 
 
-## Audio quality and transcript correction
+## Audio quality and transcript presentation
 
 SpeechMind preserves pauses and quiet speech during decode and reports duration,
 peak/RMS level, clipped-sample share and near-silence share. These are signal
 measurements, not a speech/noise classifier or correctness probability. No
 denoising, trimming or automatic gain change is applied.
 
-Users can correct the recognized transcript and rerun translation and text
-emotion without rerunning ASR. The prepared waveform and voice-emotion result
-are reused. The original ASR quality heuristic does not apply to manually
-corrected text.
+The final app displays the untouched ASR transcript separately from the English
+meaning and exports the complete analysis as JSON. Transcript editing is not
+part of the final user-facing workflow.
 
 ## Optional Romanized-Hindi transliteration
 
