@@ -38,12 +38,12 @@ class SrotaLongAudioChunkingTests(unittest.TestCase):
 
     def test_chunk_transcripts_remove_repeated_overlap_words(self):
         merged = SrotaASRProvider._merge_chunk_transcripts([
-            "कल हमारी team ने college project",
-            "ने college project के लिए नया dashboard",
+            "कल हमारी team ने college project.",
+            "ने college project, के लिए नया dashboard.",
         ])
         self.assertEqual(
             merged,
-            "कल हमारी team ने college project के लिए नया dashboard",
+            "कल हमारी team ने college project, के लिए नया dashboard.",
         )
 
     def test_long_audio_is_transcribed_in_multiple_chunks(self):
