@@ -112,7 +112,8 @@ class SpeechMindPipeline:
                 route["method"] = "indicxlit_then_indictrans2"
                 route["note"] = (
                     "Romanized-Hindi words were transliterated locally for translation; "
-                    "the original transcript remains unchanged."
+                    "the original transcript remains unchanged. Any mixed Hindi-English "
+                    "IndicTrans2 translation remains best-effort and is not yet evaluated."
                 )
             else:
                 route["error"] = transliteration["error"]
