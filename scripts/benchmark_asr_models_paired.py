@@ -307,6 +307,53 @@ def paired_model_comparison(
     }
 
 
+def _run_srota_call(provider, audio, context: str | None) -> dict:
+    started = time.perf_counter()
+    try:
+        result = provider.transcribe_audio(
+            audio, sample_rate=16000, context=context
+        )
+        hypothesis = str(result.get("transcript") or "").strip()
+        if not hypothesis:
+            raise RuntimeError("Srota returned an empty transcript.")
+        return {
+            "hypothesis": hypothesis,
+            "status": "ok",
+            "seconds": round(time.perf_counter() - started, 3),
+            "error": "",
+        }
+    except Exception as error:
+        return {
+            "hypothesis": "",
+            "status": "error",
+            "seconds": "",
+            "error": f"{type(error).__name__}: {error}",
+        }
+
+
+def run_srota_variants(provider, audio, context: str | None) -> tuple[dict, bool]:
+    """Run two true variants only when the context string is non-empty."""
+    auto_result = _run_srota_call(provider, audio, context or None)
+    shared_no_context_call = not bool(context)
+    native_result = (
+        dict(auto_result)
+        if shared_no_context_call
+        else _run_srota_call(provider, audio, None)
+    )
+    variants = {}
+    for key, result in (
+        ("srota_auto", auto_result),
+        ("srota_native", native_result),
+    ):
+        variants[f"{key}_hypothesis"] = result["hypothesis"]
+        variants[f"{key}_status"] = result["status"]
+        variants[f"{key}_seconds"] = result["seconds"]
+        if result["error"]:
+            variants[f"{key}_error"] = result["error"]
+    variants["srota_native_shared_call"] = shared_no_context_call
+    return variants, shared_no_context_call
+
+
 def write_predictions(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -448,31 +495,18 @@ def main() -> int:
                 output["srota_context_probe_seconds"] = round(float(probe_seconds or 0.0), 3)
                 output["srota_context_probe_transcript"] = probe_transcript
 
-                for key, selected_context in (
-                    ("srota_auto", context or None),
-                    ("srota_native", None),
-                ):
-                    call_started = time.perf_counter()
-                    try:
-                        result = srota_provider.transcribe_audio(
-                            audio, sample_rate=16000, context=selected_context
-                        )
-                        hypothesis = str(result.get("transcript") or "").strip()
-                        if not hypothesis:
-                            raise RuntimeError("Srota returned an empty transcript.")
-                        seconds = time.perf_counter() - call_started
-                        output[f"{key}_hypothesis"] = hypothesis
-                        output[f"{key}_status"] = "ok"
-                        output[f"{key}_seconds"] = round(seconds, 3)
-                        if key == "srota_auto":
-                            output["srota_auto_total_seconds"] = round(
-                                seconds + float(probe_seconds or 0.0), 3
-                            )
-                    except Exception as error:
-                        output[f"{key}_hypothesis"] = ""
-                        output[f"{key}_status"] = "error"
-                        output[f"{key}_seconds"] = ""
-                        output[f"{key}_error"] = f"{type(error).__name__}: {error}"
+                variant_results, shared_no_context_call = run_srota_variants(
+                    srota_provider, audio, context
+                )
+                output.update(variant_results)
+                output["srota_auto_total_seconds"] = (
+                    round(
+                        float(output["srota_auto_seconds"] or 0.0)
+                        + float(probe_seconds or 0.0),
+                        3,
+                    )
+                    if output["srota_auto_status"] == "ok" else ""
+                )
 
             if not args.skip_indicconformer:
                 call_started = time.perf_counter()
@@ -624,6 +658,7 @@ def main() -> int:
                 "Srota native disables vocabulary context to measure the context contribution.",
                 "The Srota worker/model is warmed on the first selected clip before any scored runs; the warm-up is timed separately and excluded from ASR scores.",
                 "Srota auto-context effective per-clip latency includes both the Whisper context scout and Srota inference; both components are retained separately in predictions.csv.",
+                "When the scout returns an empty context, Srota is called only once and the identical no-context result is reused in both variant columns; srota_native_shared_call marks this case.",
                 "IndicConformer is forced to the supplied Hindi code; this is a diagnostic on Hinglish, not a claim that it is a Hinglish specialist.",
                 "Whisper uses automatic language detection and transcription.",
                 "All candidates are scored against identical references selected once at the start.",
