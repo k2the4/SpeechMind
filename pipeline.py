@@ -340,6 +340,12 @@ class SpeechMindPipeline:
             "asr_context_probe_transcript": asr_result.get(
                 "asr_context_probe_transcript", ""
             ),
+            "asr_context_probe_language": asr_result.get(
+                "asr_context_probe_language", ""
+            ),
+            "asr_context_probe_language_score": asr_result.get(
+                "asr_context_probe_language_score"
+            ),
             "asr_inference_device": asr_result.get("asr_inference_device"),
             "asr_worker_torch_threads": asr_result.get("asr_worker_torch_threads"),
             "asr_confidence": round(asr_confidence, 3) if asr_confidence is not None else None,
