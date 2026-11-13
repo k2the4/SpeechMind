@@ -120,3 +120,32 @@ All ASR inference in this branch is local: Whisper-small, Srota, and IndicConfor
 ## Training policy
 
 Do not fine-tune a new ASR or emotion model during the three-day delivery sprint. Stabilise routing and reliability first. Train only after a versioned evaluation set exists, with speaker-separated train/validation/test splits and per-language reporting. Keep model improvements separate from UI changes so every result is reproducible.
+
+
+## Audio quality and transcript correction
+
+SpeechMind preserves pauses and quiet speech during decode and reports duration,
+peak/RMS level, clipped-sample share and near-silence share. These are signal
+measurements, not a speech/noise classifier or correctness probability. No
+denoising, trimming or automatic gain change is applied.
+
+Users can correct the recognized transcript and rerun translation and text
+emotion without rerunning ASR. The prepared waveform and voice-emotion result
+are reused. The original ASR quality heuristic does not apply to manually
+corrected text.
+
+## Optional Romanized-Hindi transliteration
+
+When transcript annotation identifies Romanized-Hindi words, SpeechMind can
+optionally use AI4Bharat IndicXlit locally to convert only those words to
+Devanagari before the existing IndicTrans2 step. English and unclassified words
+remain unchanged and the visible transcript is never rewritten. Install only
+when needed:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements_hinglish_transliteration.txt
+```
+
+This optional dependency is excluded from the base environment. If unavailable,
+the original transcript is retained and English meaning is marked unavailable.
+No hosted API is used.
