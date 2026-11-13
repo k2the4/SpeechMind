@@ -147,7 +147,7 @@ class BenchmarkEntrypointTests(unittest.TestCase):
         self.assertIn('"--no-auto-context"', source)
         self.assertIn("infer_hinglish_context_from_audio_tail", source)
         self.assertIn("context=selected_context", source)
-        self.assertIn("Automatic context:", source)
+        self.assertIn("[ASR benchmark] Srota context:", source)
 
     def test_saved_route_metrics_can_be_recomputed_without_asr_inference(self):
         root = Path(__file__).resolve().parents[1]
