@@ -1,4 +1,6 @@
 import json
+import sys
+import types
 import unittest
 from unittest.mock import patch
 
@@ -20,6 +22,26 @@ class _FakeResponse:
 
 
 class LocalLLMTests(unittest.TestCase):
+    def test_gemini_key_is_read_from_environment_at_call_time(self):
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "  test-key  "}):
+            self.assertEqual(local_llm._get_gemini_api_key(), "test-key")
+
+    def test_gemini_key_can_be_read_from_streamlit_secrets(self):
+        fake_streamlit = types.SimpleNamespace(secrets={"GEMINI_API_KEY": "secret-key"})
+        with patch.dict("os.environ", {}, clear=True), patch.dict(sys.modules, {"streamlit": fake_streamlit}):
+            self.assertEqual(local_llm._get_gemini_api_key(), "secret-key")
+
+    @patch("local_llm.urllib.request.urlopen")
+    def test_gemini_uses_api_key_header_and_current_flash_lite_model(self, mocked_urlopen):
+        mocked_urlopen.return_value = _FakeResponse({"candidates": [{"content": {"parts": [{"text": json.dumps({"ok": True})}]}}]})
+        with patch("local_llm._get_gemini_api_key", return_value="test-key"):
+            result = local_llm._post_ollama({"messages": [{"role": "system", "content": "system"}, {"role": "user", "content": "user"}]})
+        request = mocked_urlopen.call_args.args[0]
+        self.assertIn("gemini-3.5-flash-lite:generateContent", request.full_url)
+        self.assertEqual(request.get_header("X-goog-api-key"), "test-key")
+        self.assertNotIn("key=", request.full_url)
+        self.assertEqual(json.loads(result["message"]["content"]), {"ok": True})
+
     def test_extracts_amount_from_hindi_transcript_without_trusting_model(self):
         transcript = "मेरे 2500 रुपये कट गए और order confirm नहीं हुआ।"
         result = local_llm._extract_grounded_details(transcript)
