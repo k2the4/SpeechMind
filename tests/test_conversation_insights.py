@@ -147,6 +147,15 @@ class ConversationInsightsTests(unittest.TestCase):
         self.assertTrue(result["needs_human_review"])
         self.assertNotIn("transaction", " ".join(result["case_review"]["suggested_questions"]).lower())
 
+
+    def test_bank_account_is_not_misclassified_as_account_access(self):
+        result = analyze_conversation_text(
+            "मेरे bank account से पैसे कट गए लेकिन order confirm नहीं हुआ।"
+        )
+        topics = [item["topic"] for item in result["topics"]]
+        self.assertIn("Payments & refunds", topics)
+        self.assertNotIn("Account access", topics)
+
     def test_does_not_claim_emotion_or_verified_intent(self):
         result = analyze_conversation_text("The order arrived yesterday.")
         self.assertNotIn("emotion", result)
