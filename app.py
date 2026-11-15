@@ -115,6 +115,49 @@ if audio_source is not None:
                     include_emotion=not fast_case_mode,
                     include_translation=not fast_case_mode,
                 )
+                # On hosted fast intake, use Gemini's audio understanding as a
+                # transcript fallback when Whisper's heuristic quality is weak.
+                # Keep the raw Whisper hypothesis for audit and never overwrite it.
+                if fast_case_mode and float(result.get("asr_quality_score") or 0.0) < 0.60:
+                    try:
+                        from local_llm import transcribe_audio_with_gemini
+                        whisper_transcript = str(result.get("transcript") or "")
+                        gemini_transcript = transcribe_audio_with_gemini(
+                            tmp_path, language_hint=result.get("language", "auto")
+                        )
+                        if gemini_transcript.strip():
+                            result["asr_whisper_transcript"] = whisper_transcript
+                            result["transcript"] = gemini_transcript.strip()
+                            result["asr_original_model"] = result.get("asr_model")
+                            result["asr_model"] = "gemini-audio-transcription"
+                            result["asr_provider"] = "gemini_api"
+                            result["asr_fallback"] = True
+                            result["asr_fallback_reason"] = "whisper_quality_below_0.60"
+                            result["asr_quality_status"] = "gemini_audio_fallback_unscored"
+                            result["asr_quality_note"] = (
+                                "Gemini transcribed the original audio because Whisper's "
+                                "quality heuristic was below the fallback threshold. "
+                                "The Gemini transcript is not independently confidence-scored."
+                            )
+                            from models.language_spans import annotate_language_spans
+                            annotation = annotate_language_spans(
+                                result["transcript"], result.get("language")
+                            )
+                            result.update(annotation)
+                            result["code_switch_detected"] = bool(
+                                annotation.get("code_switch_detected")
+                                or annotation.get("mixed_script_detected")
+                            )
+                            print(
+                                "[Deployment] Replaced low-quality Whisper hypothesis "
+                                "with Gemini audio transcript; original retained in diagnostics."
+                            )
+                    except Exception as transcription_error:
+                        result["asr_audio_fallback_error"] = (
+                            type(transcription_error).__name__ + ": " + str(transcription_error)
+                        )
+                        print("[Deployment] Gemini audio fallback unavailable: "
+                              + result["asr_audio_fallback_error"])
                 result["model_init_time_sec"] = model_init_time
                 st.session_state["speechmind_result"] = result
                 st.session_state["speechmind_model_init_time"] = model_init_time
