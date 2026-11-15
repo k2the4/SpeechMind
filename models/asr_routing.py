@@ -1,3 +1,10 @@
+def fast_asr_mode_enabled(value: str | None = None) -> bool:
+    """Opt-in low-latency Whisper route for paired CPU benchmarking."""
+    if value is None:
+        value = os.environ.get("SPEECHMIND_ASR_FAST_MODE", "0")
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 """Small, dependency-light routing signals for the ASR cascade."""
 from __future__ import annotations
 
