@@ -129,6 +129,7 @@ SCRIPT_MARKERS = (
     ("DEVANAGARI", "Devanagari"),
     ("LATIN", "Latin"),
     ("BENGALI", "Bengali"),
+    ("ORIYA", "Odia"),
     ("GURMUKHI", "Gurmukhi"),
     ("GUJARATI", "Gujarati"),
     ("TAMIL", "Tamil"),
@@ -171,8 +172,18 @@ def _classify_token(
     if script == "Devanagari":
         if normalized in DEVANAGARI_ENGLISH_WORDS:
             return "en", 0.86, "transliterated_english_lexicon"
-        language = primary_language if primary_language in SUPPORTED_LANGUAGES else "hi"
+        # Devanagari is shared by Hindi, Marathi and Nepali. Preserve a
+        # supported ASR language hint instead of silently relabelling it Hindi.
+        language = primary_language if primary_language in {"hi", "mr", "ne"} else "hi"
         return language, 0.96, "unicode_script"
+
+    if script == "Bengali":
+        # Assamese and Bengali share the Bengali Unicode block.
+        language = primary_language if primary_language in {"as", "bn"} else "bn"
+        return language, 0.92, "unicode_script"
+
+    if script == "Odia":
+        return "or", 0.92, "unicode_script"
 
     if script == "Latin":
         if normalized in ROMANIZED_HINDI_WORDS and (
@@ -186,9 +197,9 @@ def _classify_token(
             return "en", 0.62, "primary_language_hint"
         return "und", 0.25, "ambiguous_latin_token"
 
-    if script in {"Bengali", "Gurmukhi", "Gujarati", "Tamil", "Telugu", "Kannada", "Malayalam", "Arabic"}:
+    if script in {"Gurmukhi", "Gujarati", "Tamil", "Telugu", "Kannada", "Malayalam", "Arabic"}:
         script_language = {
-            "Bengali": "bn", "Gurmukhi": "pa", "Gujarati": "gu",
+            "Gurmukhi": "pa", "Gujarati": "gu",
             "Tamil": "ta", "Telugu": "te", "Kannada": "kn",
             "Malayalam": "ml", "Arabic": primary_language if primary_language == "ur" else "und",
         }.get(script, "und")
