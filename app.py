@@ -1,5 +1,5 @@
 """
-SpeechMind — automatic multilingual speech understanding.
+SpeechMind — multilingual customer-support conversation intelligence.
 Run with: streamlit run app.py
 """
 import hashlib
@@ -13,42 +13,55 @@ from pipeline import SpeechMindPipeline
 from models.deployment_checkpoints import ensure_deployment_checkpoints
 from conversation_insights import analyze_conversation_text
 
-st.set_page_config(page_title="SpeechMind | Conversation Intelligence", page_icon="🎙️", layout="wide")
-st.markdown("""
-<style>
-    .block-container {max-width: 1440px; padding-top: 2rem; padding-bottom: 3rem;}
-    [data-testid="stMetric"] {background: rgba(120,120,120,.07); padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(128,128,128,.16);}
-    .sm-eyebrow {font-size: .76rem; letter-spacing: .12em; text-transform: uppercase; color: #818cf8; font-weight: 700;}
-    .sm-subtitle {color: var(--text-color); opacity: .72; font-size: 1rem;}
-    .sm-panel {padding: 1rem 1.1rem; border: 1px solid rgba(128,128,128,.22); border-radius: 14px; background: rgba(128,128,128,.045); min-height: 118px;}
-</style>
-""", unsafe_allow_html=True)
-st.markdown('<div class="sm-eyebrow">Multilingual conversation intelligence</div>', unsafe_allow_html=True)
-st.title("SpeechMind")
-st.markdown('<div class="sm-subtitle">Turn multilingual support calls into evidence-backed case reviews and follow-up signals.</div>', unsafe_allow_html=True)
-st.warning(
-    "SpeechMind provides experimental linguistic and vocal signals for human review. "
-    "It does not verify complaints, infer a person's true emotional state, or diagnose "
-    "medical or psychological conditions."
+st.set_page_config(
+    page_title="SpeechMind | Call Review",
+    page_icon="S",
+    layout="wide",
 )
 
+st.markdown("""
+<style>
+    .block-container {max-width: 1180px; padding-top: 2.2rem; padding-bottom: 3rem;}
+    .sm-kicker {font-size:.72rem; letter-spacing:.14em; text-transform:uppercase;
+        color:#818cf8; font-weight:700; margin-bottom:.25rem;}
+    .sm-subtitle {font-size:1rem; color:var(--text-color); opacity:.72; margin-top:-.45rem;}
+    .sm-card {border:1px solid rgba(128,128,128,.20); border-radius:12px;
+        padding:1rem 1.1rem; background:rgba(128,128,128,.045); min-height:100px;}
+    .sm-label {font-size:.78rem; color:var(--text-color); opacity:.65; margin-bottom:.35rem;}
+    .sm-value {font-size:1.35rem; font-weight:650; line-height:1.25;}
+    .sm-section-note {color:var(--text-color); opacity:.65; font-size:.88rem;}
+    div[data-testid="stMetric"] {background:rgba(128,128,128,.045);
+        border:1px solid rgba(128,128,128,.16); padding:12px 14px; border-radius:10px;}
+    div[data-testid="stTabs"] button {font-weight:600;}
+    div[data-testid="stAlert"] {border-radius:10px;}
+</style>
+""", unsafe_allow_html=True)
 
-@st.cache_resource(show_spinner="Loading core models (first run only)...")
+st.markdown('<div class="sm-kicker">CALL REVIEW WORKSPACE</div>', unsafe_allow_html=True)
+st.title("SpeechMind")
+st.markdown(
+    '<div class="sm-subtitle">Turn multilingual support calls into clear, evidence-backed review notes.</div>',
+    unsafe_allow_html=True,
+)
+st.write("")
+with st.expander("About this analysis and its limitations"):
+    st.caption(
+        "SpeechMind identifies transcript-based topics and review cues to support a human reviewer. "
+        "It does not verify complaints, confirm that an issue is resolved, or infer a person's true "
+        "emotional state. Language and model support varies by component."
+    )
+
+
+@st.cache_resource(show_spinner="Loading SpeechMind models (first run only)...")
 def get_pipeline():
     ensure_deployment_checkpoints()
     return SpeechMindPipeline()
 
 
-st.caption(
-    "Upload a customer-support call to review the original transcript, English meaning, issue themes, service signals and evidence for a human reviewer."
-)
-st.caption(
-    "Language support is component-specific. An emotion branch is only run when its installed checkpoint declares support for the detected language; unsupported analysis is marked unavailable rather than guessed."
-)
-
+st.subheader("1. Add a support call")
+st.caption("Upload an audio file or record a call excerpt. Supported uploads: WAV, MP3 and M4A.")
 uploaded_file = st.file_uploader(
-    "Upload your speech (WAV/MP3/M4A), or record directly",
-    type=["wav", "mp3", "m4a"],
+    "Audio file", type=["wav", "mp3", "m4a"], label_visibility="collapsed"
 )
 recorded_audio = st.audio_input("Or record directly")
 audio_source = uploaded_file or recorded_audio
@@ -61,17 +74,16 @@ if audio_source is not None:
         for key in ("speechmind_result", "speechmind_model_init_time"):
             st.session_state.pop(key, None)
     st.audio(audio_source)
-    if st.button("Analyze", type="primary"):
+    if st.button("Analyze call", type="primary", use_container_width=False):
         tmp_path = None
         try:
-            with st.spinner("Loading models if needed and analyzing audio..."):
+            with st.spinner("Analyzing the call. The first run may take longer while models load..."):
                 suffix = ".wav"
                 if uploaded_file is not None:
                     suffix = "." + uploaded_file.name.rsplit(".", 1)[-1].lower()
                 with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                     tmp.write(audio_bytes)
                     tmp_path = tmp.name
-
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
@@ -82,7 +94,6 @@ if audio_source is not None:
         except Exception as error:
             st.error(f"Analysis failed: {error}")
             st.exception(error)
-            result = None
             st.session_state.pop("speechmind_result", None)
         finally:
             if tmp_path and os.path.exists(tmp_path):
@@ -93,413 +104,171 @@ if audio_source is not None:
 
     result = st.session_state.get("speechmind_result")
     if result is not None:
-        # The conversation layer is intentionally conservative and transparent:
-        # it extracts transcript-grounded cues rather than claiming verified intent.
         insights = analyze_conversation_text(
             result.get("transcript", ""),
             result.get("meaning_en") if result.get("meaning_en_available") else None,
         )
-        st.markdown("### Conversation overview")
-        metric_cols = st.columns(4)
-        metric_cols[0].metric("Primary language", str(result.get("language", "unknown")).upper())
-        metric_cols[1].metric("Code-switching", "Detected" if result.get("code_switch_detected") else "Not detected")
-        metric_cols[2].metric("Topic signals", len(insights["topics"]))
-        metric_cols[3].metric("Review cues", len(insights["signals"]))
-        overview_left, overview_right = st.columns([1.55, 1])
-        with overview_left:
-            with st.container(border=True):
-                st.markdown("**Conversation brief**")
-                st.write(insights["brief"])
-                st.caption("Extractive preview from " + insights["brief_source"] + "; not an AI-generated summary.")
-        with overview_right:
-            with st.container(border=True):
-                st.markdown("**Detected topic themes**")
-                if insights["topics"]:
-                    for topic in insights["topics"]:
-                        st.write("• " + topic["topic"])
-                        st.caption("Matched terms: " + ", ".join(topic["matched_terms"]))
-                else:
-                    st.caption("No configured topic keywords were found. This does not mean the conversation has no topic.")
-        st.markdown("#### Support review signals")
-        if insights["signals"]:
-            for signal in insights["signals"]:
-                st.info("**" + signal["label"] + "** — " + signal["description"] +
-                        "\\nMatched cues: " + ", ".join(signal["evidence"]))
-                for evidence_item in signal.get("evidence_sentences", []):
-                    st.caption("Evidence: “" + evidence_item["text"] + "”")
-        else:
-            st.info("No configured support-review cues were detected. This is not proof that the call is resolved or requires no action.")
+        st.divider()
+        st.subheader("2. Call review")
+        st.caption("Start with the review summary. Open the sections below when you need more detail.")
+
+        language = str(result.get("language", "unknown")).upper()
+        code_switch = "Detected" if result.get("code_switch_detected") else "Not detected"
+        topic_count = len(insights.get("topics", []))
+        signal_count = len(insights.get("signals", []))
+        metrics = st.columns(4)
+        metrics[0].metric("Primary language", language)
+        metrics[1].metric("Code-switching", code_switch)
+        metrics[2].metric("Topics found", topic_count)
+        metrics[3].metric("Review cues", signal_count)
 
         case_review = insights.get("case_review") or {}
-        st.markdown("#### Case review")
-        st.write("**Suggested review status:** " + str(case_review.get("suggested_status", "review_required")).replace("_", " ").title())
-        st.write(case_review.get("suggested_next_step", "A human reviewer should verify the call."))
-        if insights.get("review_reasons"):
-            st.caption("Review notes: " + " ".join(insights["review_reasons"]))
-        st.caption("All topics and signals are deterministic transcript cues. Verify every finding against the original audio before recording a case outcome.")
-        st.divider()
-        st.download_button(
-            "Download complete analysis (JSON)",
-            data=json.dumps(result, ensure_ascii=False, indent=2, default=str),
-            file_name="speechmind-analysis.json",
-            mime="application/json",
-            key=f"speechmind_download_{audio_digest}",
-        )
-
-    if result is not None:
-        st.subheader("Transcript (original speech)")
-        st.write(result.get("transcript") or "No transcript was produced.")
-        if result.get("asr_error"):
-            st.warning(
-                "Speech recognition is unavailable for this clip. "
-                + str(result.get("asr_error"))
-            )
-
-        with st.expander("Detected language spans (beta)"):
-            spans = result.get("language_spans") or []
+        status = str(case_review.get("suggested_status", "review_required")).replace("_", " ").title()
+        st.markdown("#### Reviewer summary")
+        with st.container(border=True):
+            st.markdown(f"**Suggested review status:** {status}")
+            st.write(insights.get("brief") or "No concise conversation brief could be generated.")
             st.caption(
-                "These are transcript character offsets, not audio timestamps. "
-                "Romanized-Hindi and English labels use conservative word-list "
-                "evidence; ambiguous Latin words remain unclassified."
+                "This is an extractive preview, not a verified case summary. "
+                "The suggested status is a review aid, not a final case outcome."
             )
+            st.write("**Suggested next step**")
+            st.write(case_review.get("suggested_next_step", "A human reviewer should listen to the call and verify the transcript."))
+            if insights.get("review_reasons"):
+                st.caption("Review notes: " + " ".join(insights["review_reasons"]))
+
+        st.markdown("#### Findings")
+        if insights.get("topics"):
+            topic_cols = st.columns(min(3, len(insights["topics"])))
+            for index, topic in enumerate(insights["topics"]):
+                with topic_cols[index % len(topic_cols)]:
+                    with st.container(border=True):
+                        st.markdown(f"**{topic['topic']}**")
+                        st.caption("Matched terms: " + ", ".join(topic.get("matched_terms", [])))
+        else:
+            st.caption("No configured topic keywords were detected. This does not mean the call has no issue.")
+
+        if insights.get("signals"):
+            for signal in insights["signals"]:
+                with st.expander(signal.get("label", "Review signal"), expanded=True):
+                    st.write(signal.get("description", ""))
+                    if signal.get("evidence_sentences"):
+                        st.markdown("**Transcript evidence**")
+                        for evidence in signal["evidence_sentences"]:
+                            st.write("“" + evidence.get("text", "") + "”")
+                    if signal.get("evidence"):
+                        st.caption("Matched cues: " + ", ".join(signal["evidence"]))
+        else:
+            st.info("No configured review cues were detected. This is not proof that the call is resolved or requires no action.")
+
+        st.caption("Verify every finding against the original audio before recording a case outcome.")
+
+        # Keep the detailed model output available without overwhelming the main review screen.
+        with st.expander("Transcript and English meaning", expanded=False):
+            left, right = st.columns(2)
+            with left:
+                st.markdown("**Original transcript**")
+                st.write(result.get("transcript") or "No transcript was produced.")
+                if result.get("asr_error"):
+                    st.warning("Speech recognition issue: " + str(result["asr_error"]))
+            with right:
+                st.markdown("**English meaning**")
+                st.write(result.get("meaning_en") or "English meaning is unavailable.")
+                if result.get("meaning_en_note"):
+                    st.caption(str(result["meaning_en_note"]))
+            if result.get("asr_quality_status") == "unavailable":
+                st.warning(result.get("asr_quality_note") or "Transcript quality score is unavailable. Check the original transcript.")
+            elif result.get("asr_quality_score") is not None:
+                st.caption(
+                    f"Transcript quality estimate: {float(result['asr_quality_score']) * 100:.1f}% "
+                                       "(uncalibrated heuristic, not a probability of correctness)."
+                )
+
+        with st.expander("Language and code-switch details", expanded=False):
+            st.caption("Language spans are transcript character ranges, not audio timestamps.")
+            spans = result.get("language_spans") or []
             if spans:
-                st.table([
+                st.dataframe([
                     {
                         "Text": span.get("text", ""),
                         "Language": span.get("language", "und"),
                         "Script": span.get("script", "Other"),
-                        "Character range": (
-                            f"{span.get('char_start', 0)}–{span.get('char_end', 0)}"
-                        ),
-                        "Evidence": span.get("method", ""),
+                        "Character range": f"{span.get('char_start', 0)}–{span.get('char_end', 0)}",
                     }
                     for span in spans
-                ])
+                ], use_container_width=True, hide_index=True)
             else:
-                st.caption("No language-bearing transcript spans were detected.")
+                st.caption("No language-bearing spans were detected.")
 
-        st.subheader("Meaning (English)")
-        st.write(result.get("meaning_en") or "English meaning is unavailable.")
-        if result.get("meaning_en_note"):
-            st.caption("Translation note: " + str(result["meaning_en_note"]))
-        if not result.get("meaning_en_available", False):
-            st.warning(
-                "An English translation could not be produced. The text above "
-                "is the original transcript, not an English translation. "
-                + str(result.get("translator_error") or "")
-            )
-
-        st.caption(
-            "Detected primary language: "
-            + str(result.get("language", "unknown")).upper()
-            + ". Language labels below are conservative transcript-level estimates."
-        )
-        if result.get("code_switch_detected"):
-            st.caption(
-                "Automatic Hindi-English code-switch route: "
-                + str(result.get("asr_model", "Srota"))
-            )
-
-        quality = result.get("asr_quality_score")
-        quality_status = result.get("asr_quality_status")
-        if quality_status == "unavailable":
-            st.warning(
-                result.get("asr_quality_note")
-                or "Transcript quality could not be scored by this recognizer. "
-                   "Check the original transcript before relying on its meaning."
-            )
-        elif quality is not None:
-            st.caption(
-                f"Transcript quality estimate: {quality * 100:.1f}% "
-                "(uncalibrated model heuristic, not a probability of correctness)."
-            )
-
-        audio_quality = result.get("audio_quality") or {}
-        if audio_quality:
-            st.subheader("Audio quality")
-            q1, q2, q3 = st.columns(3)
-            q1.metric("Duration", f"{audio_quality.get('duration_seconds', 0):.1f} s")
-            q2.metric("Peak level", f"{audio_quality.get('peak_amplitude', 0):.3f}")
-            q3.metric(
-                "Clipped samples",
-                f"{100 * float(audio_quality.get('clipped_sample_ratio', 0)):.2f}%",
-            )
-            st.caption(
-                "Near-silence sample share: "
-                f"{100 * float(audio_quality.get('near_silence_sample_ratio', 0)):.1f}%"
-                " · Measurements only; no trimming, denoising or automatic gain change."
-            )
-            if audio_quality.get("status") == "unusable":
-                st.error("The recording is effectively silent. Upload or record it again.")
-            elif audio_quality.get("flags"):
-                st.warning("Audio needs review: " + ", ".join(audio_quality.get("flags", [])))
-
-        if result.get("transcript_source") == "manual_correction":
-            st.info("This result uses your corrected transcript. The original ASR score does not apply.")
-
-        if result.get("transliteration_available"):
-            st.caption(
-                "Romanized-Hindi words were transliterated locally with "
-                + str(result.get("transliteration_model") or "IndicXlit")
-                + " for meaning generation. The original transcript is unchanged."
-            )
-
-        if result.get("low_confidence_warning"):
-            reasons = result.get("uncertainty_reasons") or []
-            st.info(
-                "Interpretation needs caution. "
-                + ("; ".join(reasons) if reasons else
-                   "One or more model signals are uncertain or unavailable.")
-            )
-
-        st.divider()
-        st.subheader("Emotion conveyed through words")
-        st.metric(
-            "Semantic emotion",
-            str(result.get("text_emotion", "unavailable")).title()
-        )
-        secondary_text_emotions = result.get("text_emotion_secondary") or []
-        if secondary_text_emotions:
-            st.caption(
-                "Additional text signals: "
-                + ", ".join(str(label).title() for label in secondary_text_emotions)
-            )
-        raw_text_scores = result.get("text_emotion_multi_label_scores") or {}
-        if raw_text_scores:
-            thresholds = result.get("text_emotion_decision_thresholds") or {}
-            ranked_text_scores = sorted(
-                raw_text_scores.items(), key=lambda item: float(item[1]), reverse=True
-            )[:3]
-            score_notes = []
-            for label, score in ranked_text_scores:
-                threshold = thresholds.get(label)
-                cutoff = (
-                    f" (decision threshold {float(threshold):.2f})"
-                    if threshold is not None else ""
-                )
-                score_notes.append(f"{str(label).title()} {float(score):.3f}{cutoff}")
-            st.caption(
-                "Top raw text-emotion scores (uncalibrated): "
-                + " · ".join(score_notes)
-            )
-            if not result.get("text_emotion_active_labels"):
+        with st.expander("Audio quality", expanded=False):
+            quality = result.get("audio_quality") or {}
+            if quality:
+                q1, q2, q3 = st.columns(3)
+                q1.metric("Duration", f"{quality.get('duration_seconds', 0):.1f} s")
+                q2.metric("Peak level", f"{quality.get('peak_amplitude', 0):.3f}")
+                q3.metric("Clipped samples", f"{100 * float(quality.get('clipped_sample_ratio', 0)):.2f}%")
                 st.caption(
-                    "No non-neutral class crossed its decision threshold, so "
-                    "the classifier reports Neutral. Raw scores are not final labels."
+                    f"Near-silence sample share: {100 * float(quality.get('near_silence_sample_ratio', 0)):.1f}%. "
+                    "Measurements only; no trimming, denoising or automatic gain change."
                 )
-        if not result.get("text_emotion_available", False):
-            st.warning(
-                "Text-emotion analysis is unavailable. "
-                + str(result.get("text_emotion_reason") or "")
-            )
-        st.subheader("Emotion conveyed through voice")
-        st.metric(
-            "Vocal emotion",
-            str(result.get("voice_emotion", "unavailable")).title()
-        )
-        voice_candidates = result.get("voice_top_two") or []
-        if len(voice_candidates) >= 2:
-            st.caption(
-                "Top vocal model scores (uncalibrated): "
-                + " vs. ".join(
-                    f"{item['label'].title()} {item['score']:.3f}"
-                    for item in voice_candidates
-                )
-                + f" | margin {float(result.get('voice_top_two_margin') or 0.0):.3f}"
-            )
-        st.caption(
-            "Arousal: not assessed. SpeechMind does not yet have a separately "
-            "validated acoustic arousal estimator."
-        )
-        if not result.get("voice_branch_available", False):
-            st.warning(
-                "Voice-emotion analysis is unavailable. "
-                + str(result.get("voice_emotion_reason") or "")
-            )
-        else:
-            st.caption(
-                "Experimental baseline: the current voice model has not been "
-                "validated on spontaneous Indian/Hinglish speech."
-            )
-        st.divider()
-        st.subheader("Overall emotional context")
-        st.write(
-            result.get(
-                "overall_interpretation",
-                "Combined interpretation unavailable."
-            )
-        )
+                if quality.get("status") == "unusable":
+                    st.error("The recording is effectively silent. Upload or record it again.")
+                elif quality.get("flags"):
+                    st.warning("Audio needs review: " + ", ".join(quality["flags"]))
+            else:
+                st.caption("Audio quality measurements are unavailable.")
 
-        interpretation_status = result.get("interpretation_status")
-        branch_comparison = str(result.get("branch_comparison") or "")
-        if interpretation_status == "insufficient_evidence":
+        with st.expander("Experimental emotion signals (optional)", expanded=False):
             st.warning(
-                "There is not enough reliable evidence to assign an overall emotion."
+                "These model outputs are experimental and are not a reliable measure of a person's true emotional state. "
+                "They are not used to determine support-case status."
             )
-            if branch_comparison:
-                st.caption(branch_comparison)
-        elif interpretation_status == "branch_disagreement":
-            st.warning(
-                "The text and voice branches produced different reliable signals. "
-                "No combined emotion or valence is assigned."
-            )
-            if branch_comparison:
-                st.caption(branch_comparison)
-        elif interpretation_status == "single_branch":
-            st.info(branch_comparison or "Only one reliable analysis branch contributed.")
-            st.caption(
-                "This is a single-branch interpretation. SpeechMind does not show "
-                "a combined confidence score when both modalities have not contributed reliably."
-            )
-            if result.get("valence") not in (None, "Unknown"):
-                st.metric("Valence from available branch", str(result["valence"]))
-        elif interpretation_status == "branch_agreement":
-            st.info(branch_comparison or "Text and voice signals agree.")
-            st.caption(
-                "The displayed model score is uncalibrated; it is not a probability "
-                "that the emotional interpretation is correct."
-            )
-            confidence = result.get("confidence")
-            if confidence is not None:
-                st.metric(
-                    "Combined model score (uncalibrated)",
-                    f"{float(confidence) * 100:.1f}%",
-                )
-            st.metric("Valence", str(result.get("valence", "unknown")))
-        else:
-            if branch_comparison:
-                st.caption(branch_comparison)
-            st.caption(
-                "Emotion predictions are experimental and require validation "
-                "on representative held-out Indian speech."
-            )
+            emotion_cols = st.columns(2)
+            emotion_cols[0].metric("Text model signal", str(result.get("text_emotion", "unavailable")).title())
+            emotion_cols[1].metric("Voice model signal", str(result.get("voice_emotion", "unavailable")).title())
+            if result.get("branch_comparison"):
+                st.write(result["branch_comparison"])
+            st.caption("The voice model has not been validated on spontaneous Indian/Hinglish support calls.")
 
-        with st.expander("Performance timings and diagnostics"):
-            st.write(
-                f"Model initialization on this click: "
-                f"{result.get('model_init_time_sec', 0.0)} s"
+        with st.expander("Technical diagnostics", expanded=False):
+            st.caption(
+                f"Model initialization: {result.get('model_init_time_sec', 0)} seconds. "
+                f"Total processing: {result.get('processing_time_sec', 0)} seconds."
             )
             st.json({
                 "stage_timings_sec": result.get("timings_sec", {}),
-                "text_emotion_inference_seconds": result.get(
-                    "text_emotion_inference_seconds"
-                ),
-                "voice_emotion_inference_seconds": result.get(
-                    "voice_emotion_inference_seconds"
-                ),
-                "voice_top_two": result.get("voice_top_two"),
-                "voice_top_two_margin": result.get("voice_top_two_margin"),
-                "torch_runtime": result.get("torch_runtime"),
                 "asr_model": result.get("asr_model"),
-                "asr_error": result.get("asr_error"),
-                "code_switch_detected": result.get("code_switch_detected"),
-                "language_spans": result.get("language_spans"),
-                "language_evidence": result.get("language_evidence"),
-                "script_evidence": result.get("script_evidence"),
-                "languages_present": result.get("languages_present"),
-                "scripts_present": result.get("scripts_present"),
-                "mixed_script_detected": result.get("mixed_script_detected"),
-                "romanized_hindi_detected": result.get("romanized_hindi_detected"),
-                "language_span_unit": result.get("language_span_unit"),
-                "audio_timestamps_available": result.get("audio_timestamps_available"),
-                "asr_candidate_model": result.get("asr_candidate_model"),
-                "asr_candidate_inference_seconds": result.get(
-                    "asr_candidate_inference_seconds"
-                ),
-                "asr_candidate_initialization_seconds": result.get(
-                    "asr_candidate_initialization_seconds"
-                ),
-                "asr_candidate_worker_request_seconds": result.get(
-                    "asr_candidate_worker_request_seconds"
-                ),
-                "asr_context_terms": result.get("asr_context_terms"),
-                "asr_context_source": result.get("asr_context_source"),
-                "asr_context_probe_seconds": result.get(
-                    "asr_context_probe_seconds"
-                ),
-                "asr_context_probe_transcript": result.get(
-                    "asr_context_probe_transcript"
-                ),
-                "asr_context_probe_language": result.get(
-                    "asr_context_probe_language"
-                ),
-                "asr_context_probe_language_score": result.get(
-                    "asr_context_probe_language_score"
-                ),
-                "asr_inference_device": result.get("asr_inference_device"),
-                "asr_worker_torch_threads": result.get("asr_worker_torch_threads"),
-                "language_source": result.get("language_source"),
-                "language_detection_score": result.get("language_detection_score"),
-                "asr_quality_score": result.get("asr_quality_score"),
+                "asr_provider": result.get("asr_provider"),
                 "asr_quality_status": result.get("asr_quality_status"),
-                "asr_quality_note": result.get("asr_quality_note"),
-                "asr_quality_method": result.get("asr_quality_method"),
-                "asr_avg_logprob": result.get("asr_avg_logprob"),
-                "asr_avg_no_speech_prob": result.get("asr_avg_no_speech_prob"),
-                "asr_avg_compression_ratio": result.get("asr_avg_compression_ratio"),
-                "text_emotion_model_source": result.get("text_emotion_model_source"),
-                "text_emotion_available": result.get("text_emotion_available"),
-                "text_emotion_reason": result.get("text_emotion_reason"),
-                "text_emotion_secondary": result.get("text_emotion_secondary"),
-                "text_emotion_multi_label_scores": result.get(
-                    "text_emotion_multi_label_scores"
-                ),
-                "text_emotion_decision_thresholds": result.get(
-                    "text_emotion_decision_thresholds"
-                ),
-                "text_emotion_active_labels": result.get("text_emotion_active_labels"),
-                "text_emotion_task_type": result.get("text_emotion_task_type"),
-                "voice_model_source": result.get("voice_model_source"),
-                "voice_emotion_available": result.get("voice_emotion_available"),
-                "voice_emotion_reason": result.get("voice_emotion_reason"),
-                "voice_inference_device": result.get("voice_inference_device"),
-                "voice_inference_windows": result.get("voice_inference_windows"),
-                "voice_validation_macro_f1": result.get("voice_validation_macro_f1"),
-                "fusion_weights": result.get("fusion_weights"),
-                "branch_agreement": result.get("branch_agreement"),
-                "branch_disagreement": result.get("branch_disagreement"),
-                "branch_comparison": result.get("branch_comparison"),
-                "interpretation_status": result.get("interpretation_status"),
-                "uncertainty_reasons": result.get("uncertainty_reasons"),
-                "confidence_margin": result.get("confidence_margin"),
-                "arousal_available": result.get("arousal_available"),
-                "meaning_en_available": result.get("meaning_en_available"),
-                "meaning_en_source": result.get("meaning_en_source"),
-                "meaning_en_source_language": result.get("meaning_en_source_language"),
-                "meaning_en_method": result.get("meaning_en_method"),
-                "meaning_en_note": result.get("meaning_en_note"),
-                "audio_quality": result.get("audio_quality"),
-                "transcript_source": result.get("transcript_source"),
-                "transliteration_available": result.get("transliteration_available"),
-                "transliterated_transcript": result.get("transliterated_transcript"),
-                "transliteration_replacements": result.get("transliteration_replacements"),
-                "transliteration_model": result.get("transliteration_model"),
-                "transliteration_error": result.get("transliteration_error"),
-                "translation_input_text": result.get("translation_input_text"),
                 "translator_provider": result.get("translator_provider"),
-                "translator_loaded": result.get("translator_loaded"),
-                "translator_inference_seconds": result.get(
-                    "translator_inference_seconds"
-                ),
-                "translator_initialization_seconds": result.get(
-                    "translator_initialization_seconds"
-                ),
-                "translator_preparation_seconds": result.get(
-                    "translator_preparation_seconds"
-                ),
-                "translator_generation_seconds": result.get(
-                    "translator_generation_seconds"
-                ),
-                "translator_postprocessing_seconds": result.get(
-                    "translator_postprocessing_seconds"
-                ),
-                "translator_worker_request_seconds": result.get(
-                    "translator_worker_request_seconds"
-                ),
-                "translation_cache_used": result.get("translation_cache_used"),
-                "translation_num_beams": result.get("translation_num_beams"),
-                "translator_error": result.get("translator_error"),
-                "full_result": result,
+                "meaning_en_method": result.get("meaning_en_method"),
+                "torch_runtime": result.get("torch_runtime"),
+                "uncertainty_reasons": result.get("uncertainty_reasons"),
+                "language_source": result.get("language_source"),
+                "audio_quality": result.get("audio_quality"),
             })
+
+        export_payload = {
+            "product": "SpeechMind",
+            "report_type": "customer_support_call_review",
+            "analysis": result,
+            "conversation_insights": insights,
+            "review_status": "pending_human_verification",
+        }
+        st.divider()
+        st.download_button(
+            "Export call review (JSON)",
+            data=json.dumps(export_payload, ensure_ascii=False, indent=2, default=str),
+            file_name="speechmind-call-review.json",
+            mime="application/json",
+            key=f"speechmind_download_{audio_digest}",
+        )
 else:
-    st.info("Upload or record an audio clip to get started.")
+    st.info("Add an audio recording above to begin a call review.")
+    st.markdown("**How it works**")
+    st.markdown(
+        "1. Add a support-call recording.\n"
+        "2. SpeechMind transcribes the call and generates an English meaning where supported.\n"
+        "3. Review detected topics, evidence and follow-up cues.\n"
+        "4. A human reviewer verifies the findings and decides what action to take."
+    )
