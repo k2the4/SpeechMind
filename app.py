@@ -74,6 +74,17 @@ if audio_source is not None:
         for key in ("speechmind_result", "speechmind_model_init_time"):
             st.session_state.pop(key, None)
     st.audio(audio_source)
+    analysis_mode = st.radio(
+        "Processing mode",
+        ["Fast support case intake", "Full SpeechMind analysis"],
+        horizontal=True,
+        help=(
+            "Fast mode runs the existing ASR and support-case extraction, while skipping "
+            "English translation and optional emotion inference for this run. Full mode "
+            "runs all existing SpeechMind analysis branches."
+        ),
+    )
+    fast_case_mode = analysis_mode == "Fast support case intake"
     if st.button("Analyze call", type="primary", use_container_width=False):
         tmp_path = None
         try:
@@ -87,7 +98,11 @@ if audio_source is not None:
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
-                result = pipeline.run(tmp_path)
+                result = pipeline.run(
+                    tmp_path,
+                    include_emotion=not fast_case_mode,
+                    include_translation=not fast_case_mode,
+                )
                 result["model_init_time_sec"] = model_init_time
                 st.session_state["speechmind_result"] = result
                 st.session_state["speechmind_model_init_time"] = model_init_time
