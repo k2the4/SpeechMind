@@ -2,6 +2,10 @@
 # SETUP_SECOND_PC.bat installs the matching PyTorch + TorchAudio build
 # before this file. The current development machine should use CPU inference.
 
+# CPU-only PyTorch for Streamlit Community Cloud (prevents CUDA/NVIDIA wheel downloads).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+
 # Transformers and speech models
 transformers==4.46.3
 accelerate
