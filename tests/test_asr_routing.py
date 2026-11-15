@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from models.asr import fast_asr_mode_enabled
+
 from models.asr_routing import (
     automatic_context_scout_enabled,
     audio_language_suggests_hindi,
@@ -11,6 +13,22 @@ from models.asr_routing import (
     srota_transcript_supports_hindi,
     whisper_transcript_suggests_hinglish,
 )
+
+
+class FastAsrModeConfigurationTests(unittest.TestCase):
+    def test_fast_mode_is_disabled_by_default(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(fast_asr_mode_enabled())
+
+    def test_fast_mode_requires_explicit_opt_in(self):
+        for value in ("1", "true", "yes", "on", " TRUE "):
+            with self.subTest(value=value):
+                self.assertTrue(fast_asr_mode_enabled(value))
+
+    def test_fast_mode_rejects_false_or_unknown_values(self):
+        for value in ("0", "false", "no", "off", "", "enabled"):
+            with self.subTest(value=value):
+                self.assertFalse(fast_asr_mode_enabled(value))
 
 
 class AsrRoutingSignalTests(unittest.TestCase):
