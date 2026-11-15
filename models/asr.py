@@ -227,10 +227,7 @@ class SpeechRecognizer:
             if self.srota_provider is None:
                 self.srota_provider = SrotaASRProvider()
             if not self.srota_provider.available:
-                self.srota_provider_error = (
-                    "Srota environment is not installed; run "
-                    "SETUP_HINGLISH_ASR_ENV.bat once."
-                )
+                self.srota_provider_error = self.srota_provider.unavailable_reason
                 print(f"[ASR] {self.srota_provider_error}")
                 return None
             context_probe_seconds = 0.0
