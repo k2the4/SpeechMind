@@ -196,40 +196,50 @@ def analyze_conversation_text(transcript, translated_text=None):
             return found
         return _evidence(_sentences(english), cues, limit=limit)
 
-    resolution_evidence = combined_evidence(RESOLUTION_CUES)
-    issue_evidence = combined_evidence(ISSUE_CUES)
+    original_resolution = _evidence(original_sentences, RESOLUTION_CUES)
+    original_issue = _evidence(original_sentences, ISSUE_CUES)
+    english_sentences = _sentences(english)
+    english_resolution = _evidence(english_sentences, RESOLUTION_CUES) if english else []
+    english_issue = _evidence(english_sentences, ISSUE_CUES) if english else []
+    resolution_evidence = original_resolution or english_resolution
+    issue_evidence = original_issue or english_issue
+    # Resolution suppresses an issue only when both are found in the same
+    # source, where sentence order is meaningful. Cross-language alignment is
+    # unavailable, so a translated resolution never silently clears a cue.
+    if original_issue:
+        unresolved_evidence = [
+            item for item in original_issue
+            if not any(
+                original_sentences.index(resolution["text"]) >= original_sentences.index(item["text"])
+                for resolution in original_resolution
+            )
+        ]
+    elif english_issue:
+        unresolved_evidence = [
+            item for item in english_issue
+            if not any(
+                english_sentences.index(resolution["text"]) >= english_sentences.index(item["text"])
+                for resolution in english_resolution
+            )
+        ]
+    else:
+        unresolved_evidence = []
     signal_specs = [
-        ("Possible unresolved issue", ISSUE_CUES,
+        ("Possible unresolved issue", unresolved_evidence,
          "Issue-related wording appears without a later explicit resolution cue."),
-        ("Possible repeat contact", REPEAT_CONTACT_CUES,
+        ("Possible repeat contact", combined_evidence(REPEAT_CONTACT_CUES),
          "The speaker may be referring to earlier contact attempts."),
-        ("Possible follow-up needed", FOLLOW_UP_CUES,
+        ("Possible follow-up needed", combined_evidence(FOLLOW_UP_CUES),
          "The transcript contains a request or wording associated with a next step."),
-        ("Possible escalation", ESCALATION_CUES,
+        ("Possible escalation", combined_evidence(ESCALATION_CUES),
          "Escalation-related wording appears and may need supervisor review."),
-        ("Customer-reported impact", CUSTOMER_IMPACT_CUES,
+        ("Customer-reported impact", combined_evidence(CUSTOMER_IMPACT_CUES),
          "The speaker describes a possible impact or urgency."),
-        ("Agent commitment mentioned", AGENT_COMMITMENT_CUES,
+        ("Agent commitment mentioned", combined_evidence(AGENT_COMMITMENT_CUES),
          "The transcript may contain an agent commitment; verify its owner and deadline."),
     ]
     signals = []
-    for label, cues, description in signal_specs:
-        evidence = combined_evidence(cues)
-        if label == "Possible unresolved issue" and resolution_evidence:
-            # Keep unresolved only when issue evidence occurs after the final
-            # explicit resolution cue; do not infer resolution from silence.
-            resolution_texts = {x["text"] for x in resolution_evidence}
-            if any(original_sentences.index(x["text"]) < len(original_sentences) - 1
-                   for x in resolution_evidence if x["text"] in original_sentences):
-                evidence = [
-                    item for item in evidence
-                    if item["text"] in original_sentences
-                    and any(original_sentences.index(item["text"]) >
-                            original_sentences.index(r) for r in resolution_texts
-                            if r in original_sentences)
-                ]
-            else:
-                evidence = []
+    for label, evidence, description in signal_specs:
         if evidence:
             signals.append({
                 "label": label,
