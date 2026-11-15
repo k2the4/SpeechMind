@@ -1,8 +1,4 @@
-"""Free local LLM conversation analysis through Ollama.
-
-No cloud API, API key, telemetry or paid service is used. The original
-transcript is sent only to the Ollama process on the same machine.
-"""
+"""Evidence-validated conversation analysis via Gemini free tier or optional Ollama."""
 import json
 import os
 import re
@@ -11,7 +7,8 @@ import urllib.error
 import urllib.request
 
 
-DEFAULT_MODEL = os.getenv("SPEECHMIND_LLM_MODEL", "qwen2.5:0.5b")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+DEFAULT_MODEL = os.getenv("SPEECHMIND_LLM_MODEL", "gemini-2.5-flash-lite" if GEMINI_API_KEY else "qwen2.5:0.5b")
 OLLAMA_URL = os.getenv("SPEECHMIND_OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
 ALLOWED_TOPICS = {
     "Payments & refunds", "Orders & delivery", "Account access",
@@ -27,12 +24,24 @@ ALLOWED_SIGNALS = {
 
 
 def _post_ollama(payload, timeout=180):
-    request = urllib.request.Request(
-        OLLAMA_URL,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    """Use Gemini when configured; otherwise use optional local Ollama."""
+    if GEMINI_API_KEY:
+        model = payload.get("model") or "gemini-2.5-flash-lite"
+        messages = payload.get("messages", [])
+        system = next((m.get("content", "") for m in messages if m.get("role") == "system"), "")
+        user = next((m.get("content", "") for m in messages if m.get("role") == "user"), "")
+        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + GEMINI_API_KEY
+        body = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": {"temperature": 0, "responseMimeType": "application/json", "maxOutputTokens": 4096},
+        }
+        request = urllib.request.Request(endpoint, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+        return {"message": {"content": "".join(part.get("text", "") for part in parts)}}
+    request = urllib.request.Request(OLLAMA_URL, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -181,21 +190,22 @@ def analyze_with_local_llm(transcript, language="unknown", model=None):
 
     return {
         "brief": summary[:800],
-        "brief_source": "Local LLM English meaning" if english else "original transcript",
+        "brief_source": ("Gemini English meaning" if GEMINI_API_KEY else "Local LLM English meaning") if english else "original transcript",
         "topics": topics,
         "signals": signals,
         "needs_human_review": needs_review,
         "review_reasons": ["Local LLM analysis; all displayed evidence was checked against the original transcript."],
         "resolution_cues": [],
-        "analysis_source": "local open-source LLM",
-        "method": "local Ollama model " + model + " with verbatim evidence validation",
+        "analysis_source": "Gemini API" if GEMINI_API_KEY else "local open-source LLM",
+        "method": ("Gemini model " if GEMINI_API_KEY else "local Ollama model ") + model + " with verbatim evidence validation",
         "original_transcript": transcript,
         "translation_available": bool(english),
         "english_meaning": english,
         "llm": {
-            "provider": "ollama_local",
+            "provider": "gemini_api" if GEMINI_API_KEY else "ollama_local",
             "model": model,
             "available": True,
+            "data_policy_note": "Gemini free-tier content may be used to improve Google products; avoid sensitive recordings." if GEMINI_API_KEY else "Transcript stays on this machine.",
             "duration_sec": round(time.perf_counter() - started, 3),
             "evidence_validation": "verbatim_substring",
         },
