@@ -114,7 +114,7 @@ class SrotaASRProvider:
                     },
                     data={"context": str(context or ""), "model_name": self.model_name},
                     files={"audio": (path.name, audio_file, "audio/wav")},
-                    timeout=(20, self.request_timeout),
+                    timeout=(20, max(self.request_timeout, 600.0)),
                 )
             response.raise_for_status()
             payload = response.json()
