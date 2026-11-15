@@ -13,6 +13,11 @@ _audio_module.preprocess = lambda _path: [0.1, 0.2, 0.1]
 _audio_module.preprocess_with_quality = lambda _path: (
     [0.1, 0.2, 0.1], {"status": "good", "duration_seconds": 1.0, "flags": []}
 )
+_audio_module.prepare_audio_paths = lambda _path: (
+    [0.1, 0.2, 0.1],
+    [0.1, 0.2, 0.1],
+    {"status": "good", "duration_seconds": 1.0, "flags": []},
+)
 _asr_module = types.ModuleType("models.asr")
 _asr_module.SpeechRecognizer = object
 _text_module = types.ModuleType("models.text_emotion")
