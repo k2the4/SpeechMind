@@ -11,15 +11,25 @@ import time
 import streamlit as st
 from pipeline import SpeechMindPipeline
 from models.deployment_checkpoints import ensure_deployment_checkpoints
+from conversation_insights import analyze_conversation_text
 
-st.set_page_config(page_title="SpeechMind", page_icon="🎙️", layout="centered")
+st.set_page_config(page_title="SpeechMind | Conversation Intelligence", page_icon="🎙️", layout="wide")
+st.markdown("""
+<style>
+    .block-container {max-width: 1440px; padding-top: 2rem; padding-bottom: 3rem;}
+    [data-testid="stMetric"] {background: rgba(120,120,120,.07); padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(128,128,128,.16);}
+    .sm-eyebrow {font-size: .76rem; letter-spacing: .12em; text-transform: uppercase; color: #818cf8; font-weight: 700;}
+    .sm-subtitle {color: var(--text-color); opacity: .72; font-size: 1rem;}
+    .sm-panel {padding: 1rem 1.1rem; border: 1px solid rgba(128,128,128,.22); border-radius: 14px; background: rgba(128,128,128,.045); min-height: 118px;}
+</style>
+""", unsafe_allow_html=True)
+st.markdown('<div class="sm-eyebrow">Multilingual conversation intelligence</div>', unsafe_allow_html=True)
 st.title("SpeechMind")
-st.caption(
-    "Speak naturally in Hindi, English, Hinglish and supported Indian languages. SpeechMind explains both what was said and the emotion conveyed through words and voice."
-)
+st.markdown('<div class="sm-subtitle">Understand multilingual conversations. Review issues, language patterns and model uncertainty.</div>', unsafe_allow_html=True)
 st.warning(
-    "SpeechMind describes linguistic and vocal patterns. It does not diagnose "
-    "anxiety, depression, or any medical or psychological condition."
+    "SpeechMind provides experimental linguistic and vocal signals for human review. "
+    "It does not verify complaints, infer a person's true emotional state, or diagnose "
+    "medical or psychological conditions."
 )
 
 
@@ -83,6 +93,44 @@ if audio_source is not None:
 
     result = st.session_state.get("speechmind_result")
     if result is not None:
+        # The conversation layer is intentionally conservative and transparent:
+        # it extracts transcript-grounded cues rather than claiming verified intent.
+        insights = analyze_conversation_text(
+            result.get("transcript", ""),
+            result.get("meaning_en") if result.get("meaning_en_available") else None,
+        )
+        st.markdown("### Conversation overview")
+        metric_cols = st.columns(4)
+        metric_cols[0].metric("Primary language", str(result.get("language", "unknown")).upper())
+        metric_cols[1].metric("Code-switching", "Detected" if result.get("code_switch_detected") else "Not detected")
+        metric_cols[2].metric("Topic signals", len(insights["topics"]))
+        metric_cols[3].metric("Review cues", len(insights["signals"]))
+        overview_left, overview_right = st.columns([1.55, 1])
+        with overview_left:
+            st.markdown('<div class="sm-panel">', unsafe_allow_html=True)
+            st.markdown("**Conversation brief**")
+            st.write(insights["brief"])
+            st.caption("Extractive preview from " + insights["brief_source"] + "; not an AI-generated summary.")
+            st.markdown('</div>', unsafe_allow_html=True)
+        with overview_right:
+            st.markdown('<div class="sm-panel">', unsafe_allow_html=True)
+            st.markdown("**Detected topic themes**")
+            if insights["topics"]:
+                for topic in insights["topics"]:
+                    st.write("• " + topic["topic"])
+                    st.caption("Matched terms: " + ", ".join(topic["matched_terms"]))
+            else:
+                st.caption("No configured topic keywords were found. This does not mean the conversation has no topic.")
+            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("#### Potential follow-up signals")
+        if insights["signals"]:
+            for signal in insights["signals"]:
+                st.info("**" + signal["label"] + "** — " + signal["description"] +
+                        "\\nEvidence: " + ", ".join(signal["evidence"]))
+        else:
+            st.success("No configured follow-up phrases were detected. This is not proof that no action is needed.")
+        st.caption("These are rule-based review cues, not verified complaint classifications. Always check the original audio.")
+        st.divider()
         st.download_button(
             "Download complete analysis (JSON)",
             data=json.dumps(result, ensure_ascii=False, indent=2, default=str),
