@@ -9,6 +9,59 @@ import numpy as np
 from models.srota_provider import SrotaASRProvider, has_mixed_devanagari_latin
 
 
+
+class SrotaRemoteWorkerTests(unittest.TestCase):
+    def test_remote_endpoint_is_used_when_configured(self):
+        import os
+        from unittest import mock
+
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "ok": True,
+                    "transcript": "मेरा order confirm नहीं हुआ",
+                    "model": SrotaASRProvider.MODEL_NAME,
+                    "inference_seconds": 1.2,
+                    "worker_initialization_seconds": 0.0,
+                    "worker_request_seconds": 1.4,
+                }
+
+        with tempfile.TemporaryDirectory() as directory:
+            audio = Path(directory) / "sample.wav"
+            audio.write_bytes(b"audio")
+            with mock.patch.dict(os.environ, {
+                "SPEECHMIND_SROTA_ENDPOINT": "https://speechmind-srota.hf.space",
+                "SPEECHMIND_SROTA_API_TOKEN": "test-token",
+            }):
+                provider = SrotaASRProvider(project_root=directory)
+                with mock.patch("requests.post", return_value=FakeResponse()) as post:
+                    result = provider.transcribe_file(audio, context="order")
+                self.assertTrue(provider.available)
+                self.assertEqual(result["transcript"], "मेरा order confirm नहीं हुआ")
+                self.assertEqual(post.call_args.args[0], "https://speechmind-srota.hf.space/transcribe")
+                self.assertEqual(
+                    post.call_args.kwargs["headers"]["Authorization"],
+                    "Bearer test-token",
+                )
+                provider.close()
+
+    def test_remote_endpoint_without_token_is_unavailable(self):
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {
+            "SPEECHMIND_SROTA_ENDPOINT": "https://speechmind-srota.hf.space",
+        }, clear=False):
+            os.environ.pop("SPEECHMIND_SROTA_API_TOKEN", None)
+            provider = SrotaASRProvider()
+            self.assertFalse(provider.available)
+            self.assertIn("SPEECHMIND_SROTA_API_TOKEN", provider.unavailable_reason)
+            provider.close()
+
+
 class SrotaScriptDetectionTests(unittest.TestCase):
     def test_detects_hindi_english_code_switch(self):
         self.assertTrue(has_mixed_devanagari_latin("मेरा favourite colour blue है"))
