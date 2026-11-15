@@ -278,6 +278,33 @@ class SrotaASRProvider:
             raise ValueError("Translation input is empty.")
         if not src_lang or not src_lang.strip():
             raise ValueError("Translation source language is missing.")
+        if self.remote_endpoint:
+            if not self.remote_token:
+                raise RuntimeError("SPEECHMIND_SROTA_API_TOKEN is missing from deployment secrets.")
+            try:
+                import requests
+                response = requests.post(
+                    self.remote_endpoint + "/translate",
+                    headers={"Authorization": f"Bearer {self.remote_token}"},
+                    json={"text": text, "src_lang": src_lang},
+                    timeout=(20, 600),
+                )
+                response.raise_for_status()
+                payload = response.json()
+            except Exception as error:
+                raise RuntimeError(
+                    f"Remote IndicTrans2 worker request failed: {type(error).__name__}: {error}"
+                ) from error
+            translated = str(payload.get("translated_text") or "").strip()
+            if not translated:
+                raise RuntimeError("Remote IndicTrans2 worker returned an empty translation.")
+            return {
+                "translated_text": translated,
+                "model": payload.get("model", "ai4bharat/indictrans2-indic-en-dist-200M"),
+                "inference_seconds": payload.get("inference_seconds"),
+                "worker_response": payload,
+            }
+
         response = self._request({
             "action": "translate",
             "text": text,
