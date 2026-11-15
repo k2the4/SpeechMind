@@ -35,7 +35,7 @@ Streamlit Community Cloud installs the main environment from the root `requireme
 
 For a lightweight hosted demonstration, select **Fast support case intake**. It uses the single-pass Whisper route and skips local translation and emotion inference for that run. If Gemini is configured, it can provide contextual analysis and may be used as an audio-transcription fallback only when Whisper returns a valid, explicitly low quality score. An unknown quality score does not trigger an external audio upload.
 
-For the full specialist ASR, IndicTrans2 and trained emotion workflow, use the Docker deployment and provision its isolated worker environment and model checkpoints. Do not describe the standard Streamlit Community Cloud app as running those worker branches unless the runtime diagnostics confirm they are available.
+For full specialist ASR on Streamlit Community Cloud, configure the remote Srota worker endpoint described above and the authorized Hugging Face token for IndicConformer. IndicTrans2 still uses the isolated worker path and is not automatically available on Community Cloud; it requires its own hosted worker configuration or should be reported as unavailable. The local \`.venv_srota\` worker remains supported for local Windows/Linux runs. Do not report a branch as available unless its runtime diagnostics confirm it.
 
 ## Smoke test after reboot
 
