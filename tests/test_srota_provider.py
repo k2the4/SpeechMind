@@ -43,8 +43,8 @@ class SrotaRemoteWorkerTests(unittest.TestCase):
                 self.assertEqual(result["transcript"], "मेरा order confirm नहीं हुआ")
                 self.assertEqual(post.call_args.args[0], "https://speechmind-srota.hf.space/transcribe")
                 self.assertEqual(
-                    post.call_args.kwargs["headers"]["Authorization"],
-                    "Bearer test-token",
+                    post.call_args.kwargs["headers"]["X-SpeechMind-API-Key"],
+                    "test-token",
                 )
                 provider.close()
 
