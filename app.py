@@ -11,7 +11,7 @@ import time
 import streamlit as st
 from pipeline import SpeechMindPipeline
 from models.deployment_checkpoints import ensure_deployment_checkpoints
-from conversation_insights import analyze_conversation_text
+from conversation_insights import analyze_conversation
 
 st.set_page_config(
     page_title="SpeechMind | Call Review",
@@ -47,6 +47,8 @@ st.write("")
 with st.expander("About this analysis and its limitations"):
     st.caption(
         "SpeechMind identifies transcript-based topics and review cues to support a human reviewer. "
+        "A free local Ollama model provides contextual analysis when installed; otherwise the app uses "
+        "deterministic fallback rules. Evidence quotes are checked against the original transcript. "
         "It does not verify complaints, confirm that an issue is resolved, or infer a person's true "
         "emotional state. Language and model support varies by component."
     )
@@ -119,10 +121,29 @@ if audio_source is not None:
 
     result = st.session_state.get("speechmind_result")
     if result is not None:
-        insights = analyze_conversation_text(
+        insights = analyze_conversation(
             result.get("transcript", ""),
             result.get("meaning_en") if result.get("meaning_en_available") else None,
+            language=result.get("language", "unknown"),
         )
+        # Preserve IndicTrans2 when it succeeded; use local LLM translation only
+        # when the translation branch was skipped or unavailable.
+        if not result.get("meaning_en") and insights.get("english_meaning"):
+            result["meaning_en"] = insights["english_meaning"]
+            result["meaning_en_available"] = True
+            result["meaning_en_method"] = "local_ollama_llm"
+            result["meaning_en_note"] = "Generated locally by the open-source Ollama model. Verify against the original speech."
+        llm_info = insights.get("llm") or {}
+        if llm_info.get("provider") == "ollama_local":
+            st.caption(
+                f"Conversation analysis: local AI ({llm_info.get('model')}) · "
+                f"{llm_info.get('duration_sec', 0)}s · no cloud API"
+            )
+        else:
+            st.warning(
+                "Local AI is unavailable; deterministic fallback is being used. "
+                + str(llm_info.get("setup_hint", ""))
+            )
         st.divider()
         st.subheader("2. Call review")
         st.caption("Start with the review summary. Open the sections below when you need more detail.")
@@ -165,7 +186,10 @@ if audio_source is not None:
                 with topic_cols[index % len(topic_cols)]:
                     with st.container(border=True):
                         st.markdown(f"**{topic['topic']}**")
-                        st.caption("Matched terms: " + ", ".join(topic.get("matched_terms", [])))
+                        if topic.get("summary"):
+                            st.write(topic["summary"])
+                        if topic.get("matched_terms"):
+                            st.caption("Matched terms: " + ", ".join(topic.get("matched_terms", [])))
                         st.caption("Evidence source: " + topic.get("evidence_source", "original_transcript").replace("_", " "))
                         for evidence in topic.get("evidence", []):
                             st.write("“" + evidence.get("text", "") + "”")
