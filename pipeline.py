@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from utils.runtime_config import configure_torch_runtime
 
-from utils.audio_utils import preprocess_with_quality
+from utils.audio_utils import prepare_audio_paths
 from models.language_spans import annotate_language_spans
 from models.asr import SpeechRecognizer
 from models.text_emotion import TextEmotionClassifier
@@ -220,7 +220,7 @@ class SpeechMindPipeline:
         """Decode and transcribe once; keep the prepared waveform for later edits."""
         timings = {}
         started = time.perf_counter()
-        audio, quality = preprocess_with_quality(audio_path)
+        audio, asr_audio, quality = prepare_audio_paths(audio_path)
         timings["preprocessing"] = round(time.perf_counter() - started, 3)
         started = time.perf_counter()
         error = None
@@ -230,10 +230,10 @@ class SpeechMindPipeline:
         else:
             try:
                 if asr_context and asr_context.strip():
-                    result = self.asr.transcribe(audio, language_hint=language_hint,
+                    result = self.asr.transcribe(asr_audio, language_hint=language_hint,
                                                  context=asr_context)
                 else:
-                    result = self.asr.transcribe(audio, language_hint=language_hint)
+                    result = self.asr.transcribe(asr_audio, language_hint=language_hint)
                 if not isinstance(result, dict):
                     raise TypeError("ASR returned an invalid result.")
             except Exception as exc:
@@ -241,7 +241,7 @@ class SpeechMindPipeline:
                 print(f"[Pipeline] ASR unavailable for this clip: {error}")
                 result = {}
         timings["asr"] = round(time.perf_counter() - started, 3)
-        return {"audio": audio, "audio_quality": quality, "asr_result": result,
+        return {"audio": audio, "asr_audio": asr_audio, "audio_quality": quality, "asr_result": result,
                 "asr_error": error, "timings_sec": timings}
 
     def analyze_prepared(
