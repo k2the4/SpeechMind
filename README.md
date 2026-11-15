@@ -23,6 +23,8 @@ For a controlled same-audio comparison of the ASR candidates, see [docs/PAIRED_A
 
 ## Hosted deployment
 
+For the standard Streamlit Community Cloud runtime, see [docs/DEPLOY_STREAMLIT_CLOUD.md](docs/DEPLOY_STREAMLIT_CLOUD.md). For the Docker-based Hugging Face Spaces runtime, see [docs/DEPLOY_HUGGINGFACE_SPACES.md](docs/DEPLOY_HUGGINGFACE_SPACES.md).
+
 See [docs/DEPLOY_HUGGINGFACE_SPACES.md](docs/DEPLOY_HUGGINGFACE_SPACES.md) for Docker Space setup, private checkpoint configuration and deployment instructions.
 
 The hosted CPU configuration may take around a minute or more to process short Hinglish recordings. Model predictions are experimental and should not be treated as verified emotional states. Do not upload private or sensitive recordings to a public demo.
