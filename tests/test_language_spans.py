@@ -201,6 +201,37 @@ class LanguageSpanTests(unittest.TestCase):
         self.assertIn("कॉन्टेक्ट", english_tokens)
         self.assertIn("इशू", english_tokens)
 
+    def test_devanagari_respects_marathi_and_nepali_language_hints(self):
+        marathi = annotate_language_spans("माझे घर सुंदर आहे", "mr")
+        nepali = annotate_language_spans("मेरो घर राम्रो छ", "ne")
+
+        self.assertEqual(marathi["languages_present"], ["mr"])
+        self.assertEqual(nepali["languages_present"], ["ne"])
+        self.assertTrue(all(s["script"] == "Devanagari" for s in marathi["language_spans"]))
+        self.assertTrue(all(s["script"] == "Devanagari" for s in nepali["language_spans"]))
+
+    def test_shared_bengali_script_respects_assamese_hint(self):
+        assamese = annotate_language_spans("মই আজি ঘৰলৈ যাওঁ", "as")
+        bengali = annotate_language_spans("আমি আজ বাড়ি যাই", "bn")
+
+        self.assertEqual(assamese["languages_present"], ["as"])
+        self.assertEqual(bengali["languages_present"], ["bn"])
+        self.assertTrue(all(s["script"] == "Bengali" for s in assamese["language_spans"]))
+
+    def test_odia_script_is_recognized(self):
+        result = annotate_language_spans("ମୁଁ ଘରକୁ ଯାଉଛି", "or")
+
+        self.assertEqual(result["languages_present"], ["or"])
+        self.assertTrue(all(s["script"] == "Odia" for s in result["language_spans"]))
+
+    def test_offsets_remain_exact_with_emoji_and_unicode_punctuation(self):
+        text = "🙂 नमस्ते—please, मेरा design!"
+        result = annotate_language_spans(text, "hi")
+
+        for span in result["language_spans"]:
+            self.assertEqual(text[span["char_start"]:span["char_end"]], span["text"])
+            self.assertGreater(span["char_end"], span["char_start"])
+
     def test_transliterated_english_preserves_devanagari_script(self):
         result = annotate_language_spans("मेरा पेमेंट पेंडिंग है", "hi")
         english_spans = [
