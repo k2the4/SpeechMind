@@ -121,11 +121,12 @@ if audio_source is not None:
 
     result = st.session_state.get("speechmind_result")
     if result is not None:
-        insights = analyze_conversation(
-            result.get("transcript", ""),
-            result.get("meaning_en") if result.get("meaning_en_available") else None,
-            language=result.get("language", "unknown"),
-        )
+        with st.spinner("Running free local AI conversation analysis..."):
+            insights = analyze_conversation(
+                result.get("transcript", ""),
+                result.get("meaning_en") if result.get("meaning_en_available") else None,
+                language=result.get("language", "unknown"),
+            )
         # Preserve IndicTrans2 when it succeeded; use local LLM translation only
         # when the translation branch was skipped or unavailable.
         if not result.get("meaning_en") and insights.get("english_meaning"):
