@@ -6,7 +6,6 @@ reliable intent detection. Every output is a review cue grounded in transcript
 text and should be checked against the original audio.
 """
 import re
-from collections import Counter
 
 TOPIC_KEYWORDS = {
     "Payments & refunds": ("payment", "paid", "refund", "money", "transaction", "billing", "charge", "paisa", "paise", "payment", "refund"),
@@ -18,7 +17,7 @@ TOPIC_KEYWORDS = {
 ISSUE_CUES = (
     "problem", "issue", "complaint", "not working", "not received",
     "haven't received", "have not received", "didn't receive", "did not receive",
-    "still waiting", "not resolved", "not fixed", "failed", "delay", "late",
+    "still waiting", "not resolved", "not fixed", "not arrived", "has not arrived", "hasn't arrived", "failed", "delay", "late",
     "refund nahi", "nahi aaya", "nahi mila", "abhi tak", "paise wapas",
 )
 REPEAT_CONTACT_CUES = (
