@@ -331,3 +331,22 @@ def analyze_conversation_text(transcript, translated_text=None):
             "suggested_questions": questions[:5],
         },
     }
+
+
+def analyze_conversation(transcript, translated_text=None, language="unknown"):
+    """Prefer free local LLM analysis; retain deterministic fallback if unavailable."""
+    try:
+        from local_llm import analyze_with_local_llm
+        result = analyze_with_local_llm(transcript, language=language)
+        result["llm"]["fallback_used"] = False
+        return result
+    except Exception as error:
+        fallback = analyze_conversation_text(transcript, translated_text)
+        fallback["llm"] = {
+            "provider": "deterministic_fallback",
+            "available": False,
+            "fallback_used": True,
+            "error": f"{type(error).__name__}: {error}",
+            "setup_hint": "Install Ollama and run SETUP_LOCAL_LLM.bat to enable free local semantic analysis.",
+        }
+        return fallback
