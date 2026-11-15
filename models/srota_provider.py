@@ -68,6 +68,10 @@ class SrotaASRProvider:
         self.model_name = str(model_name or self.MODEL_NAME).strip()
         if not self.model_name:
             raise ValueError("Srota model_name must be a non-empty Hugging Face model ID.")
+        # Hosted Streamlit deployments use a separately hosted persistent worker.
+        from models.deployment_checkpoints import _deployment_setting
+        self.remote_endpoint = _deployment_setting("SPEECHMIND_SROTA_ENDPOINT").rstrip("/")
+        self.remote_token = _deployment_setting("SPEECHMIND_SROTA_API_TOKEN")
         self._process: subprocess.Popen[str] | None = None
         self._stderr_handle = None
         self.stderr_log_path = self.project_root / "logs" / "srota_worker_stderr.log"
@@ -77,7 +81,41 @@ class SrotaASRProvider:
 
     @property
     def available(self) -> bool:
+        if self.remote_endpoint:
+            return bool(self.remote_token)
         return self.python_executable.is_file() and self.worker_script.is_file()
+
+    def _remote_transcribe_file(self, path: Path, context: str | None = None) -> dict:
+        """Call the separately hosted persistent Srota worker."""
+        if not self.remote_token:
+            raise RuntimeError("SPEECHMIND_SROTA_API_TOKEN is missing from deployment secrets.")
+        try:
+            import requests
+            with path.open("rb") as audio_file:
+                response = requests.post(
+                    self.remote_endpoint + "/transcribe",
+                    headers={"Authorization": f"Bearer {self.remote_token}"},
+                    data={"context": str(context or ""), "model_name": self.model_name},
+                    files={"audio": (path.name, audio_file, "audio/wav")},
+                    timeout=(20, self.request_timeout),
+                )
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as error:
+            raise RuntimeError(
+                f"Remote Srota worker request failed: {type(error).__name__}: {error}"
+            ) from error
+        transcript = str(payload.get("transcript") or "").strip()
+        if not transcript:
+            raise RuntimeError("Remote Srota worker returned an empty transcript.")
+        return {
+            "transcript": transcript,
+            "asr_model": str(payload.get("model") or self.model_name),
+            "inference_seconds": payload.get("inference_seconds"),
+            "worker_initialization_seconds": payload.get("worker_initialization_seconds"),
+            "worker_request_seconds": payload.get("worker_request_seconds"),
+            "worker_response": payload,
+        }
 
     @staticmethod
     def _read_stdout(
@@ -201,6 +239,8 @@ class SrotaASRProvider:
         # Follow the model card's native inference path: no injected instruction
         # prompt. Context is reserved for actual user-supplied names/terms only.
         final_context = str(context or "").strip()
+        if self.remote_endpoint:
+            return self._remote_transcribe_file(path, context=final_context)
 
         response = self._request({
             "action": "transcribe",
