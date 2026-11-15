@@ -85,8 +85,9 @@ class ConversationInsightsTests(unittest.TestCase):
         self.assertFalse(result["signals"])
         self.assertEqual(
             result["case_review"]["suggested_status"],
-            "no_configured_cue_detected",
+            "review_required",
         )
+        self.assertTrue(result["needs_human_review"])
 
     def test_extracts_hindi_payment_issue_from_original_transcript(self):
         result = analyze_conversation_text(
@@ -115,6 +116,36 @@ class ConversationInsightsTests(unittest.TestCase):
         topic = next(x for x in result["topics"] if x["topic"] == "Payments & refunds")
         self.assertEqual(topic["evidence_source"], "original_transcript")
         self.assertEqual(topic["evidence"][0]["text"], original)
+
+
+    def test_hindi_recording_script_extracts_payment_case(self):
+        transcript = (
+            "नमस्ते, मैंने कल आपके app से 2,500 रुपये का payment किया था, "
+            "लेकिन मेरे bank account से पैसे कट गए और order अभी तक confirm नहीं हुआ है। "
+            "मुझे transaction successful का message भी मिला था, लेकिन app में अभी भी "
+            "payment pending दिखा रहा है। मैंने दो बार customer support से contact किया, "
+            "लेकिन अभी तक मेरा issue resolve नहीं हुआ। यह problem कल शाम से हो रही है। "
+            "Please मेरा payment status check करके बताइए कि refund मिलेगा या order confirm होगा। "
+            "मुझे आज ही इस issue का resolution और confirmation चाहिए।"
+        )
+        result = analyze_conversation_text(transcript)
+        topics = [item["topic"] for item in result["topics"]]
+        labels = [item["label"] for item in result["signals"]]
+        self.assertIn("Payments & refunds", topics)
+        self.assertIn("Orders & delivery", topics)
+        self.assertIn("Possible unresolved issue", labels)
+        self.assertIn("Possible repeat contact", labels)
+        self.assertIn("Possible follow-up needed", labels)
+        self.assertEqual(result["case_brief"]["reported_details"]["amount"]["value"], "2,500")
+        self.assertTrue(result["needs_human_review"])
+
+    def test_unclassified_conversation_does_not_get_payment_questions(self):
+        result = analyze_conversation_text(
+            "Yesterday our team discussed a college design project and reviewed two wireframes."
+        )
+        self.assertEqual(result["case_brief"]["primary_category"], "Needs classification")
+        self.assertTrue(result["needs_human_review"])
+        self.assertNotIn("transaction", " ".join(result["case_review"]["suggested_questions"]).lower())
 
     def test_does_not_claim_emotion_or_verified_intent(self):
         result = analyze_conversation_text("The order arrived yesterday.")
