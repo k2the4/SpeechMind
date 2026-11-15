@@ -12,6 +12,7 @@ import streamlit as st
 from models.deployment_checkpoints import ensure_deployment_checkpoints
 from conversation_insights import analyze_conversation
 from models.asr_routing import asr_quality_requires_audio_fallback
+from models.deployment_policy import default_analysis_mode_index
 
 st.set_page_config(
     page_title="SpeechMind | Call Review",
@@ -82,6 +83,7 @@ if audio_source is not None:
     analysis_mode = st.radio(
         "Processing mode",
         ["Full SpeechMind analysis", "Fast support case intake"],
+        index=default_analysis_mode_index(),
         horizontal=True,
         help=(
             "Fast mode runs the existing ASR and support-case extraction, while skipping "
