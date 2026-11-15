@@ -113,6 +113,18 @@ ENGLISH_WORDS = {
     "yes", "you", "your"
 }
 
+# English-origin vocabulary commonly rendered phonetically in Devanagari by ASR.
+# Keep the script label as Devanagari; language attribution is a separate signal.
+DEVANAGARI_ENGLISH_WORDS = {
+    "पेमेंट", "बैंक", "अकाउंट", "ऑर्डर", "ऐप",
+    "ट्रांजेक्शन", "सक्सेसफुल", "मैसेज", "पेंडिंग",
+    "कस्टमर", "सपोर्ट", "कॉन्टेक्ट", "कॉन्टैक्ट", "कॉन्टेट",
+    "इशू", "इश्यू", "रिज़ॉल्व", "रिजॉल्व", "रिज़ल्व", "रिजल्व",
+    "प्रॉब्लम", "प्लीज़", "रिफंड", "रिज़ोल्यूशन", "रिजोल्यूशन",
+    "कन्फर्मेशन", "स्टेटस", "चेक", "कन्फर्म", "डिलीवरी",
+    "सर्विस", "कॉल", "टिकट", "अपडेट", "रिव्यू", "फीडबैक",
+}
+
 SCRIPT_MARKERS = (
     ("DEVANAGARI", "Devanagari"),
     ("LATIN", "Latin"),
@@ -157,6 +169,8 @@ def _classify_token(
 ) -> tuple[str, float, str]:
     normalized = token.casefold().replace("’", "'")
     if script == "Devanagari":
+        if normalized in DEVANAGARI_ENGLISH_WORDS:
+            return "en", 0.86, "transliterated_english_lexicon"
         language = primary_language if primary_language in SUPPORTED_LANGUAGES else "hi"
         return language, 0.96, "unicode_script"
 
