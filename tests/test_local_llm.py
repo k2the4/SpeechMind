@@ -102,7 +102,10 @@ class LocalLLMTests(unittest.TestCase):
         mocked_urlopen.return_value = _FakeResponse({
             "message": {"content": json.dumps(model_output, ensure_ascii=False)}
         })
-        result = local_llm.analyze_with_local_llm(transcript, language="hi")
+        # Keep this test on the Ollama-compatible mock even when a Gemini key
+        # is present in the developer's Streamlit secrets.
+        with patch("local_llm._get_gemini_api_key", return_value=""):
+            result = local_llm.analyze_with_local_llm(transcript, language="hi")
         self.assertEqual(result["case_brief"]["primary_category"], "Payments & refunds")
         self.assertEqual(result["case_brief"]["reported_details"]["amount"]["value"], "2500")
         self.assertEqual(len(result["topics"]), 1)
