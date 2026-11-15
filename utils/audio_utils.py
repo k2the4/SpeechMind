@@ -69,7 +69,30 @@ def preprocess_with_quality(path: str):
     return normalize_audio(audio), quality
 
 
+def prepare_audio_paths(path: str):
+    """
+    Prepare independent ASR and voice-emotion waveforms.
+
+    Quality is measured on the decoded original. Voice emotion receives the
+    original normalized waveform. ASR receives a separate copy with its DC
+    offset removed and peak normalization applied.
+    """
+    original = load_audio(path)
+    quality = analyze_audio_quality(original, sample_rate=TARGET_SAMPLE_RATE)
+
+    original = normalize_audio(original)
+
+    # Remove only the constant waveform offset. Do not denoise, trim pauses,
+    # compress dynamics, or alter the original voice-emotion input.
+    asr_audio = original.copy()
+    if asr_audio.size:
+        asr_audio = asr_audio - np.float32(np.mean(asr_audio, dtype=np.float64))
+    asr_audio = normalize_audio(asr_audio)
+
+    return original, asr_audio, quality
+
+
 def preprocess(path: str) -> np.ndarray:
-    """Backward-compatible model input helper."""
-    audio, _ = preprocess_with_quality(path)
-    return audio
+    """Backward-compatible ASR model input helper."""
+    _, asr_audio, _ = prepare_audio_paths(path)
+    return asr_audio
