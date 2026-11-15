@@ -1,96 +1,132 @@
-"""Evidence-grounded customer-support conversation review cues.
+"""Evidence-grounded customer-support case extraction.
 
-This MVP intentionally uses deterministic lexical rules, not an LLM. Findings
-are review prompts, never verified complaint states or customer intent. Each
-finding carries the sentence(s) that triggered it so a human can check the
-recording. Translation is used as a secondary analysis source only when present.
+The speech pipeline remains the source of transcript, translation, language and
+optional emotion outputs. This module adds a separate support-intake layer.
+Rules are intentionally conservative: all extracted details are attributed to
+the transcript and every finding carries original-transcript evidence.
 """
 import re
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List
 
 
 TOPIC_KEYWORDS = {
     "Payments & refunds": (
-        "payment", "paid", "refund", "money", "transaction", "billing",
-        "charge", "paisa", "paise", "payment failed", "deducted",
-        "double charged", "पैसे", "भुगतान", "रिफंड",
+        "payment", "paid", "refund", "money", "transaction", "billing", "charge",
+        "paisa", "paise", "payment failed", "deducted", "double charged",
+        "पैसे", "भुगतान", "रिफंड", "पेमेंट", "पैसा कट", "पैसे कट",
+        "paise kat", "paise kate", "payment kar", "refund nahi", "paisa kata",
     ),
     "Orders & delivery": (
         "order", "delivery", "delivered", "shipment", "courier", "parcel",
         "dispatch", "tracking", "not delivered", "आर्डर", "ऑर्डर", "डिलीवरी",
+        "ऑर्डर नहीं", "samaan", "product nahi mila", "order nahi mila",
+        "delivery nahi", "parcel nahi",
     ),
     "Account access": (
         "account", "login", "log in", "password", "otp", "verification",
-        "blocked", "sign in", "लॉगिन", "पासवर्ड", "ओटीपी",
+        "blocked", "sign in", "लॉगिन", "पासवर्ड", "ओटीपी", "खाता",
+        "login nahi", "otp nahi", "account access",
     ),
     "Technical support": (
         "error", "issue", "problem", "not working", "crash", "failed",
         "app", "website", "server", "bug", "लोड नहीं", "काम नहीं कर",
+        "kaam nahi kar", "open nahi ho", "chal nahi raha", "hang ho",
     ),
     "Cancellation & returns": (
         "cancel", "cancellation", "return", "replace", "replacement",
-        "exchange", "वापस", "रिटर्न", "कैंसल",
+        "exchange", "वापस", "रिटर्न", "कैंसल", "cancel kar", "return karna",
     ),
     "Service & agent experience": (
         "agent", "executive", "support", "customer care", "rude",
-        "helpful", "behaviour", "behavior", "representative",
+        "helpful", "behaviour", "behavior", "representative", "customer service",
+        "customer care wale", "baat nahi",
     ),
 }
 
-# Phrases are deliberately explicit to reduce accidental substring matches.
 ISSUE_CUES = (
     "problem", "issue", "complaint", "not working", "not received",
-    "haven't received", "have not received", "didn't receive",
-    "did not receive", "still waiting", "not resolved", "not fixed",
-    "not arrived", "has not arrived", "hasn't arrived", "failed",
-    "delay", "delayed", "late", "refund nahi", "nahi aaya",
-    "nahi mila", "abhi tak", "paise wapas", "काम नहीं कर",
+    "haven't received", "have not received", "didn't receive", "did not receive",
+    "still waiting", "not resolved", "not fixed", "not arrived", "failed",
+    "delay", "delayed", "late", "refund nahi", "nahi aaya", "nahi mila",
+    "abhi tak", "paise wapas", "काम नहीं कर", "नहीं मिला", "नहीं आया",
+    "अभी तक", "पैसे कट", "नहीं हुआ", "दिक्कत", "समस्या", "परेशानी",
+    "kaam nahi", "nahi ho raha", "nahi hua", "abhi tak nahi",
 )
 RESOLUTION_CUES = (
-    "issue is resolved", "problem is resolved", "resolved now", "received the refund", "refund has arrived",
-    "has been resolved", "got the refund", "refund received",
-    "delivered now", "working now", "fixed now", "समस्या हल",
+    "issue is resolved", "problem is resolved", "resolved now",
+    "received the refund", "refund has arrived", "has been resolved",
+    "got the refund", "refund received", "delivered now", "working now",
+    "fixed now", "समस्या हल", "समाधान हो गया", "पैसे वापस मिल गए",
+    "refund mil gaya", "paise aa gaye", "ab kaam kar raha",
 )
 REPEAT_CONTACT_CUES = (
     "called again", "called three times", "called multiple times",
-    "contacted before", "already called", "again and again",
-    "multiple times", "third time", "pehle bhi", "पहले भी", "kai baar",
-    "कई बार",
+    "contacted before", "already called", "again and again", "multiple times",
+    "third time", "pehle bhi", "पहले भी", "kai baar", "कई बार",
+    "dobara call", "baar baar", "बार बार",
 )
 FOLLOW_UP_CUES = (
-    "please check", "please resolve", "call me back", "follow up",
-    "follow-up", "update me", "let me know", "still waiting",
-    "not resolved", "abhi tak", "nahi mila", "कॉल बैक",
+    "please check", "please resolve", "call me back", "follow up", "follow-up",
+    "update me", "let me know", "still waiting", "not resolved", "abhi tak",
+    "nahi mila", "कॉल बैक", "जल्दी बताएं", "update dena", "bata dijiyega",
 )
 ESCALATION_CUES = (
     "escalate", "escalation", "manager", "supervisor", "consumer court",
     "complaint to", "legal action", "social media", "senior team",
-    "मैनेजर", "शिकायत",
+    "मैनेजर", "शिकायत", "manager se baat", "senior se baat",
 )
 CUSTOMER_IMPACT_CUES = (
-    "can't use", "cannot use", "unable to use", "lost money",
-    "money deducted", "business is affected", "missed my", "urgent",
-    "very important", "खाते से पैसे", "पैसे कट",
+    "can't use", "cannot use", "unable to use", "lost money", "money deducted",
+    "business is affected", "missed my", "urgent", "very important",
+    "खाते से पैसे", "पैसे कट", "जरूरी", "बहुत परेशानी", "काम रुक",
+    "kaam ruk", "paise kat",
 )
 AGENT_COMMITMENT_CUES = (
     "we will call", "we'll call", "i will call", "i'll call",
     "we will refund", "we'll refund", "i will refund", "i'll refund",
-    "will be resolved", "within 24 hours", "within 48 hours",
-    "by tomorrow", "we have raised a ticket", "ticket has been raised",
-    "मैं कॉल", "हम कॉल करेंगे",
+    "will be resolved", "within 24 hours", "within 48 hours", "by tomorrow",
+    "we have raised a ticket", "ticket has been raised", "मैं कॉल",
+    "हम कॉल करेंगे", "ticket raise", "call karenge",
 )
+
+TOPIC_QUESTIONS = {
+    "Payments & refunds": [
+        "What was the payment date and approximate time?",
+        "Can you provide the transaction or reference ID?",
+        "Which payment method or bank was used?",
+    ],
+    "Orders & delivery": [
+        "Can you share the order ID?",
+        "What delivery date was promised?",
+        "What does the latest tracking update show?",
+    ],
+    "Account access": [
+        "Which phone number or email is registered on the account?",
+        "What happens when you try to sign in?",
+        "Do you receive the OTP or verification message?",
+    ],
+    "Technical support": [
+        "Which app, website or device is affected?",
+        "When did the problem start?",
+        "What exact error message do you see?",
+    ],
+    "Cancellation & returns": [
+        "Can you share the order ID?",
+        "When was the cancellation or return requested?",
+        "Was a pickup or confirmation message received?",
+    ],
+    "Service & agent experience": [
+        "When did the interaction take place?",
+        "Was a previous ticket or reference number provided?",
+    ],
+}
 
 
 def _sentences(text: str) -> List[str]:
-    return [
-        part.strip()
-        for part in re.split(r"(?<=[.!?।])\s+|\n+", text or "")
-        if part.strip()
-    ]
+    return [part.strip() for part in re.split(r"(?<=[.!?।])\s+|\n+", text or "") if part.strip()]
 
 
 def _contains(text: str, phrase: str) -> bool:
-    """Match phrases without treating short words as arbitrary substrings."""
     escaped = re.escape(phrase.casefold())
     if re.fullmatch(r"[a-z0-9 ]+", phrase.casefold()):
         pattern = r"(?<![a-z0-9])" + escaped.replace(r"\ ", r"\s+") + r"(?![a-z0-9])"
@@ -100,12 +136,10 @@ def _contains(text: str, phrase: str) -> bool:
 
 def _evidence(sentences: Iterable[str], cues: Iterable[str], limit: int = 3) -> List[Dict[str, object]]:
     found = []
-    seen = set()
     for sentence in sentences:
         matches = [cue for cue in cues if _contains(sentence.casefold(), cue)]
-        if matches and sentence not in seen:
-            found.append({"text": sentence, "matched_terms": matches[:4]})
-            seen.add(sentence)
+        if matches:
+            found.append({"text": sentence, "matched_terms": matches[:5]})
         if len(found) >= limit:
             break
     return found
@@ -115,79 +149,135 @@ def _brief(source: str, limit: int = 420) -> str:
     parts = _sentences(source)
     value = " ".join(parts[:2]) if parts else "No usable transcript is available."
     if len(value) > limit:
-        value = value[: limit - 3].rsplit(" ", 1)[0] + "..."
+        value = value[:limit - 3].rsplit(" ", 1)[0] + "..."
     return value
 
 
-def analyze_conversation_text(transcript, translated_text=None):
-    """Return a stable, JSON-serializable support-call review structure."""
-    original = (transcript or "").strip()
-    english = (translated_text or "").strip()
-    # English translation can improve lexical coverage, but original transcript
-    # remains the primary evidence and is always retained in the result.
-    analysis_source = english or original
-    sentences = _sentences(analysis_source)
-    lowered = analysis_source.casefold()
-
+def _topic_matches(original: str, english: str):
+    original_sentences = _sentences(original)
+    english_sentences = _sentences(english)
     topics = []
     for topic, phrases in TOPIC_KEYWORDS.items():
-        matched = [phrase for phrase in phrases if _contains(lowered, phrase)]
-        if matched:
-            topics.append({
-                "topic": topic,
-                "matched_terms": list(dict.fromkeys(matched))[:5],
-                "evidence": _evidence(sentences, matched, limit=2),
-                "method": "keyword rules",
-            })
+        original_matches = [p for p in phrases if _contains(original.casefold(), p)]
+        english_matches = [p for p in phrases if _contains(english.casefold(), p)] if english else []
+        matches = list(dict.fromkeys(original_matches + english_matches))
+        if not matches:
+            continue
+        # Prefer original-language evidence. Translation-only matches are shown
+        # as translated evidence and are never presented as verbatim transcript.
+        evidence = _evidence(original_sentences, original_matches, limit=2)
+        if not evidence and english_matches:
+            evidence = _evidence(english_sentences, english_matches, limit=2)
+            evidence_source = "english_translation"
+        else:
+            evidence_source = "original_transcript"
+        topics.append({
+            "topic": topic,
+            "matched_terms": matches[:6],
+            "evidence": evidence,
+            "evidence_source": evidence_source,
+            "method": "multilingual keyword rules",
+        })
+    return topics
 
-    resolution_evidence = _evidence(sentences, RESOLUTION_CUES)
-    issue_evidence = _evidence(sentences, ISSUE_CUES)
-    # A resolution phrase suppresses only an unresolved cue when it appears
-    # in the same or a later sentence; it does not erase the underlying issue.
-    unresolved_evidence = []
-    for item in issue_evidence:
-        idx = sentences.index(item["text"])
-        resolved_later = any(
-            _evidence([s], RESOLUTION_CUES, limit=1)
-            for s in sentences[idx:]
-        )
-        if not resolved_later:
-            unresolved_evidence.append(item)
 
+def analyze_conversation_text(transcript, translated_text=None):
+    """Return an additive, JSON-serializable executive case-review structure."""
+    original = (transcript or "").strip()
+    english = (translated_text or "").strip()
+    original_sentences = _sentences(original)
+    analysis_source = english or original
+    topics = _topic_matches(original, english)
+
+    # Signals are searched in both sources, but evidence prefers the original.
+    def combined_evidence(cues, limit=3):
+        found = _evidence(original_sentences, cues, limit=limit)
+        if found or not english:
+            return found
+        return _evidence(_sentences(english), cues, limit=limit)
+
+    resolution_evidence = combined_evidence(RESOLUTION_CUES)
+    issue_evidence = combined_evidence(ISSUE_CUES)
     signal_specs = [
-        ("Possible unresolved issue", unresolved_evidence,
+        ("Possible unresolved issue", ISSUE_CUES,
          "Issue-related wording appears without a later explicit resolution cue."),
-        ("Possible repeat contact", _evidence(sentences, REPEAT_CONTACT_CUES),
+        ("Possible repeat contact", REPEAT_CONTACT_CUES,
          "The speaker may be referring to earlier contact attempts."),
-        ("Possible follow-up needed", _evidence(sentences, FOLLOW_UP_CUES),
+        ("Possible follow-up needed", FOLLOW_UP_CUES,
          "The transcript contains a request or wording associated with a next step."),
-        ("Possible escalation", _evidence(sentences, ESCALATION_CUES),
+        ("Possible escalation", ESCALATION_CUES,
          "Escalation-related wording appears and may need supervisor review."),
-        ("Customer-reported impact", _evidence(sentences, CUSTOMER_IMPACT_CUES),
+        ("Customer-reported impact", CUSTOMER_IMPACT_CUES,
          "The speaker describes a possible impact or urgency."),
-        ("Agent commitment mentioned", _evidence(sentences, AGENT_COMMITMENT_CUES),
-         "The transcript contains wording that may represent an agent commitment; verify owner and deadline."),
+        ("Agent commitment mentioned", AGENT_COMMITMENT_CUES,
+         "The transcript may contain an agent commitment; verify its owner and deadline."),
     ]
     signals = []
-    for label, evidence, description in signal_specs:
+    for label, cues, description in signal_specs:
+        evidence = combined_evidence(cues)
+        if label == "Possible unresolved issue" and resolution_evidence:
+            # Keep unresolved only when issue evidence occurs after the final
+            # explicit resolution cue; do not infer resolution from silence.
+            resolution_texts = {x["text"] for x in resolution_evidence}
+            if any(original_sentences.index(x["text"]) < len(original_sentences) - 1
+                   for x in resolution_evidence if x["text"] in original_sentences):
+                evidence = [
+                    item for item in evidence
+                    if item["text"] in original_sentences
+                    and any(original_sentences.index(item["text"]) >
+                            original_sentences.index(r) for r in resolution_texts
+                            if r in original_sentences)
+                ]
+            else:
+                evidence = []
         if evidence:
             signals.append({
                 "label": label,
-                "evidence": [term for item in evidence for term in item["matched_terms"]][:5],
+                "evidence": [term for item in evidence for term in item["matched_terms"]][:6],
                 "evidence_sentences": evidence,
                 "description": description,
                 "status": "needs_human_review",
             })
 
-    needs_review = bool(signals) or not bool(original)
+    matched_topics = [item["topic"] for item in topics]
+    questions = []
+    for topic in matched_topics:
+        for question in TOPIC_QUESTIONS.get(topic, []):
+            if question not in questions:
+                questions.append(question)
+    if not questions:
+        questions = [
+            "Please describe exactly what happened and what you expected to happen.",
+            "When did the issue first occur?",
+            "Do you have an order, transaction or support reference number?",
+        ]
+
+    # Only claim details explicitly present in the transcript. Never invent IDs,
+    # amounts, dates or account identifiers from a translation.
+    detail_patterns = {
+        "transaction_id": r"\b(?:transaction|txn|utr|reference)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{6,})\b",
+        "order_id": r"\b(?:order)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{5,})\b",
+        "amount": r"(?:₹|rs\.?\s*)(\d[\d,]*(?:\.\d{1,2})?)",
+    }
+    extracted_details = {}
+    for key, pattern in detail_patterns.items():
+        match = re.search(pattern, original, flags=re.IGNORECASE)
+        if match:
+            extracted_details[key] = {"value": match.group(1), "source": "original_transcript"}
+
+    needs_review = bool(signals) or bool(topics) or not bool(original)
     review_reasons = []
     if not original:
         review_reasons.append("No original transcript is available.")
     if not english:
-        review_reasons.append("English meaning is unavailable; findings use the original transcript.")
+        review_reasons.append("English meaning is unavailable; topic rules also inspect the original transcript.")
     if signals:
         review_reasons.append("One or more support review cues were detected.")
+    if topics:
+        review_reasons.append("One or more possible support topics were detected.")
 
+    primary_topic = topics[0]["topic"] if topics else "Needs classification"
+    status = "review_required" if needs_review else "no_configured_cue_detected"
     return {
         "brief": _brief(analysis_source),
         "brief_source": "English translation" if english else "original transcript",
@@ -196,18 +286,28 @@ def analyze_conversation_text(transcript, translated_text=None):
         "needs_human_review": needs_review,
         "review_reasons": review_reasons,
         "resolution_cues": resolution_evidence,
-        "analysis_source": "English translation" if english else "original transcript",
-        "method": "deterministic keyword rules and extractive evidence; not a trained classifier",
+        "analysis_source": "English translation and original transcript" if english else "original transcript",
+        "method": "multilingual deterministic keyword rules and extractive evidence; not a trained classifier",
         "original_transcript": original,
         "translation_available": bool(english),
+        "case_brief": {
+            "primary_category": primary_topic,
+            "issue_summary": _brief(analysis_source),
+            "reported_details": extracted_details,
+            "missing_information": questions[:5],
+            "evidence": [
+                {"topic": topic["topic"], "source": topic["evidence_source"], "items": topic["evidence"]}
+                for topic in topics
+            ],
+            "review_caveat": "All extracted details are transcript-derived and require executive verification.",
+        },
         "case_review": {
-            "suggested_status": (
-                "review_required" if needs_review else "no_configured_cue_detected"
-            ),
+            "suggested_status": status,
             "suggested_next_step": (
-                "Human reviewer: verify the issue, evidence, resolution state and any promised follow-up against the audio."
+                "Verify the reported issue and evidence, collect missing details, then check the relevant account/order/payment system."
                 if needs_review else
                 "No configured review cue was detected; this is not proof that no action is required."
             ),
+            "suggested_questions": questions[:5],
         },
     }
