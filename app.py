@@ -107,21 +107,19 @@ if audio_source is not None:
         metric_cols[3].metric("Review cues", len(insights["signals"]))
         overview_left, overview_right = st.columns([1.55, 1])
         with overview_left:
-            st.markdown('<div class="sm-panel">', unsafe_allow_html=True)
-            st.markdown("**Conversation brief**")
-            st.write(insights["brief"])
-            st.caption("Extractive preview from " + insights["brief_source"] + "; not an AI-generated summary.")
-            st.markdown('</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("**Conversation brief**")
+                st.write(insights["brief"])
+                st.caption("Extractive preview from " + insights["brief_source"] + "; not an AI-generated summary.")
         with overview_right:
-            st.markdown('<div class="sm-panel">', unsafe_allow_html=True)
-            st.markdown("**Detected topic themes**")
-            if insights["topics"]:
-                for topic in insights["topics"]:
-                    st.write("• " + topic["topic"])
-                    st.caption("Matched terms: " + ", ".join(topic["matched_terms"]))
-            else:
-                st.caption("No configured topic keywords were found. This does not mean the conversation has no topic.")
-            st.markdown('</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("**Detected topic themes**")
+                if insights["topics"]:
+                    for topic in insights["topics"]:
+                        st.write("• " + topic["topic"])
+                        st.caption("Matched terms: " + ", ".join(topic["matched_terms"]))
+                else:
+                    st.caption("No configured topic keywords were found. This does not mean the conversation has no topic.")
         st.markdown("#### Potential follow-up signals")
         if insights["signals"]:
             for signal in insights["signals"]:
