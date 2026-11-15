@@ -14,8 +14,8 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo Downloading Qwen 2.5 3B Instruct (quantized local model)...
-ollama pull qwen2.5:3b
+echo Downloading Qwen 2.5 0.5B Instruct (small quantized local model)...
+ollama pull qwen2.5:0.5b
 if errorlevel 1 (
   echo Model download failed. Check your internet connection and try again.
   pause
