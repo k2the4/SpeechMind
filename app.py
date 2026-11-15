@@ -143,9 +143,9 @@ if audio_source is not None:
             result["meaning_en_method"] = "local_ollama_llm"
             result["meaning_en_note"] = "Generated locally by the open-source Ollama model. Verify against the original speech."
         llm_info = insights.get("llm") or {}
-        if llm_info.get("provider") == "ollama_local":
+        if llm_info.get("provider") in {"ollama_local", "gemini_api"}:
             st.caption(
-                f"Conversation analysis: local AI ({llm_info.get('model')}) · "
+                f"Conversation analysis: {'Gemini API' if llm_info.get('provider') == 'gemini_api' else 'local AI'} ({llm_info.get('model')}) · "
                 f"{llm_info.get('duration_sec', 0)}s · no cloud API"
             )
         else:
