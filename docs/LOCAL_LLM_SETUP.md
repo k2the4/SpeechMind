@@ -13,7 +13,7 @@ SpeechMind supports Gemini API free-tier inference. No model weights or Ollama i
    .\.venv\Scripts\python.exe -m streamlit run app.py
    ```
 
-Default model: `gemini-2.5-flash-lite`. Google's current pricing page lists free text input/output subject to account-specific limits. Free-tier content may be used to improve Google products. Do not send sensitive customer recordings through this route. See https://ai.google.dev/gemini-api/docs/pricing and https://ai.google.dev/gemini-api/docs/rate-limits.
+Default model: `gemini-3.5-flash-lite`. Google's current pricing page lists free text input/output subject to account-specific limits. Free-tier content may be used to improve Google products. Do not send sensitive customer recordings through this route. See https://ai.google.dev/gemini-api/docs/pricing and https://ai.google.dev/gemini-api/docs/rate-limits.
 
 ## Offline alternative
 Ollama is optional. Install it only for offline/local inference, then run `SETUP_LOCAL_LLM.bat` to pull `qwen2.5:0.5b`. Without a Gemini key or a working Ollama server, SpeechMind uses deterministic fallback.
