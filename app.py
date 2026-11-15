@@ -287,6 +287,12 @@ if audio_source is not None:
             with left:
                 st.markdown("**Original transcript**")
                 st.write(result.get("transcript") or "No transcript was produced.")
+                if result.get("asr_fallback") and result.get("asr_whisper_transcript"):
+                    st.caption("Original Whisper hypothesis (retained for comparison)")
+                    st.write(result["asr_whisper_transcript"])
+                    st.info("The displayed transcript was produced by Gemini from the original audio because Whisper's quality heuristic was low. Gemini's transcript is not independently confidence-scored; verify it against the recording.")
+                if result.get("asr_audio_fallback_error"):
+                    st.warning("Gemini audio transcription fallback failed: " + str(result["asr_audio_fallback_error"]))
                 if result.get("asr_error"):
                     st.warning("Speech recognition issue: " + str(result["asr_error"]))
             with right:
@@ -358,6 +364,12 @@ if audio_source is not None:
                 "asr_model": result.get("asr_model"),
                 "asr_provider": result.get("asr_provider"),
                 "asr_quality_status": result.get("asr_quality_status"),
+                "asr_quality_score": result.get("asr_quality_score"),
+                "asr_quality_note": result.get("asr_quality_note"),
+                "asr_fallback": result.get("asr_fallback", False),
+                "asr_fallback_reason": result.get("asr_fallback_reason"),
+                "asr_original_model": result.get("asr_original_model"),
+                "asr_audio_fallback_error": result.get("asr_audio_fallback_error"),
                 "translator_provider": result.get("translator_provider"),
                 "meaning_en_method": result.get("meaning_en_method"),
                 "torch_runtime": result.get("torch_runtime"),

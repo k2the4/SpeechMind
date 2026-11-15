@@ -385,7 +385,9 @@ class SpeechRecognizer:
                 language=None,
                 fp16=False,
                 verbose=False,
-                beam_size=1,
+                # Beam search improves transcription quality for names, numbers and
+                # code-switched speech while retaining a single-pass decode.
+                beam_size=5,
                 condition_on_previous_text=False,
             )
             result = self._whisper_result(
