@@ -25,9 +25,9 @@ TOPIC_KEYWORDS = {
         "delivery nahi", "parcel nahi",
     ),
     "Account access": (
-        "account", "login", "log in", "password", "otp", "verification",
-        "blocked", "sign in", "लॉगिन", "पासवर्ड", "ओटीपी", "खाता",
-        "login nahi", "otp nahi", "account access",
+        "account access", "account blocked", "login", "log in", "password",
+        "otp", "verification", "blocked", "sign in", "लॉगिन", "पासवर्ड",
+        "ओटीपी", "खाता", "login nahi", "otp nahi",
     ),
     "Technical support": (
         "error", "issue", "problem", "not working", "crash", "failed",
@@ -269,7 +269,7 @@ def analyze_conversation_text(transcript, translated_text=None):
     detail_patterns = {
         "transaction_id": r"\b(?:transaction|txn|utr|reference)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{6,})\b",
         "order_id": r"\b(?:order)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{5,})\b",
-        "amount": r"(?:₹|rs\.?\s*)(\d[\d,]*(?:\.\d{1,2})?)|(?<!\d)(\d[\d,]*(?:\.\d{1,2})?)\s*(?:रुपये|रुपए|रु\.?)(?!\w)",
+        "amount": r"(?:₹|rs\.?\s*)(\d[\d,]*(?:\.\d{1,2})?)|(?<!\d)(\d[\d,]*(?:\.\d{1,2})?)\s*(?:रुपये|रुपए|रूपये|रूपए|रु\.?)(?!\w)",
     }
     extracted_details = {}
     for key, pattern in detail_patterns.items():
