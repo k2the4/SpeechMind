@@ -1,10 +1,8 @@
 # SpeechMind Python dependencies.
 # SETUP_SECOND_PC.bat installs the matching PyTorch + TorchAudio build
 # before this file. The current development machine should use CPU inference.
-# Hugging Face Gradio Space additionally installs Gradio from this file.
 
 # Transformers and speech models
-gradio>=5.0,<6.0
 transformers==4.46.3
 accelerate
 openai-whisper
@@ -31,5 +29,3 @@ scikit-learn
 pandas
 matplotlib
 datasets
-huggingface_hub>=0.36.2,<1.0
-joblib
