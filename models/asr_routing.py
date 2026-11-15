@@ -139,3 +139,21 @@ def srota_transcript_supports_hindi(
     return has_hindi_script or whisper_transcript_suggests_hinglish(
         transcript, primary_language
     )
+
+def asr_quality_requires_audio_fallback(score, threshold: float = 0.60) -> bool:
+    """Use the hosted audio fallback only for a valid, explicitly low ASR score.
+
+    Missing or malformed quality is unknown, not evidence of poor recognition.
+    """
+    import math
+
+    try:
+        value = float(score)
+        cutoff = float(threshold)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if not math.isfinite(value) or not math.isfinite(cutoff):
+        return False
+    if not 0.0 <= value <= 1.0 or not 0.0 < cutoff <= 1.0:
+        return False
+    return value < cutoff

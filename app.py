@@ -11,6 +11,7 @@ import time
 import streamlit as st
 from models.deployment_checkpoints import ensure_deployment_checkpoints
 from conversation_insights import analyze_conversation
+from models.asr_routing import asr_quality_requires_audio_fallback
 
 st.set_page_config(
     page_title="SpeechMind | Call Review",
@@ -118,7 +119,7 @@ if audio_source is not None:
                 # On hosted fast intake, use Gemini's audio understanding as a
                 # transcript fallback when Whisper's heuristic quality is weak.
                 # Keep the raw Whisper hypothesis for audit and never overwrite it.
-                if fast_case_mode and float(result.get("asr_quality_score") or 0.0) < 0.60:
+                if fast_case_mode and asr_quality_requires_audio_fallback(result.get("asr_quality_score")):
                     try:
                         from local_llm import transcribe_audio_with_gemini
                         whisper_transcript = str(result.get("transcript") or "")
