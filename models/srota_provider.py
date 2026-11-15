@@ -85,6 +85,16 @@ class SrotaASRProvider:
             return bool(self.remote_token)
         return self.python_executable.is_file() and self.worker_script.is_file()
 
+    @property
+    def unavailable_reason(self) -> str:
+        if self.remote_endpoint and not self.remote_token:
+            return "Remote Srota endpoint is configured, but SPEECHMIND_SROTA_API_TOKEN is missing."
+        if not self.remote_endpoint and not self.python_executable.is_file():
+            return "Srota environment is not installed; run SETUP_HINGLISH_ASR_ENV.bat locally or configure SPEECHMIND_SROTA_ENDPOINT for hosted deployment."
+        if not self.remote_endpoint and not self.worker_script.is_file():
+            return f"Srota worker script is missing: {self.worker_script}"
+        return "Srota provider is unavailable."
+
     def _remote_transcribe_file(self, path: Path, context: str | None = None) -> dict:
         """Call the separately hosted persistent Srota worker."""
         if not self.remote_token:
