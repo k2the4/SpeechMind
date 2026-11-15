@@ -72,6 +72,7 @@ class SrotaASRProvider:
         from models.deployment_checkpoints import _deployment_setting
         self.remote_endpoint = _deployment_setting("SPEECHMIND_SROTA_ENDPOINT").rstrip("/")
         self.remote_token = _deployment_setting("SPEECHMIND_SROTA_API_TOKEN")
+        self.space_token = _deployment_setting("HF_TOKEN")
         self._process: subprocess.Popen[str] | None = None
         self._stderr_handle = None
         self.stderr_log_path = self.project_root / "logs" / "srota_worker_stderr.log"
@@ -104,7 +105,13 @@ class SrotaASRProvider:
             with path.open("rb") as audio_file:
                 response = requests.post(
                     self.remote_endpoint + "/transcribe",
-                    headers={"Authorization": f"Bearer {self.remote_token}"},
+                    headers={
+                        "X-SpeechMind-API-Key": self.remote_token,
+                        **(
+                            {"Authorization": f"Bearer {self.space_token}"}
+                            if self.space_token else {}
+                        ),
+                    },
                     data={"context": str(context or ""), "model_name": self.model_name},
                     files={"audio": (path.name, audio_file, "audio/wav")},
                     timeout=(20, self.request_timeout),
@@ -285,7 +292,13 @@ class SrotaASRProvider:
                 import requests
                 response = requests.post(
                     self.remote_endpoint + "/translate",
-                    headers={"Authorization": f"Bearer {self.remote_token}"},
+                    headers={
+                        "X-SpeechMind-API-Key": self.remote_token,
+                        **(
+                            {"Authorization": f"Bearer {self.space_token}"}
+                            if self.space_token else {}
+                        ),
+                    },
                     json={"text": text, "src_lang": src_lang},
                     timeout=(20, 600),
                 )
