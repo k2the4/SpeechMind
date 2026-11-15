@@ -47,7 +47,7 @@ ISSUE_CUES = (
     "nahi mila", "abhi tak", "paise wapas", "काम नहीं कर",
 )
 RESOLUTION_CUES = (
-    "issue is resolved", "problem is resolved", "resolved now",
+    "issue is resolved", "problem is resolved", "resolved now", "received the refund", "refund has arrived",
     "has been resolved", "got the refund", "refund received",
     "delivered now", "working now", "fixed now", "समस्या हल",
 )
@@ -179,7 +179,7 @@ def analyze_conversation_text(transcript, translated_text=None):
                 "status": "needs_human_review",
             })
 
-    needs_review = bool(signals) or not bool(original) or not bool(english)
+    needs_review = bool(signals) or not bool(original)
     review_reasons = []
     if not original:
         review_reasons.append("No original transcript is available.")
