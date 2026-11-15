@@ -9,7 +9,6 @@ import tempfile
 import time
 
 import streamlit as st
-from pipeline import SpeechMindPipeline
 from models.deployment_checkpoints import ensure_deployment_checkpoints
 from conversation_insights import analyze_conversation
 
@@ -56,7 +55,10 @@ with st.expander("About this analysis and its limitations"):
 
 @st.cache_resource(show_spinner="Loading SpeechMind models (first run only)...")
 def get_pipeline():
+    # Keep heavyweight ML imports out of the initial web-app startup path.
     ensure_deployment_checkpoints()
+    from pipeline import SpeechMindPipeline
+
     return SpeechMindPipeline()
 
 
