@@ -84,7 +84,7 @@ AGENT_COMMITMENT_CUES = (
 def _sentences(text: str) -> List[str]:
     return [
         part.strip()
-        for part in re.split(r"(?<=[.!?।])\\s+|\\n+", text or "")
+        for part in re.split(r"(?<=[.!?।])\s+|\n+", text or "")
         if part.strip()
     ]
 
@@ -93,7 +93,7 @@ def _contains(text: str, phrase: str) -> bool:
     """Match phrases without treating short words as arbitrary substrings."""
     escaped = re.escape(phrase.casefold())
     if re.fullmatch(r"[a-z0-9 ]+", phrase.casefold()):
-        pattern = r"(?<![a-z0-9])" + escaped.replace(r"\\ ", r"\\s+") + r"(?![a-z0-9])"
+        pattern = r"(?<![a-z0-9])" + escaped.replace(r"\ ", r"\s+") + r"(?![a-z0-9])"
         return re.search(pattern, text, flags=re.IGNORECASE) is not None
     return phrase.casefold() in text
 
