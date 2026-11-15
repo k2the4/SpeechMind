@@ -9,6 +9,7 @@ Hindi/Hinglish evidence. Pure-Hindi and clear-English routes retain their
 specialists.
 """
 
+import os
 import torch
 import whisper
 from transformers import AutoModel
@@ -63,6 +64,13 @@ LANGUAGE_ALIASES = {
     "odia": "or", "punjabi": "pa", "tamil": "ta", "telugu": "te",
     "urdu": "ur",
 }
+
+def fast_asr_mode_enabled(value: str | None = None) -> bool:
+    """Opt-in low-latency Whisper route for paired CPU benchmarking."""
+    if value is None:
+        value = os.environ.get("SPEECHMIND_ASR_FAST_MODE", "0")
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
 
 def _attach_language_spans(result: dict) -> dict:
     """Attach conservative transcript offsets without inventing audio timing."""
@@ -372,6 +380,30 @@ class SpeechRecognizer:
             return self._whisper_result(
                 whisper_result, language_fallback=hint, language_source="user_selected_legacy"
             )
+
+        # Experimental low-latency route: one Whisper decode, no separate
+        # language-detection pass, no 600M IndicConformer pass, and greedy
+        # decoding. Keep opt-in until paired WER/CER checks confirm quality.
+        if fast_asr_mode_enabled():
+            whisper_result = self.whisper.transcribe(
+                audio_numpy,
+                task="transcribe",
+                language=None,
+                fp16=False,
+                verbose=False,
+                beam_size=1,
+                condition_on_previous_text=False,
+            )
+            result = self._whisper_result(
+                whisper_result,
+                language_source="whisper_fast_mode_experimental",
+            )
+            result["asr_fast_mode"] = True
+            result["asr_fast_mode_note"] = (
+                "Experimental single-pass Whisper greedy decoding; compare "
+                "transcript quality against the specialist route before production use."
+            )
+            return result
 
         try:
             detected_language, language_score, language_probabilities = self._detect_language(
