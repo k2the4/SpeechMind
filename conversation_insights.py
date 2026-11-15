@@ -37,8 +37,8 @@ TOPIC_KEYWORDS = {
         "exchange", "वापस", "रिटर्न", "कैंसल", "cancel kar", "return karna",
     ),
     "Service & agent experience": (
-        "agent", "executive", "support", "customer care", "rude",
-        "helpful", "behaviour", "behavior", "representative", "customer service",
+        "agent", "executive", "customer care", "rude",
+        "helpful", "behaviour", "behavior", "representative", "customer service complaint",
         "customer care wale", "baat nahi",
     ),
 }
