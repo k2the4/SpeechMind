@@ -124,18 +124,24 @@ if audio_source is not None:
 
         case_review = insights.get("case_review") or {}
         status = str(case_review.get("suggested_status", "review_required")).replace("_", " ").title()
-        st.markdown("#### Reviewer summary")
+        case_brief = insights.get("case_brief") or {}
+        st.markdown("#### Executive case brief")
         with st.container(border=True):
-            st.markdown(f"**Suggested review status:** {status}")
-            st.write(insights.get("brief") or "No concise conversation brief could be generated.")
-            st.caption(
-                "This is an extractive preview, not a verified case summary. "
-                "The suggested status is a review aid, not a final case outcome."
-            )
-            st.write("**Suggested next step**")
-            st.write(case_review.get("suggested_next_step", "A human reviewer should listen to the call and verify the transcript."))
-            if insights.get("review_reasons"):
-                st.caption("Review notes: " + " ".join(insights["review_reasons"]))
+            st.markdown(f"**Issue category:** {case_brief.get('primary_category', 'Needs classification')}")
+            st.markdown("**What the customer reported**")
+            st.write(case_brief.get("issue_summary") or "No usable transcript is available.")
+            st.caption("Transcript-derived preview. The executive must verify it against the recording.")
+            details = case_brief.get("reported_details") or {}
+            if details:
+                st.markdown("**Details found in the transcript**")
+                for label, item in details.items():
+                    st.write(f"- {label.replace('_', ' ').title()}: {item.get('value')}")
+            st.markdown("**Information to confirm with the customer**")
+            for question in (insights.get("case_review") or {}).get("suggested_questions", []):
+                st.write(f"- {question}")
+            st.markdown("**Recommended handling**")
+            st.write(case_review.get("suggested_next_step", "Review the transcript and verify the customer's concern."))
+            st.caption("Suggested status: " + status + ". This is a review aid, not a verified case outcome.")
 
         st.markdown("#### Findings")
         if insights.get("topics"):
