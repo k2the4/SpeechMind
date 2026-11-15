@@ -13,11 +13,13 @@ TOPIC_KEYWORDS = {
     "Payments & refunds": (
         "payment", "paid", "refund", "money", "transaction", "billing", "charge",
         "paisa", "paise", "payment failed", "deducted", "double charged",
-        "पैसे", "भुगतान", "रिफंड", "पेमेंट", "पैसा कट", "पैसे कट",
+        "पैसे", "भुगतान", "रिफंड", "पेमेंट", "पैसा कट", "पैसे कट", "कट गए",
+        "रुपये कट", "रुपए कट", "बैंक से पैसे", "खाते से पैसे", "पैसे वापस",
         "paise kat", "paise kate", "payment kar", "refund nahi", "paisa kata",
+        "bank account", "money deducted", "amount deducted",
     ),
     "Orders & delivery": (
-        "order", "delivery", "delivered", "shipment", "courier", "parcel",
+        "order", "delivery", "delivered", "shipment", "courier", "parcel", "ऑर्डर कन्फर्म", "ऑर्डर कन्फर्म नहीं", "ऑर्डर पक्का",
         "dispatch", "tracking", "not delivered", "आर्डर", "ऑर्डर", "डिलीवरी",
         "ऑर्डर नहीं", "samaan", "product nahi mila", "order nahi mila",
         "delivery nahi", "parcel nahi",
@@ -44,7 +46,7 @@ TOPIC_KEYWORDS = {
 }
 
 ISSUE_CUES = (
-    "problem", "issue", "complaint", "not working", "not received",
+    "problem", "issue", "complaint", "not working", "not received", "pending", "अभी भी", "अभी तक", "कन्फर्म नहीं", "resolve नहीं",
     "haven't received", "have not received", "didn't receive", "did not receive",
     "still waiting", "not resolved", "not fixed", "not arrived", "failed",
     "delay", "delayed", "late", "refund nahi", "nahi aaya", "nahi mila",
@@ -60,13 +62,13 @@ RESOLUTION_CUES = (
     "refund mil gaya", "paise aa gaye", "ab kaam kar raha",
 )
 REPEAT_CONTACT_CUES = (
-    "called again", "called three times", "called multiple times",
+    "called again", "called three times", "called multiple times", "twice", "two times", "दो बार", "कई बार",
     "contacted before", "already called", "again and again", "multiple times",
     "third time", "pehle bhi", "पहले भी", "kai baar", "कई बार",
     "dobara call", "baar baar", "बार बार",
 )
 FOLLOW_UP_CUES = (
-    "please check", "please resolve", "call me back", "follow up", "follow-up",
+    "please check", "please resolve", "call me back", "follow up", "follow-up", "resolution", "confirmation", "आज ही", "बताइए", "बता दीजिए", "चेक करके",
     "update me", "let me know", "still waiting", "not resolved", "abhi tak",
     "nahi mila", "कॉल बैक", "जल्दी बताएं", "update dena", "bata dijiyega",
 )
@@ -78,7 +80,7 @@ ESCALATION_CUES = (
 CUSTOMER_IMPACT_CUES = (
     "can't use", "cannot use", "unable to use", "lost money", "money deducted",
     "business is affected", "missed my", "urgent", "very important",
-    "खाते से पैसे", "पैसे कट", "जरूरी", "बहुत परेशानी", "काम रुक",
+    "खाते से पैसे", "पैसे कट", "बैंक अकाउंट", "जरूरी", "बहुत परेशानी", "काम रुक",
     "kaam ruk", "paise kat",
 )
 AGENT_COMMITMENT_CUES = (
@@ -257,9 +259,9 @@ def analyze_conversation_text(transcript, translated_text=None):
                 questions.append(question)
     if not questions:
         questions = [
-            "Please describe exactly what happened and what you expected to happen.",
-            "When did the issue first occur?",
-            "Do you have an order, transaction or support reference number?",
+            "Is this a customer-support issue, a general enquiry, or another type of conversation?",
+            "What outcome or action is the speaker asking for, if any?",
+            "Is there any relevant reference, date, amount or account detail to verify?",
         ]
 
     # Only claim details explicitly present in the transcript. Never invent IDs,
@@ -267,15 +269,19 @@ def analyze_conversation_text(transcript, translated_text=None):
     detail_patterns = {
         "transaction_id": r"\b(?:transaction|txn|utr|reference)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{6,})\b",
         "order_id": r"\b(?:order)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{5,})\b",
-        "amount": r"(?:₹|rs\.?\s*)(\d[\d,]*(?:\.\d{1,2})?)",
+        "amount": r"(?:₹|rs\.?\s*)(\d[\d,]*(?:\.\d{1,2})?)|(?<!\d)(\d[\d,]*(?:\.\d{1,2})?)\s*(?:रुपये|रुपए|रु\.?)(?!\w)",
     }
     extracted_details = {}
     for key, pattern in detail_patterns.items():
         match = re.search(pattern, original, flags=re.IGNORECASE)
         if match:
-            extracted_details[key] = {"value": match.group(1), "source": "original_transcript"}
+            value = next((group for group in match.groups() if group), None)
+            if value:
+                extracted_details[key] = {"value": value, "source": "original_transcript"}
 
-    needs_review = bool(signals) or bool(topics) or not bool(original)
+    # An unclassified recording still needs a human decision; absence of a
+    # keyword match must never be interpreted as a clean or resolved case.
+    needs_review = bool(signals) or bool(topics) or not bool(original) or not bool(topics)
     review_reasons = []
     if not original:
         review_reasons.append("No original transcript is available.")
@@ -283,6 +289,8 @@ def analyze_conversation_text(transcript, translated_text=None):
         review_reasons.append("English meaning is unavailable; topic rules also inspect the original transcript.")
     if signals:
         review_reasons.append("One or more support review cues were detected.")
+    if not topics and original:
+        review_reasons.append("No configured topic matched; classify the conversation before closing the review.")
     if topics:
         review_reasons.append("One or more possible support topics were detected.")
 
@@ -314,7 +322,9 @@ def analyze_conversation_text(transcript, translated_text=None):
         "case_review": {
             "suggested_status": status,
             "suggested_next_step": (
-                "Verify the reported issue and evidence, collect missing details, then check the relevant account/order/payment system."
+                ("Classify the conversation first. If it is a support case, verify the reported issue and evidence, then collect only the relevant missing details."
+                 if not topics else
+                 "Verify the reported issue and evidence, collect missing details, then check the relevant account/order/payment system.")
                 if needs_review else
                 "No configured review cue was detected; this is not proof that no action is required."
             ),
