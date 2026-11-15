@@ -23,6 +23,7 @@ from models.srota_provider import SrotaASRProvider
 from models.language_spans import annotate_language_spans
 from models.asr_routing import (
     audio_language_suggests_hindi,
+    fast_asr_mode_enabled,
     automatic_context_scout_enabled,
     srota_candidate_valid_for_route,
     srota_supports_duration,
@@ -64,13 +65,6 @@ LANGUAGE_ALIASES = {
     "odia": "or", "punjabi": "pa", "tamil": "ta", "telugu": "te",
     "urdu": "ur",
 }
-
-def fast_asr_mode_enabled(value: str | None = None) -> bool:
-    """Opt-in low-latency Whisper route for paired CPU benchmarking."""
-    if value is None:
-        value = os.environ.get("SPEECHMIND_ASR_FAST_MODE", "0")
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
 
 def _attach_language_spans(result: dict) -> dict:
     """Attach conservative transcript offsets without inventing audio timing."""
