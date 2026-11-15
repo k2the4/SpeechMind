@@ -13,7 +13,7 @@ pinned: false
 
 SpeechMind is an experimental multilingual speech-understanding application for Hindi, Hindi-English (Hinglish), and English recordings.
 
-The hosted Gradio profile uses Whisper for English/Hinglish fallback and IndicConformer for Hindi/other supported Indic languages. It loads the fine-tuned MuRIL and WavLM checkpoints from the private Hugging Face model repository using the Space secrets `SPEECHMIND_MODEL_REPO` and `HF_TOKEN`.
+The hosted Gradio profile uses Whisper for English-detected speech and IndicConformer for Hindi/other supported Indic-language detections. Hindi-detected mixed Hindi-English speech therefore uses IndicConformer rather than Srota; mixed-script accuracy may be lower than the locally benchmarked production route. It loads the fine-tuned MuRIL and WavLM checkpoints from the private Hugging Face model repository using the Space secrets `SPEECHMIND_MODEL_REPO` and `HF_TOKEN`.
 
 ## Hosted profile limitations
 
