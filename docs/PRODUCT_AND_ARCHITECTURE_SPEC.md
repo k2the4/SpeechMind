@@ -16,7 +16,7 @@ The product is not merely speech-to-text and does not replace a human quality an
 6. Make uncertainty, missing audio/transcript evidence, unsupported language coverage, and model limitations visible.
 7. Aggregate reviewed call records into team-level trends only when records have been processed and stored with appropriate privacy controls.
 
-The initial target workflow is post-call review of customer-support conversations. Live agent assistance, automatic CRM updates, customer identity resolution, and autonomous case closure are out of scope for the MVP.
+The initial target workflow is simulated incoming-call intake followed by an executive-facing case preview. A customer can explain the issue naturally in a recording; SpeechMind prepares a transcript-grounded case brief, possible issue category, evidence, missing information, and suggested questions for the executive. Real telephony/IVR integration is the next phase. Automatic CRM updates, customer identity resolution, and autonomous case closure remain out of scope.
 
 SpeechMind must distinguish transcript evidence from model interpretation. It must not claim that a complaint is verified, that an issue is actually resolved, that a customer is objectively angry, or that an agent made a commitment unless the recording supports that statement. Vocal emotion is an experimental acoustic cue, not a reliable measure of a person's internal state.
 
@@ -35,16 +35,13 @@ Language selection is not a required input. The system should detect language an
 
 ## 3. User-facing experience
 
-1. Upload a customer-support call recording or record a short sample.
-2. Press Analyze; no manual language selection is required.
-3. Review call metadata and audio-quality warnings.
-4. Read the original transcript and English meaning side by side, with transcript evidence kept available.
-5. Review the detected support topic(s), issue description, evidence cues, and confidence/uncertainty labels.
-6. Review service signals: possible unresolved issue, repeat contact, follow-up request, escalation cue, customer impact, and agent commitment. A signal is a review prompt, not a verified outcome.
-7. Read an extractive or model-generated case brief only when its method is clearly labelled. Extractive text must not be marketed as an AI summary.
-8. Review suggested next steps, each linked to supporting transcript evidence and labelled as a suggestion.
-9. Export a structured case report (JSON in the MVP).
-10. Human reviewers can correct or confirm findings in a later workflow; the MVP must not silently treat heuristic output as ground truth.
+1. Simulate an incoming customer call by uploading or recording the customer's natural-language explanation.
+2. Select fast case intake or full SpeechMind analysis. Fast intake skips translation and optional emotion inference for that run; full analysis preserves all existing branches.
+3. Review the executive case brief: possible issue category, what the customer reported, details explicitly found, missing information, and suggested questions.
+4. Inspect transcript evidence for every detected topic or service signal.
+5. Expand the original transcript, English meaning, language/code-switch details, audio quality, optional emotion analysis, and technical diagnostics when needed.
+6. Export the structured case report (JSON in the MVP).
+7. A human executive verifies the transcript and findings before acting. Heuristic output is never treated as ground truth.
 
 The original transcript must never be overwritten by translation, transliteration, cleanup, or summarization. Preserve the audio and transcript as the source of truth. Keep original transcript, English meaning, detected topics, evidence cues, service signals, and recommendations as distinct fields.
 
@@ -194,3 +191,8 @@ the original transcript remains immutable and English meaning is a separate
 result. Translation runs concurrently with semantic and vocal analysis after
 ASR, so model loading/inference overlaps the other branches. See
 `docs/TRANSLATION_WSL_SETUP.md`.
+
+
+## Stage 1 implementation guardrail
+
+The existing SpeechMind speech pipeline is retained as the foundation: ASR routing, original transcript, language/code-switch detection, IndicTrans2 English meaning, MuRIL text emotion, WavLM voice emotion, fusion, audio diagnostics, and timing metadata remain available. The support case extractor is an additive downstream layer. Fast case intake is opt-in at the pipeline API and is selectable in the UI; the default pipeline API continues to run all existing branches unless callers explicitly disable translation or emotion inference. The Srota/Hinglish routing and model checkpoints must not be changed as part of case-dashboard work without regression tests against the existing recordings.
