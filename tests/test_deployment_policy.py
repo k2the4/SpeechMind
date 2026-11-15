@@ -1,5 +1,7 @@
+import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from models.deployment_policy import default_analysis_mode_index, has_isolated_srota_runtime
@@ -22,6 +24,17 @@ class DeploymentPolicyTests(unittest.TestCase):
             worker.touch()
             self.assertTrue(has_isolated_srota_runtime(root, is_windows=False))
             self.assertEqual(default_analysis_mode_index(root, is_windows=False), 0)
+
+
+    def test_remote_worker_configuration_enables_full_mode_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {
+                "SPEECHMIND_SROTA_ENDPOINT": "https://speechmind-srota.hf.space",
+                "SPEECHMIND_SROTA_API_TOKEN": "test-token",
+            }):
+                self.assertEqual(
+                    default_analysis_mode_index(directory, is_windows=False), 0
+                )
 
     def test_windows_worker_presence_enables_full_mode_default(self):
         with tempfile.TemporaryDirectory() as directory:
