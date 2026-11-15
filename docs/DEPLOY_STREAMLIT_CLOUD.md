@@ -11,7 +11,7 @@ This guide is for the standard Streamlit Community Cloud runtime. It is separate
 5. Set the main file path to `app.py`.
 6. Reboot the app after changing the deployed branch or its dependencies.
 
-The repository includes `runtime.txt` to select Python 3.11, `packages.txt` for FFmpeg and libsndfile, and a CPU-only PyTorch pin in `requirements.txt`. These are required for the supported Streamlit Community Cloud configuration and MP3/M4A decoding.
+The repository includes `runtime.txt` to select Python 3.11, `packages.txt` for FFmpeg and libsndfile, and a CPU-only PyTorch pin in `requirements.txt`. These are required for the supported Streamlit Community Cloud configuration and MP3/M4A decoding. Streamlit secrets are read directly and should never be committed to source control.
 
 ## Optional Streamlit secrets
 
@@ -21,11 +21,14 @@ Open the app's settings and add secrets only when the corresponding feature is r
 GEMINI_API_KEY = "your-google-ai-studio-key"
 SPEECHMIND_MODEL_REPO = "your-huggingface-username/speechmind-models"
 HF_TOKEN = "your-huggingface-read-token"
+SPEECHMIND_SROTA_ENDPOINT = "https://YOUR-SPACE-NAME.hf.space"
+SPEECHMIND_SROTA_API_TOKEN = "the-same-random-secret-configured-in-the-Space"
 ```
 
 - `GEMINI_API_KEY` enables Gemini conversation analysis and the optional audio-transcription fallback. When enabled, the recording or transcript may be sent to Google's API. Do not use this with sensitive recordings unless the data-handling terms are acceptable.
-- `SPEECHMIND_MODEL_REPO` and `HF_TOKEN` allow the app to download the trained MuRIL and voice-emotion checkpoints. Keep the model repository private if the weights or associated material should not be public.
-- If these secrets are absent, the app should still start. Conversation analysis uses deterministic transcript rules, and emotion branches report their actual availability rather than pretending that missing checkpoints loaded.
+- `SPEECHMIND_MODEL_REPO` and `HF_TOKEN` allow the app to download the trained MuRIL and voice-emotion checkpoints. The app reads these from Streamlit secrets and exports `HF_TOKEN` for Transformers/Hub model loading, including gated IndicConformer access. The token account must already have access to gated models.
+- `SPEECHMIND_SROTA_ENDPOINT` and `SPEECHMIND_SROTA_API_TOKEN` connect the app to the separately hosted Srota HTTP worker. Follow [the Srota worker deployment guide](../deployment/srota_worker/README.md). The token must match the secret configured in the worker Space.
+- If model/checkpoint secrets are absent, the app should still start. Conversation analysis uses deterministic transcript rules, and emotion branches report their actual availability rather than pretending that missing checkpoints loaded.
 
 Never commit API keys or Hugging Face tokens to GitHub.
 
