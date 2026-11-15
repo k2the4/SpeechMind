@@ -268,7 +268,10 @@ def analyze_conversation_text(transcript, translated_text=None):
     # amounts, dates or account identifiers from a translation.
     detail_patterns = {
         "transaction_id": r"\b(?:transaction|txn|utr|reference)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{6,})\b",
-        "order_id": r"\b(?:order)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{5,})\b",
+        # Require an explicit identifier label and a digit-bearing value.
+        # This prevents ordinary words after "order" (e.g. "confirm",
+        # "confirmation", "remains") from being reported as an order ID.
+        "order_id": r"\border\s*(?:id|number|no\.?|#)\s*[:#-]?\s*((?:\d{5,}|(?=[A-Z0-9-]*\d)[A-Z0-9-]{5,}))\b",
         "amount": r"(?:₹|rs\.?\s*)(\d[\d,]*(?:\.\d{1,2})?)|(?<!\d)(\d[\d,]*(?:\.\d{1,2})?)\s*(?:रुपये|रुपए|रूपये|रूपए|रु\.?)(?!\w)",
     }
     extracted_details = {}
