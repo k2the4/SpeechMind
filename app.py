@@ -78,7 +78,7 @@ if audio_source is not None:
     st.audio(audio_source)
     analysis_mode = st.radio(
         "Processing mode",
-        ["Fast support case intake", "Full SpeechMind analysis"],
+        ["Full SpeechMind analysis", "Fast support case intake"],
         horizontal=True,
         help=(
             "Fast mode runs the existing ASR and support-case extraction, while skipping "
