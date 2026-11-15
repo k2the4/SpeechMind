@@ -73,7 +73,7 @@ if audio_source is not None:
     audio_digest = hashlib.sha256(audio_bytes).hexdigest()
     if st.session_state.get("speechmind_audio_digest") != audio_digest:
         st.session_state["speechmind_audio_digest"] = audio_digest
-        for key in ("speechmind_result", "speechmind_model_init_time"):
+        for key in ("speechmind_result", "speechmind_model_init_time", "speechmind_insights", "speechmind_insights_digest"):
             st.session_state.pop(key, None)
     st.audio(audio_source)
     analysis_mode = st.radio(
@@ -121,12 +121,20 @@ if audio_source is not None:
 
     result = st.session_state.get("speechmind_result")
     if result is not None:
-        with st.spinner("Running free local AI conversation analysis..."):
-            insights = analyze_conversation(
-                result.get("transcript", ""),
-                result.get("meaning_en") if result.get("meaning_en_available") else None,
-                language=result.get("language", "unknown"),
-            )
+        transcript_key = hashlib.sha256(
+            (str(result.get("transcript", "")) + "|" + str(result.get("language", "unknown"))).encode("utf-8")
+        ).hexdigest()
+        if st.session_state.get("speechmind_insights_digest") == transcript_key:
+            insights = st.session_state["speechmind_insights"]
+        else:
+            with st.spinner("Running free local AI conversation analysis..."):
+                insights = analyze_conversation(
+                    result.get("transcript", ""),
+                    result.get("meaning_en") if result.get("meaning_en_available") else None,
+                    language=result.get("language", "unknown"),
+                )
+            st.session_state["speechmind_insights"] = insights
+            st.session_state["speechmind_insights_digest"] = transcript_key
         # Preserve IndicTrans2 when it succeeded; use local LLM translation only
         # when the translation branch was skipped or unavailable.
         if not result.get("meaning_en") and insights.get("english_meaning"):
