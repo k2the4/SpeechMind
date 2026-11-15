@@ -34,7 +34,7 @@ Never commit API keys or Hugging Face tokens to GitHub.
 
 ## Runtime scope and model limitations
 
-Streamlit Community Cloud installs the main environment from the root `requirements.txt`; it does not create the separate `.venv_srota` worker environment used by the Docker deployment. Consequently, the isolated Srota and IndicTrans2 worker paths are not guaranteed to be available in this hosting mode.
+Streamlit Community Cloud installs the main environment from the root `requirements.txt`; it does not create the separate `.venv_srota` worker environment used by local Windows/Linux runs. For hosted Full SpeechMind mode, the remote Srota service provides both Hinglish transcription and IndicTrans2 translation. IndicConformer runs in the Streamlit process and uses the configured Hugging Face token.
 
 For a lightweight hosted demonstration, select **Fast support case intake**. It uses the single-pass Whisper route and skips local translation and emotion inference for that run. If Gemini is configured, it can provide contextual analysis and may be used as an audio-transcription fallback only when Whisper returns a valid, explicitly low quality score. An unknown quality score does not trigger an external audio upload.
 
