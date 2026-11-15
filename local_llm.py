@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 
 
-DEFAULT_MODEL = os.getenv("SPEECHMIND_LLM_MODEL", "qwen2.5:3b")
+DEFAULT_MODEL = os.getenv("SPEECHMIND_LLM_MODEL", "qwen2.5:0.5b")
 OLLAMA_URL = os.getenv("SPEECHMIND_OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
 ALLOWED_TOPICS = {
     "Payments & refunds", "Orders & delivery", "Account access",
