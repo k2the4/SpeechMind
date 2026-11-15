@@ -284,3 +284,57 @@ def ollama_status():
     except Exception as error:
         return {"available": False, "models": [], "default_model": _get_default_model(),
                 "error": str(error)}
+
+
+def transcribe_audio_with_gemini(audio_path, language_hint="auto", model=None, timeout=120):
+    """Transcribe audio with Gemini when local ASR quality is weak."""
+    import base64
+    import mimetypes
+    from pathlib import Path
+    api_key = _get_gemini_api_key()
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is not configured.")
+    path = Path(audio_path)
+    if not path.is_file():
+        raise FileNotFoundError("Audio file not found: " + str(path))
+    mime_type = mimetypes.guess_type(path.name)[0] or "audio/wav"
+    if mime_type not in {"audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp4", "audio/aac", "audio/flac"}:
+        mime_type = "audio/wav"
+    audio_data = base64.b64encode(path.read_bytes()).decode("ascii")
+    model = model or DEFAULT_GEMINI_MODEL
+    prompt = (
+        "Transcribe the attached recording verbatim. Preserve the language actually spoken. "
+        "For Hindi, use Devanagari; preserve English words in English script when the speaker "
+        "code-switches. Do not translate, summarize, polish, infer, or add missing words. "
+        "Pay special attention to numbers, currency amounts, dates, names, and negations. "
+        "If a word or number is unclear, write [अस्पष्ट] rather than guessing. "
+        "Return only the transcript, with normal punctuation. Language hint: "
+        + str(language_hint or "auto-detect") + "."
+    )
+    endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent"
+    body = {
+        "contents": [{"role": "user", "parts": [
+            {"text": prompt},
+            {"inlineData": {"mimeType": mime_type, "data": audio_data}},
+        ]}],
+        "generationConfig": {"temperature": 0, "maxOutputTokens": 2048},
+    }
+    request = urllib.request.Request(endpoint, data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")[:1200]
+        try:
+            detail = json.loads(detail).get("error", {}).get("message", detail)
+        except (ValueError, AttributeError):
+            pass
+        raise RuntimeError("Gemini audio transcription HTTP " + str(error.code) + ": " + detail) from error
+    parts = payload.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+    transcript = "".join(part.get("text", "") for part in parts).strip()
+    if transcript.startswith("```"):
+        transcript = transcript.strip("`").replace("text\n", "", 1).strip()
+    if not transcript:
+        raise RuntimeError("Gemini returned an empty audio transcript.")
+    return transcript
