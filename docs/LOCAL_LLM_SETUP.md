@@ -1,35 +1,22 @@
-# Free local conversation analysis
+# Free conversation intelligence setup
 
-SpeechMind can use a local open-source language model for contextual conversation
-analysis. It does not require a cloud API, API key, subscription or per-call fee.
+SpeechMind supports Gemini API free-tier inference. No model weights or Ollama installation are required for this route.
 
-## Windows setup
+## Recommended setup (Gemini)
+1. Create an API key at https://aistudio.google.com/app/apikey
+2. In PowerShell, set it for the current terminal session:
+   ```powershell
+   $env:GEMINI_API_KEY="PASTE_YOUR_KEY_HERE"
+   ```
+3. Start SpeechMind from the same PowerShell window:
+   ```powershell
+   .\.venv\Scripts\python.exe -m streamlit run app.py
+   ```
 
-1. Install the free Ollama Windows application: https://ollama.com/download/windows
-2. Close and reopen PowerShell.
-3. From the SpeechMind repository, run `SETUP_LOCAL_LLM.bat`.
-4. The script downloads `qwen2.5:0.5b` (a small quantized 0.5B instruction model).
-5. Start SpeechMind normally with `streamlit run app.py`.
+Default model: `gemini-2.5-flash-lite`. Google's current pricing page lists free text input/output subject to account-specific limits. Free-tier content may be used to improve Google products. Do not send sensitive customer recordings through this route. See https://ai.google.dev/gemini-api/docs/pricing and https://ai.google.dev/gemini-api/docs/rate-limits.
 
-Ollama runs at `http://127.0.0.1:11434`. SpeechMind sends the transcript to
-that local endpoint only. Model weights are downloaded once; subsequent
-analysis works offline while Ollama is running.
+## Offline alternative
+Ollama is optional. Install it only for offline/local inference, then run `SETUP_LOCAL_LLM.bat` to pull `qwen2.5:0.5b`. Without a Gemini key or a working Ollama server, SpeechMind uses deterministic fallback.
 
-## Configuration
-
-- Default model: `qwen2.5:0.5b`
-- Override model: set `SPEECHMIND_LLM_MODEL` before launching Streamlit.
-- Override endpoint: set `SPEECHMIND_OLLAMA_URL` if Ollama uses another local address.
-- If Ollama is unavailable, the app falls back to deterministic rules and shows a warning.
-
-## Safety and scope
-
-The local model generates English meaning, contextual topics, a summary,
-review cues, missing-information questions and a next step. SpeechMind validates
-topic and signal evidence against verbatim transcript substrings. Amounts and
-reference identifiers are extracted from the original transcript with local
-regular expressions rather than accepted from free-form model output.
-
-The model is an assistant, not a source of verified case outcomes. Human review
-is required. ASR errors can still affect every downstream result. Do not treat
-model-generated translation as a substitute for listening to the original audio.
+## Safeguards
+Topic and signal evidence is retained only when it appears verbatim in the original transcript. Amounts and reference identifiers are extracted locally. All interpretations require human review; ASR errors can affect downstream analysis.
