@@ -166,6 +166,9 @@ if audio_source is not None:
                     with st.container(border=True):
                         st.markdown(f"**{topic['topic']}**")
                         st.caption("Matched terms: " + ", ".join(topic.get("matched_terms", [])))
+                        st.caption("Evidence source: " + topic.get("evidence_source", "original_transcript").replace("_", " "))
+                        for evidence in topic.get("evidence", []):
+                            st.write("“" + evidence.get("text", "") + "”")
         else:
             st.caption("No configured topic keywords were detected. This does not mean the call has no issue.")
 
