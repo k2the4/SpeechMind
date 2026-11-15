@@ -8,7 +8,7 @@ analysis. It does not require a cloud API, API key, subscription or per-call fee
 1. Install the free Ollama Windows application: https://ollama.com/download/windows
 2. Close and reopen PowerShell.
 3. From the SpeechMind repository, run `SETUP_LOCAL_LLM.bat`.
-4. The script downloads `qwen2.5:3b` (a quantized 3B instruction model).
+4. The script downloads `qwen2.5:0.5b` (a small quantized 0.5B instruction model).
 5. Start SpeechMind normally with `streamlit run app.py`.
 
 Ollama runs at `http://127.0.0.1:11434`. SpeechMind sends the transcript to
@@ -17,7 +17,7 @@ analysis works offline while Ollama is running.
 
 ## Configuration
 
-- Default model: `qwen2.5:3b`
+- Default model: `qwen2.5:0.5b`
 - Override model: set `SPEECHMIND_LLM_MODEL` before launching Streamlit.
 - Override endpoint: set `SPEECHMIND_OLLAMA_URL` if Ollama uses another local address.
 - If Ollama is unavailable, the app falls back to deterministic rules and shows a warning.
