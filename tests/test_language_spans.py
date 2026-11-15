@@ -178,5 +178,41 @@ class LanguageSpanTests(unittest.TestCase):
 
 
 
+    def test_devanagari_transliterated_english_detects_code_switch(self):
+        text = (
+            "मैंने कस्टमर सपोर्ट से कॉन्टेक्ट किया "
+            "लेकिन मेरा इशू रिज़ॉल्व नहीं हुआ"
+        )
+        result = annotate_language_spans(text, "hi")
+
+        self.assertTrue(result["code_switch_detected"])
+        self.assertFalse(result["mixed_script_detected"])
+        self.assertIn("hi", result["languages_present"])
+        self.assertIn("en", result["languages_present"])
+
+        english_tokens = [
+            token
+            for span in result["language_spans"]
+            if span["language"] == "en"
+            for token in span["tokens"]
+        ]
+        self.assertIn("कस्टमर", english_tokens)
+        self.assertIn("सपोर्ट", english_tokens)
+        self.assertIn("कॉन्टेक्ट", english_tokens)
+        self.assertIn("इशू", english_tokens)
+
+    def test_transliterated_english_preserves_devanagari_script(self):
+        result = annotate_language_spans("मेरा पेमेंट पेंडिंग है", "hi")
+        english_spans = [
+            span for span in result["language_spans"]
+            if span["language"] == "en"
+        ]
+
+        self.assertTrue(english_spans)
+        self.assertTrue(
+            all(span["script"] == "Devanagari" for span in english_spans)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
