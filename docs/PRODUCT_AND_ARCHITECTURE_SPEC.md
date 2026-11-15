@@ -5,17 +5,22 @@
 
 ## 1. Product objective
 
-SpeechMind is a multilingual speech-understanding system designed around how people in India actually speak: naturally switching between English, Hindi, Hinglish, and selected major Indian languages within the same conversation.
+SpeechMind is a multilingual **customer-support conversation intelligence** platform. It turns recorded support calls into evidence-backed, reviewable operational insights for support agents, quality reviewers, and team leads.
 
-Its purpose is not merely speech-to-text. SpeechMind must:
-1. Transcribe what the speaker actually said, preserving natural language mixing.
-2. Explain the complete meaning in English.
-3. Analyze linguistic content and the acoustic/vocal signal independently.
-4. Combine those analyses into a cautious, explainable interpretation of the audio.
+The product is not merely speech-to-text and does not replace a human quality analyst. It must:
+1. Transcribe the conversation faithfully, preserving Hindi, English, Hinglish, and natural code-switching.
+2. Produce an English meaning separately without mutating the original transcript.
+3. identify the customer-support issue and relevant operational topic(s), with evidence spans or quoted transcript cues.
+4. Surface review signals such as a possibly unresolved issue, repeat contact, requested follow-up, escalation language, customer-reported impact, and agent commitments.
+5. Produce a concise case brief and structured next-step suggestions that are traceable to the conversation.
+6. Make uncertainty, missing audio/transcript evidence, unsupported language coverage, and model limitations visible.
+7. Aggregate reviewed call records into team-level trends only when records have been processed and stored with appropriate privacy controls.
 
-The speaker must not select English, Hindi, or Hinglish before recording. Language identification and code-switch handling should be automatic. Hinglish is a natural speaking pattern, not a mode the user must select.
+The initial target workflow is simulated incoming-call intake followed by an executive-facing case preview. A customer can explain the issue naturally in a recording; SpeechMind prepares a transcript-grounded case brief, possible issue category, evidence, missing information, and suggested questions for the executive. Real telephony/IVR integration is the next phase. Automatic CRM updates, customer identity resolution, and autonomous case closure remain out of scope.
 
-SpeechMind is not a medical, psychological, lie-detection, personality, or intent-diagnosis product. It reports observable linguistic and vocal patterns and must not claim to know a speaker's actual internal state.
+SpeechMind must distinguish transcript evidence from model interpretation. It must not claim that a complaint is verified, that an issue is actually resolved, that a customer is objectively angry, or that an agent made a commitment unless the recording supports that statement. Vocal emotion is an experimental acoustic cue, not a reliable measure of a person's internal state.
+
+SpeechMind is not a medical, psychological, lie-detection, personality, or intent-diagnosis product.
 
 ## 2. Intended language scope
 
@@ -30,35 +35,34 @@ Language selection is not a required input. The system should detect language an
 
 ## 3. User-facing experience
 
-1. Upload an audio clip or record speech.
-2. Press Analyze.
-3. SpeechMind automatically recognizes the spoken language(s).
-4. Display the original transcript, preserving code-switching.
-5. Display the English meaning separately.
-6. Display text/semantic analysis.
-7. Display vocal/acoustic analysis.
-8. Display a combined interpretation, including disagreement or uncertainty when branches do not agree.
+1. Simulate an incoming customer call by uploading or recording the customer's natural-language explanation.
+2. Select fast case intake or full SpeechMind analysis. Fast intake skips translation and optional emotion inference for that run; full analysis preserves all existing branches.
+3. Review the executive case brief: possible issue category, what the customer reported, details explicitly found, missing information, and suggested questions.
+4. Inspect transcript evidence for every detected topic or service signal.
+5. Expand the original transcript, English meaning, language/code-switch details, audio quality, optional emotion analysis, and technical diagnostics when needed.
+6. Export the structured case report (JSON in the MVP).
+7. A human executive verifies the transcript and findings before acting. Heuristic output is never treated as ground truth.
 
-The original transcript must never be overwritten by translation. Transliteration and translation are distinct:
-- Transliteration changes script while retaining the language and wording.
-- Translation expresses the meaning in English.
-
-The results page prioritizes original transcript and English meaning, then the two independent analyses and combined interpretation. Diagnostics remain expandable.
+The original transcript must never be overwritten by translation, transliteration, cleanup, or summarization. Preserve the audio and transcript as the source of truth. Keep original transcript, English meaning, detected topics, evidence cues, service signals, and recommendations as distinct fields.
 
 ## 4. Target processing architecture
 
 Audio input
--> Audio preparation and quality checks
--> Automatic multilingual/code-switching ASR
--> Original mixed-language transcript + timestamps/language spans + ASR quality
+-> Decode and audio-quality diagnostics
+-> Automatic ASR and language/code-switch identification
+-> Immutable original transcript + timestamps/language spans + ASR diagnostics
+-> English meaning generation (separate, with route/method disclosure)
 -> Parallel analysis:
-   A. Text understanding: semantic emotion from the original transcript
-   B. Vocal understanding: vocal emotion and acoustic/prosodic features from audio
--> English meaning conversion from the original transcript
--> Reliability-aware multimodal fusion
--> Results: original transcript, English meaning, text analysis, voice analysis, combined interpretation, quality/uncertainty
+   A. Support issue/topic detection and transcript evidence extraction
+   B. Service-signal detection (repeat contact, follow-up, escalation, unresolved wording, commitments)
+   C. Text/semantic cues from original transcript
+   D. Optional vocal/acoustic cues from audio
+-> Evidence and uncertainty validation
+-> Case brief + suggested next actions
+-> Human-reviewable case report + JSON export
+-> (Later phase) privacy-controlled multi-call aggregation and team dashboard
 
-Translation and emotion analysis must not replace or mutate the original transcript. Text emotion analyzes the original-language/code-mixed transcript, not only its English translation. The voice branch analyzes audio directly and does not depend on ASR correctness.
+Conversation intelligence must not depend on an emotion label. Topic and service-signal outputs must remain available when emotion models are unsupported or unavailable. Each finding should carry its source evidence, method, and review status. Translation may assist analysis but must not be treated as ground truth when the translation route is uncertain.
 
 ## 5. Component responsibilities
 
@@ -187,3 +191,8 @@ the original transcript remains immutable and English meaning is a separate
 result. Translation runs concurrently with semantic and vocal analysis after
 ASR, so model loading/inference overlaps the other branches. See
 `docs/TRANSLATION_WSL_SETUP.md`.
+
+
+## Stage 1 implementation guardrail
+
+The existing SpeechMind speech pipeline is retained as the foundation: ASR routing, original transcript, language/code-switch detection, IndicTrans2 English meaning, MuRIL text emotion, WavLM voice emotion, fusion, audio diagnostics, and timing metadata remain available. The support case extractor is an additive downstream layer. Fast case intake is opt-in at the pipeline API and is selectable in the UI; the default pipeline API continues to run all existing branches unless callers explicitly disable translation or emotion inference. The Srota/Hinglish routing and model checkpoints must not be changed as part of case-dashboard work without regression tests against the existing recordings.

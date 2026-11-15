@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from utils.runtime_config import configure_torch_runtime
 
-from utils.audio_utils import preprocess_with_quality
+from utils.audio_utils import prepare_audio_paths
 from models.language_spans import annotate_language_spans
 from models.asr import SpeechRecognizer
 from models.text_emotion import TextEmotionClassifier
@@ -220,7 +220,7 @@ class SpeechMindPipeline:
         """Decode and transcribe once; keep the prepared waveform for later edits."""
         timings = {}
         started = time.perf_counter()
-        audio, quality = preprocess_with_quality(audio_path)
+        audio, asr_audio, quality = prepare_audio_paths(audio_path)
         timings["preprocessing"] = round(time.perf_counter() - started, 3)
         started = time.perf_counter()
         error = None
@@ -230,10 +230,10 @@ class SpeechMindPipeline:
         else:
             try:
                 if asr_context and asr_context.strip():
-                    result = self.asr.transcribe(audio, language_hint=language_hint,
+                    result = self.asr.transcribe(asr_audio, language_hint=language_hint,
                                                  context=asr_context)
                 else:
-                    result = self.asr.transcribe(audio, language_hint=language_hint)
+                    result = self.asr.transcribe(asr_audio, language_hint=language_hint)
                 if not isinstance(result, dict):
                     raise TypeError("ASR returned an invalid result.")
             except Exception as exc:
@@ -241,10 +241,13 @@ class SpeechMindPipeline:
                 print(f"[Pipeline] ASR unavailable for this clip: {error}")
                 result = {}
         timings["asr"] = round(time.perf_counter() - started, 3)
-        return {"audio": audio, "audio_quality": quality, "asr_result": result,
+        return {"audio": audio, "asr_audio": asr_audio, "audio_quality": quality, "asr_result": result,
                 "asr_error": error, "timings_sec": timings}
 
-    def analyze_prepared(self, prepared: dict, transcript_override=None) -> dict:
+    def analyze_prepared(
+        self, prepared: dict, transcript_override=None,
+        include_emotion: bool = True, include_translation: bool = True,
+    ) -> dict:
         """Analyze prepared audio; corrected text never triggers another ASR call."""
         if not isinstance(prepared, dict) or "audio" not in prepared:
             raise ValueError("Prepared SpeechMind audio is missing or invalid.")
@@ -298,25 +301,47 @@ class SpeechMindPipeline:
 
         stage_start = time.perf_counter()
         with ThreadPoolExecutor(max_workers=3) as executor:
-            text_future = executor.submit(
-                _run_timed, self._predict_text_emotion,
-                transcript, language, asr_result
+            text_future = (
+                executor.submit(_run_timed, self._predict_text_emotion,
+                                transcript, language, asr_result)
+                if include_emotion else None
             )
             voice_future = None
-            if "_voice_result" not in prepared:
+            if include_emotion and "_voice_result" not in prepared:
                 voice_future = executor.submit(_run_timed, self._predict_voice_emotion, audio)
-            translation_future = executor.submit(
-                self._translate, transcript, asr_result
+            translation_future = (
+                executor.submit(self._translate, transcript, asr_result)
+                if include_translation else None
             )
-            text_result, text_duration = text_future.result()
-            if voice_future is None:
+            if text_future is not None:
+                text_result, text_duration = text_future.result()
+            else:
+                text_result = _unavailable_branch("Skipped in fast case-intake mode.")
+                text_duration = 0.0
+            if not include_emotion:
+                voice_result = _unavailable_branch("Skipped in fast case-intake mode.")
+                voice_duration = 0.0
+            elif voice_future is None:
                 voice_result = prepared["_voice_result"]
                 voice_duration = prepared.get("_voice_duration", 0.0)
             else:
                 voice_result, voice_duration = voice_future.result()
                 prepared["_voice_result"] = voice_result
                 prepared["_voice_duration"] = voice_duration
-            translation_result = translation_future.result()
+            if translation_future is not None:
+                translation_result = translation_future.result()
+            else:
+                translation_result = {
+                    "text": "", "available": False, "source": None,
+                    "source_language": language, "method": "skipped_fast_case_intake",
+                    "note": "English translation was skipped to reduce case-intake latency. The original transcript remains available.",
+                    "error": "Translation skipped in fast case-intake mode.",
+                    "duration_sec": 0.0, "cache_used": None,
+                    "translation_input_text": transcript,
+                    "transliteration_available": None, "transliterated_text": None,
+                    "transliteration_replacements": 0, "transliteration_model": None,
+                    "transliteration_error": None,
+                }
         timings["parallel_analysis_and_translation"] = round(
             time.perf_counter() - stage_start, 3
         )
@@ -520,12 +545,18 @@ class SpeechMindPipeline:
             "translator_error": translation_result["error"],
         }
 
-    def run(self, audio_path: str, language_hint: str = None,
-            asr_context: str = None) -> dict:
-        """Backward-compatible one-call API."""
+    def run(
+        self, audio_path: str, language_hint: str = None,
+        asr_context: str = None, include_emotion: bool = True,
+        include_translation: bool = True,
+    ) -> dict:
+        """Backward-compatible one-call API with opt-in fast intake switches."""
         prepared = self.prepare(audio_path, language_hint=language_hint,
                                 asr_context=asr_context)
-        return self.analyze_prepared(prepared)
+        return self.analyze_prepared(
+            prepared, include_emotion=include_emotion,
+            include_translation=include_translation,
+        )
 
 
 if __name__ == "__main__":

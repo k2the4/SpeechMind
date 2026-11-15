@@ -28,3 +28,8 @@ See [docs/DEPLOY_HUGGINGFACE_SPACES.md](docs/DEPLOY_HUGGINGFACE_SPACES.md) for D
 The hosted CPU configuration may take around a minute or more to process short Hinglish recordings. Model predictions are experimental and should not be treated as verified emotional states. Do not upload private or sensitive recordings to a public demo.
 
 Audio-quality diagnostics and complete JSON result export are part of the app workflow. Automatic Whisper vocabulary scouting is opt-in, not enabled by default. Optional local Romanized-Hindi transliteration is documented in the routing guide.
+
+
+## Conversation intelligence
+
+SpeechMind can use the Gemini API free tier (`gemini-3.5-flash-lite`) without downloading model weights. Set `GEMINI_API_KEY` before launching the app. Free-tier content may be used to improve Google products; do not send sensitive customer recordings. Ollama remains an optional offline alternative. Without either provider, deterministic analysis is used. See [docs/LOCAL_LLM_SETUP.md](docs/LOCAL_LLM_SETUP.md).

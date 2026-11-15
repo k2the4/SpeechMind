@@ -17,10 +17,15 @@ class FinalAppPolicyTests(unittest.TestCase):
     def test_complete_json_export_remains_available(self):
         self.assertIn("Download complete analysis (JSON)", self.app)
         self.assertIn('file_name="speechmind-analysis.json"', self.app)
+        self.assertIn('"conversation_insights": insights', self.app)
 
-    def test_app_uses_single_pass_pipeline_entrypoint(self):
-        self.assertIn("result = pipeline.run(tmp_path)", self.app)
+    def test_app_uses_single_pass_pipeline_entrypoint_with_explicit_modes(self):
+        self.assertIn("result = pipeline.run(", self.app)
+        self.assertIn("include_emotion=not fast_case_mode", self.app)
+        self.assertIn("include_translation=not fast_case_mode", self.app)
         self.assertNotIn("pipeline.prepare(tmp_path)", self.app)
+        self.assertIn("Fast support case intake", self.app)
+        self.assertIn("Full SpeechMind analysis", self.app)
 
 
 if __name__ == "__main__":

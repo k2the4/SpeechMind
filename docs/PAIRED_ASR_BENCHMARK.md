@@ -31,7 +31,8 @@ To use a particular input file:
 | Srota auto-context | Whisper tail scout + Srota vocabulary context | Measures the current Hinglish specialist path |
 | Srota native | Same Srota checkpoint, no context | Measures whether the automatic vocabulary context improves recognition |
 | IndicConformer | Forced Hindi route | Hindi-focused cross-language diagnostic; not assumed to be a Hinglish specialist |
-| Whisper-small | Automatic language detection | General-purpose baseline |
+| Whisper-small (beam 5) | Automatic language detection | General-purpose baseline |
+| Whisper-small fast (beam 1) | Same checkpoint, greedy decoding | Low-latency candidate; accuracy must be checked |
 
 The existing production-router transcript from the input predictions file is also included as a historical baseline. It is not re-run as a direct candidate in this benchmark.
 
@@ -110,3 +111,6 @@ The script reads UTF-8 (with or without a BOM) directly from the file.
 WER/CER values from different recordings are still affected by speaker, pace,
 recording conditions and content. Do not interpret a two-speaker sample as a
 gender-performance conclusion or as general model-quality evidence.
+
+
+The paired benchmark now runs both Whisper beam-5 and beam-1 decoding on each selected recording. They share the same loaded Whisper checkpoint and exact audio/reference pair. Compare `whisper_auto` and `whisper_fast` in `summary.json` and `predictions.csv`; do not promote beam-1 to production solely because it is faster.

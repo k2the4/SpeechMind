@@ -9,6 +9,7 @@ Hindi/Hinglish evidence. Pure-Hindi and clear-English routes retain their
 specialists.
 """
 
+import os
 import torch
 import whisper
 from transformers import AutoModel
@@ -22,6 +23,7 @@ from models.srota_provider import SrotaASRProvider
 from models.language_spans import annotate_language_spans
 from models.asr_routing import (
     audio_language_suggests_hindi,
+    fast_asr_mode_enabled,
     automatic_context_scout_enabled,
     srota_candidate_valid_for_route,
     srota_supports_duration,
@@ -372,6 +374,30 @@ class SpeechRecognizer:
             return self._whisper_result(
                 whisper_result, language_fallback=hint, language_source="user_selected_legacy"
             )
+
+        # Experimental low-latency route: one Whisper decode, no separate
+        # language-detection pass, no 600M IndicConformer pass, and greedy
+        # decoding. Keep opt-in until paired WER/CER checks confirm quality.
+        if fast_asr_mode_enabled():
+            whisper_result = self.whisper.transcribe(
+                audio_numpy,
+                task="transcribe",
+                language=None,
+                fp16=False,
+                verbose=False,
+                beam_size=1,
+                condition_on_previous_text=False,
+            )
+            result = self._whisper_result(
+                whisper_result,
+                language_source="whisper_fast_mode_experimental",
+            )
+            result["asr_fast_mode"] = True
+            result["asr_fast_mode_note"] = (
+                "Experimental single-pass Whisper greedy decoding; compare "
+                "transcript quality against the specialist route before production use."
+            )
+            return result
 
         try:
             detected_language, language_score, language_probabilities = self._detect_language(

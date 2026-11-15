@@ -113,10 +113,23 @@ ENGLISH_WORDS = {
     "yes", "you", "your"
 }
 
+# English-origin vocabulary commonly rendered phonetically in Devanagari by ASR.
+# Keep the script label as Devanagari; language attribution is a separate signal.
+DEVANAGARI_ENGLISH_WORDS = {
+    "पेमेंट", "बैंक", "अकाउंट", "ऑर्डर", "ऐप",
+    "ट्रांजेक्शन", "सक्सेसफुल", "मैसेज", "पेंडिंग",
+    "कस्टमर", "सपोर्ट", "कॉन्टेक्ट", "कॉन्टैक्ट", "कॉन्टेट",
+    "इशू", "इश्यू", "रिज़ॉल्व", "रिजॉल्व", "रिज़ल्व", "रिजल्व",
+    "प्रॉब्लम", "प्लीज़", "रिफंड", "रिज़ोल्यूशन", "रिजोल्यूशन",
+    "कन्फर्मेशन", "स्टेटस", "चेक", "कन्फर्म", "डिलीवरी",
+    "सर्विस", "कॉल", "टिकट", "अपडेट", "रिव्यू", "फीडबैक",
+}
+
 SCRIPT_MARKERS = (
     ("DEVANAGARI", "Devanagari"),
     ("LATIN", "Latin"),
     ("BENGALI", "Bengali"),
+    ("ORIYA", "Odia"),
     ("GURMUKHI", "Gurmukhi"),
     ("GUJARATI", "Gujarati"),
     ("TAMIL", "Tamil"),
@@ -157,8 +170,20 @@ def _classify_token(
 ) -> tuple[str, float, str]:
     normalized = token.casefold().replace("’", "'")
     if script == "Devanagari":
-        language = primary_language if primary_language in SUPPORTED_LANGUAGES else "hi"
+        if normalized in DEVANAGARI_ENGLISH_WORDS:
+            return "en", 0.86, "transliterated_english_lexicon"
+        # Devanagari is shared by Hindi, Marathi and Nepali. Preserve a
+        # supported ASR language hint instead of silently relabelling it Hindi.
+        language = primary_language if primary_language in {"hi", "mr", "ne"} else "hi"
         return language, 0.96, "unicode_script"
+
+    if script == "Bengali":
+        # Assamese and Bengali share the Bengali Unicode block.
+        language = primary_language if primary_language in {"as", "bn"} else "bn"
+        return language, 0.92, "unicode_script"
+
+    if script == "Odia":
+        return "or", 0.92, "unicode_script"
 
     if script == "Latin":
         if normalized in ROMANIZED_HINDI_WORDS and (
@@ -172,9 +197,9 @@ def _classify_token(
             return "en", 0.62, "primary_language_hint"
         return "und", 0.25, "ambiguous_latin_token"
 
-    if script in {"Bengali", "Gurmukhi", "Gujarati", "Tamil", "Telugu", "Kannada", "Malayalam", "Arabic"}:
+    if script in {"Gurmukhi", "Gujarati", "Tamil", "Telugu", "Kannada", "Malayalam", "Arabic"}:
         script_language = {
-            "Bengali": "bn", "Gurmukhi": "pa", "Gujarati": "gu",
+            "Gurmukhi": "pa", "Gujarati": "gu",
             "Tamil": "ta", "Telugu": "te", "Kannada": "kn",
             "Malayalam": "ml", "Arabic": primary_language if primary_language == "ur" else "und",
         }.get(script, "und")

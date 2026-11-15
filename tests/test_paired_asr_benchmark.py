@@ -39,6 +39,12 @@ class PairedASRBenchmarkTests(unittest.TestCase):
         self.assertEqual(second.name, "run-20261113T143100Z")
         self.assertNotEqual(first, second)
 
+    def test_benchmark_source_includes_paired_whisper_fast_candidate(self):
+        source = (Path(__file__).resolve().parents[1] / "scripts" / "benchmark_asr_models_paired.py").read_text(encoding="utf-8")
+        self.assertIn('beam_size=1', source)
+        self.assertIn('whisper_fast_hypothesis', source)
+        self.assertIn('"whisper_fast": "whisper_fast_hypothesis"', source)
+
     def test_reader_accepts_full_pipeline_prediction_schema(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "predictions.csv"

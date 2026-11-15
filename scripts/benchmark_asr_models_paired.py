@@ -438,7 +438,7 @@ def main() -> int:
             f"[PairedASR] Same recordings for every candidate: {len(selected)}\n"
             f"[PairedASR] Speakers: {len({row['speaker_id'] for row in selected})}\n"
             "[PairedASR] Candidate models: Srota auto-context, Srota no-context, "
-            "IndicConformer forced language, Whisper auto-language."
+            "IndicConformer forced language, Whisper beam-5 auto, Whisper beam-1 fast."
         )
 
         import torch
@@ -565,6 +565,35 @@ def main() -> int:
                     output["whisper_auto_seconds"] = ""
                     output["whisper_auto_error"] = f"{type(error).__name__}: {error}"
 
+            if not args.skip_whisper:
+                call_started = time.perf_counter()
+                try:
+                    result = recognizer.whisper.transcribe(
+                        audio,
+                        task="transcribe",
+                        language=None,
+                        fp16=False,
+                        verbose=False,
+                        beam_size=1,
+                        condition_on_previous_text=False,
+                    )
+                    hypothesis = extract_whisper_text(result)
+                    if not hypothesis:
+                        raise RuntimeError("Whisper fast decode returned an empty transcript.")
+                    output["whisper_fast_hypothesis"] = hypothesis
+                    output["whisper_fast_status"] = "ok"
+                    output["whisper_fast_seconds"] = round(
+                        time.perf_counter() - call_started, 3
+                    )
+                    output["whisper_fast_detected_language"] = str(
+                        result.get("language") if isinstance(result, dict) else ""
+                    )
+                except Exception as error:
+                    output["whisper_fast_hypothesis"] = ""
+                    output["whisper_fast_status"] = "error"
+                    output["whisper_fast_seconds"] = ""
+                    output["whisper_fast_error"] = f"{type(error).__name__}: {error}"
+
             output_rows.append(output)
             print(f"[PairedASR] {index}/{len(selected)} completed: {audio_path.name}")
 
@@ -577,6 +606,7 @@ def main() -> int:
             "srota_native": "srota_native_hypothesis",
             "indicconformer": "indicconformer_hypothesis",
             "whisper_auto": "whisper_auto_hypothesis",
+            "whisper_fast": "whisper_fast_hypothesis",
         }
         model_results = {}
         for model_name, hypothesis_key in model_columns.items():
@@ -681,7 +711,7 @@ def main() -> int:
                 "Srota auto-context effective per-clip latency includes both the Whisper context scout and Srota inference; both components are retained separately in predictions.csv.",
                 "When the scout returns an empty context, Srota is called only once and the identical no-context result is reused in both variant columns; srota_native_shared_call marks this case.",
                 "IndicConformer is forced to the supplied Hindi code; this is a diagnostic on Hinglish, not a claim that it is a Hinglish specialist.",
-                "Whisper uses automatic language detection and transcription.",
+                "Whisper auto uses the existing beam-5 decoder; Whisper fast uses the same loaded checkpoint with beam_size=1. Compare quality and latency before selecting a default.",
                 "All candidates are scored against identical references selected once at the start.",
                 "Do not change production routing based on this small diagnostic sample alone.",
             ],

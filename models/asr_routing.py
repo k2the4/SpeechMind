@@ -8,6 +8,13 @@ from models.language_spans import (
     STRONG_ROMANIZED_HINDI_WORDS,
 )
 
+def fast_asr_mode_enabled(value: str | None = None) -> bool:
+    """Opt-in low-latency Whisper route for paired CPU benchmarking."""
+    if value is None:
+        value = os.environ.get("SPEECHMIND_ASR_FAST_MODE", "0")
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 
 # These words are specific enough to justify a second pass even when they are
 # the only Romanized-Hindi token in a short transcript.

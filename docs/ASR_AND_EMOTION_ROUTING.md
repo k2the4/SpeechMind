@@ -198,3 +198,15 @@ When the dependency is absent or fails, SpeechMind keeps the original
 transcript and reports the English-meaning step as unavailable for that
 Romanized-Hindi route. No hosted API is used. Do not change the main
 requirements or downgrade the primary environment's pip to work around this.
+
+
+## Experimental CPU fast path
+
+A controlled low-latency route is available behind an explicit opt-in:
+
+```powershell
+$env:SPEECHMIND_ASR_FAST_MODE = "1"
+.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+This route uses the already-loaded Whisper-small model for one automatic-language, greedy decode (beam size 1). It skips the separate Whisper language-detection pass, the Srota probe and the IndicConformer specialist pass. It is an experiment, not the production default: compare its transcript against the normal route on the same audio and verify Hindi names, amounts, negation, code-switching and technical terms before enabling it for users. Unset the variable to restore the existing specialist router.
