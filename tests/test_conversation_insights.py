@@ -103,6 +103,21 @@ class ConversationInsightsTests(unittest.TestCase):
         )
         self.assertIn("Orders & delivery", [x["topic"] for x in result["topics"]])
 
+    def test_does_not_extract_ordinary_word_after_order_as_order_id(self):
+        result = analyze_conversation_text(
+            "The customer paid yesterday, but the order remains unconfirmed."
+        )
+        self.assertNotIn("order_id", result["case_brief"]["reported_details"])
+
+    def test_extracts_explicit_numeric_order_id(self):
+        result = analyze_conversation_text(
+            "The customer says order ID: AB123456 has not been delivered."
+        )
+        self.assertEqual(
+            result["case_brief"]["reported_details"]["order_id"]["value"],
+            "AB123456",
+        )
+
     def test_case_brief_does_not_invent_transaction_details(self):
         result = analyze_conversation_text(
             "My payment was deducted but the order was not confirmed."
