@@ -7,9 +7,26 @@ import urllib.error
 import urllib.request
 
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-DEFAULT_MODEL = os.getenv("SPEECHMIND_LLM_MODEL", "gemini-3.5-flash-lite" if GEMINI_API_KEY else "qwen2.5:0.5b")
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
+DEFAULT_OLLAMA_MODEL = "qwen2.5:0.5b"
 OLLAMA_URL = os.getenv("SPEECHMIND_OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
+
+
+def _get_gemini_api_key():
+    """Resolve the key at call time so Streamlit secrets and late env setup work."""
+    value = os.getenv("GEMINI_API_KEY", "")
+    if not value:
+        try:
+            import streamlit as st
+            value = st.secrets.get("GEMINI_API_KEY", "")
+        except Exception:
+            value = ""
+    return str(value or "").strip().strip('"').strip("\'")
+
+
+def _get_default_model():
+    configured = os.getenv("SPEECHMIND_LLM_MODEL", "").strip()
+    return configured or (DEFAULT_GEMINI_MODEL if _get_gemini_api_key() else DEFAULT_OLLAMA_MODEL)
 ALLOWED_TOPICS = {
     "Payments & refunds", "Orders & delivery", "Account access",
     "Technical support", "Cancellation & returns",
@@ -25,18 +42,19 @@ ALLOWED_SIGNALS = {
 
 def _post_ollama(payload, timeout=180):
     """Use Gemini when configured; otherwise use optional local Ollama."""
-    if GEMINI_API_KEY:
-        model = payload.get("model") or "gemini-3.5-flash-lite"
+    api_key = _get_gemini_api_key()
+    if api_key:
+        model = payload.get("model") or DEFAULT_GEMINI_MODEL
         messages = payload.get("messages", [])
         system = next((m.get("content", "") for m in messages if m.get("role") == "system"), "")
         user = next((m.get("content", "") for m in messages if m.get("role") == "user"), "")
-        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + GEMINI_API_KEY
+        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent"
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
             "generationConfig": {"temperature": 0, "responseMimeType": "application/json", "maxOutputTokens": 4096},
         }
-        request = urllib.request.Request(endpoint, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+        request = urllib.request.Request(endpoint, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), headers={"Content-Type": "application/json", "x-goog-api-key": api_key}, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 result = json.loads(response.read().decode("utf-8"))
@@ -104,7 +122,8 @@ def analyze_with_local_llm(transcript, language="unknown", model=None):
     if not transcript:
         raise ValueError("No transcript is available for local LLM analysis.")
 
-    model = model or DEFAULT_MODEL
+    model = model or _get_default_model()
+    gemini_enabled = bool(_get_gemini_api_key())
     system = (
         "You are SpeechMind, a careful multilingual customer-support conversation analyst. "
         "Understand Hindi, English and Hinglish, including code-switching. Analyse only the "
@@ -169,7 +188,7 @@ def analyze_with_local_llm(transcript, language="unknown", model=None):
                 "matched_terms": [],
                 "evidence": [{"text": q, "matched_terms": []} for q in evidence[:3]],
                 "evidence_source": "original_transcript",
-                "method": ("Gemini API" if GEMINI_API_KEY else "local open-source LLM") + " with verbatim evidence validation",
+                "method": ("Gemini API" if gemini_enabled else "local open-source LLM") + " with verbatim evidence validation",
             })
 
     signals = []
@@ -213,22 +232,22 @@ def analyze_with_local_llm(transcript, language="unknown", model=None):
 
     return {
         "brief": summary[:800],
-        "brief_source": ("Gemini English meaning" if GEMINI_API_KEY else "Local LLM English meaning") if english else "original transcript",
+        "brief_source": ("Gemini English meaning" if gemini_enabled else "Local LLM English meaning") if english else "original transcript",
         "topics": topics,
         "signals": signals,
         "needs_human_review": needs_review,
-        "review_reasons": [("Gemini API analysis" if GEMINI_API_KEY else "Local LLM analysis") + "; all displayed evidence was checked against the original transcript."],
+        "review_reasons": [("Gemini API analysis" if gemini_enabled else "Local LLM analysis") + "; all displayed evidence was checked against the original transcript."],
         "resolution_cues": [],
-        "analysis_source": "Gemini API" if GEMINI_API_KEY else "local open-source LLM",
-        "method": ("Gemini model " if GEMINI_API_KEY else "local Ollama model ") + model + " with verbatim evidence validation",
+        "analysis_source": "Gemini API" if gemini_enabled else "local open-source LLM",
+        "method": ("Gemini model " if gemini_enabled else "local Ollama model ") + model + " with verbatim evidence validation",
         "original_transcript": transcript,
         "translation_available": bool(english),
         "english_meaning": english,
         "llm": {
-            "provider": "gemini_api" if GEMINI_API_KEY else "ollama_local",
+            "provider": "gemini_api" if gemini_enabled else "ollama_local",
             "model": model,
             "available": True,
-            "data_policy_note": "Gemini free-tier content may be used to improve Google products; avoid sensitive recordings." if GEMINI_API_KEY else "Transcript stays on this machine.",
+            "data_policy_note": "Gemini free-tier content may be used to improve Google products; avoid sensitive recordings." if gemini_enabled else "Transcript stays on this machine.",
             "duration_sec": round(time.perf_counter() - started, 3),
             "evidence_validation": "verbatim_substring",
         },
@@ -244,7 +263,7 @@ def analyze_with_local_llm(transcript, language="unknown", model=None):
                 {"topic": topic["topic"], "source": "original_transcript", "items": topic["evidence"]}
                 for topic in topics
             ],
-            "review_caveat": ("Gemini API interpretation" if GEMINI_API_KEY else "Local-model interpretation") + "; verify every finding against the original audio.",
+            "review_caveat": ("Gemini API interpretation" if gemini_enabled else "Local-model interpretation") + "; verify every finding against the original audio.",
         },
         "case_review": {
             "suggested_status": status,
@@ -261,7 +280,7 @@ def ollama_status():
         with urllib.request.urlopen(request, timeout=2) as response:
             payload = json.loads(response.read().decode("utf-8"))
         models = [item.get("name", "") for item in payload.get("models", [])]
-        return {"available": True, "models": models, "default_model": DEFAULT_MODEL}
+        return {"available": True, "models": models, "default_model": _get_default_model()}
     except Exception as error:
-        return {"available": False, "models": [], "default_model": DEFAULT_MODEL,
+        return {"available": False, "models": [], "default_model": _get_default_model(),
                 "error": str(error)}
