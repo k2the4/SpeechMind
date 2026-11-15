@@ -189,6 +189,7 @@ if audio_source is not None:
 
         # Keep the detailed model output available without overwhelming the main review screen.
         with st.expander("Transcript and English meaning", expanded=False):
+            st.subheader("Transcript (original speech)")
             left, right = st.columns(2)
             with left:
                 st.markdown("**Original transcript**")
@@ -281,9 +282,9 @@ if audio_source is not None:
         }
         st.divider()
         st.download_button(
-            "Export call review (JSON)",
+            "Download complete analysis (JSON)",
             data=json.dumps(export_payload, ensure_ascii=False, indent=2, default=str),
-            file_name="speechmind-call-review.json",
+            file_name="speechmind-analysis.json",
             mime="application/json",
             key=f"speechmind_download_{audio_digest}",
         )
