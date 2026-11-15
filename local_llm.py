@@ -74,6 +74,20 @@ def _extract_grounded_details(transcript):
     )
     if amount:
         details["amount"] = next(group for group in amount.groups() if group)
+    else:
+        # Common Hindi spoken amount forms, grounded in the transcript.
+        spoken_amounts = (
+            (r"पच्चीस\s*सौ", "2500"),
+            (r"दो\s*हज़ार\s*(?:पाँच|पांच)\s*सौ", "2500"),
+            (r"दो\s*हजार\s*(?:पाँच|पांच)\s*सौ", "2500"),
+            (r"पाँच\s*हज़ार|पांच\s*हज़ार|पाँच\s*हजार|पांच\s*हजार", "5000"),
+            (r"एक\s*हज़ार|एक\s*हजार", "1000"),
+            (r"पाँच\s*सौ|पांच\s*सौ", "500"),
+        )
+        for pattern, value in spoken_amounts:
+            if re.search(pattern, transcript):
+                details["amount"] = value
+                break
     for key, pattern in (
         ("transaction_id", r"\b(?:transaction|txn|utr|reference)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{6,})\b"),
         ("order_id", r"\b(?:order)\s*(?:id|number|no\.?)?\s*[:#-]?\s*([A-Z0-9-]{5,})\b"),
@@ -155,7 +169,7 @@ def analyze_with_local_llm(transcript, language="unknown", model=None):
                 "matched_terms": [],
                 "evidence": [{"text": q, "matched_terms": []} for q in evidence[:3]],
                 "evidence_source": "original_transcript",
-                "method": "local open-source LLM with verbatim evidence validation",
+                "method": ("Gemini API" if GEMINI_API_KEY else "local open-source LLM") + " with verbatim evidence validation",
             })
 
     signals = []
@@ -203,7 +217,7 @@ def analyze_with_local_llm(transcript, language="unknown", model=None):
         "topics": topics,
         "signals": signals,
         "needs_human_review": needs_review,
-        "review_reasons": ["Local LLM analysis; all displayed evidence was checked against the original transcript."],
+        "review_reasons": [("Gemini API analysis" if GEMINI_API_KEY else "Local LLM analysis") + "; all displayed evidence was checked against the original transcript."],
         "resolution_cues": [],
         "analysis_source": "Gemini API" if GEMINI_API_KEY else "local open-source LLM",
         "method": ("Gemini model " if GEMINI_API_KEY else "local Ollama model ") + model + " with verbatim evidence validation",
@@ -230,7 +244,7 @@ def analyze_with_local_llm(transcript, language="unknown", model=None):
                 {"topic": topic["topic"], "source": "original_transcript", "items": topic["evidence"]}
                 for topic in topics
             ],
-            "review_caveat": "Local-model interpretation; verify every finding against the original audio.",
+            "review_caveat": ("Gemini API interpretation" if GEMINI_API_KEY else "Local-model interpretation") + "; verify every finding against the original audio.",
         },
         "case_review": {
             "suggested_status": status,
