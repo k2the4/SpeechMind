@@ -82,7 +82,17 @@ class PipelineFailureIsolationTests(unittest.TestCase):
                 return_value=(
                     [0.1, 0.2, 0.1],
                     {"status": "good", "duration_seconds": 1.0, "flags": []},
-                )
+                ),
+                create=True,
+            ),
+            patch.object(
+                pipeline_module, "prepare_audio_paths",
+                return_value=(
+                    [0.1, 0.2, 0.1],
+                    [0.1, 0.2, 0.1],
+                    {"status": "good", "duration_seconds": 1.0, "flags": []},
+                ),
+                create=True,
             ),
         ):
             pipeline = pipeline_module.SpeechMindPipeline(load_translator=False)
@@ -187,7 +197,12 @@ class PipelineFailureIsolationTests(unittest.TestCase):
             patch.object(pipeline_module, "VoiceEmotionRecognizer", Voice),
             patch.object(pipeline_module, "preprocess_with_quality",
                          return_value=([0.1, 0.2, 0.1],
-                         {"status": "good", "duration_seconds": 1.0, "flags": []})),
+                         {"status": "good", "duration_seconds": 1.0, "flags": []}),
+                         create=True),
+            patch.object(pipeline_module, "prepare_audio_paths",
+                         return_value=([0.1, 0.2, 0.1], [0.1, 0.2, 0.1],
+                         {"status": "good", "duration_seconds": 1.0, "flags": []}),
+                         create=True),
         ):
             pipeline = pipeline_module.SpeechMindPipeline(load_translator=False)
             prepared = pipeline.prepare("unused.wav")
