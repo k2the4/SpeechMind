@@ -18,7 +18,7 @@ onnxruntime==1.20.1
 librosa
 soundfile
 scipy
-numpy
+numpy==1.26.4
 
 # IndicTrans2 translation (legacy local provider; optional)
 sentencepiece
@@ -28,7 +28,7 @@ mosestokenizer
 # pip install indictranstoolkit
 
 # Application and evaluation
-streamlit
+streamlit==1.41.1
 scikit-learn
 pandas
 matplotlib
