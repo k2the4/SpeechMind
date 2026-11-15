@@ -25,7 +25,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown('<div class="sm-eyebrow">Multilingual conversation intelligence</div>', unsafe_allow_html=True)
 st.title("SpeechMind")
-st.markdown('<div class="sm-subtitle">Understand multilingual conversations. Review issues, language patterns and model uncertainty.</div>', unsafe_allow_html=True)
+st.markdown('<div class="sm-subtitle">Turn multilingual support calls into evidence-backed case reviews and follow-up signals.</div>', unsafe_allow_html=True)
 st.warning(
     "SpeechMind provides experimental linguistic and vocal signals for human review. "
     "It does not verify complaints, infer a person's true emotional state, or diagnose "
@@ -40,7 +40,7 @@ def get_pipeline():
 
 
 st.caption(
-    "Record directly or upload a clip. SpeechMind automatically identifies the spoken language, transcribes the original speech, analyses text and vocal emotion in parallel, and presents the meaning in English."
+    "Upload a customer-support call to review the original transcript, English meaning, issue themes, service signals and evidence for a human reviewer."
 )
 st.caption(
     "Language support is component-specific. An emotion branch is only run when its installed checkpoint declares support for the detected language; unsupported analysis is marked unavailable rather than guessed."
@@ -120,14 +120,23 @@ if audio_source is not None:
                         st.caption("Matched terms: " + ", ".join(topic["matched_terms"]))
                 else:
                     st.caption("No configured topic keywords were found. This does not mean the conversation has no topic.")
-        st.markdown("#### Potential follow-up signals")
+        st.markdown("#### Support review signals")
         if insights["signals"]:
             for signal in insights["signals"]:
                 st.info("**" + signal["label"] + "** — " + signal["description"] +
-                        "\nEvidence: " + ", ".join(signal["evidence"]))
+                        "\\nMatched cues: " + ", ".join(signal["evidence"]))
+                for evidence_item in signal.get("evidence_sentences", []):
+                    st.caption("Evidence: “" + evidence_item["text"] + "”")
         else:
-            st.success("No configured follow-up phrases were detected. This is not proof that no action is needed.")
-        st.caption("These are rule-based review cues, not verified complaint classifications. Always check the original audio.")
+            st.info("No configured support-review cues were detected. This is not proof that the call is resolved or requires no action.")
+
+        case_review = insights.get("case_review") or {}
+        st.markdown("#### Case review")
+        st.write("**Suggested review status:** " + str(case_review.get("suggested_status", "review_required")).replace("_", " ").title())
+        st.write(case_review.get("suggested_next_step", "A human reviewer should verify the call."))
+        if insights.get("review_reasons"):
+            st.caption("Review notes: " + " ".join(insights["review_reasons"]))
+        st.caption("All topics and signals are deterministic transcript cues. Verify every finding against the original audio before recording a case outcome.")
         st.divider()
         st.download_button(
             "Download complete analysis (JSON)",
