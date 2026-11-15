@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from models.asr import fast_asr_mode_enabled
+from models.asr_routing import fast_asr_mode_enabled
 
 from models.asr_routing import (
     automatic_context_scout_enabled,
