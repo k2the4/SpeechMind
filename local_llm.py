@@ -8,7 +8,7 @@ import urllib.request
 
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-DEFAULT_MODEL = os.getenv("SPEECHMIND_LLM_MODEL", "gemini-2.5-flash-lite" if GEMINI_API_KEY else "qwen2.5:0.5b")
+DEFAULT_MODEL = os.getenv("SPEECHMIND_LLM_MODEL", "gemini-3.5-flash-lite" if GEMINI_API_KEY else "qwen2.5:0.5b")
 OLLAMA_URL = os.getenv("SPEECHMIND_OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
 ALLOWED_TOPICS = {
     "Payments & refunds", "Orders & delivery", "Account access",
@@ -26,7 +26,7 @@ ALLOWED_SIGNALS = {
 def _post_ollama(payload, timeout=180):
     """Use Gemini when configured; otherwise use optional local Ollama."""
     if GEMINI_API_KEY:
-        model = payload.get("model") or "gemini-2.5-flash-lite"
+        model = payload.get("model") or "gemini-3.5-flash-lite"
         messages = payload.get("messages", [])
         system = next((m.get("content", "") for m in messages if m.get("role") == "system"), "")
         user = next((m.get("content", "") for m in messages if m.get("role") == "user"), "")
@@ -37,8 +37,17 @@ def _post_ollama(payload, timeout=180):
             "generationConfig": {"temperature": 0, "responseMimeType": "application/json", "maxOutputTokens": 4096},
         }
         request = urllib.request.Request(endpoint, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            result = json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")[:1200]
+            try:
+                parsed = json.loads(detail)
+                detail = parsed.get("error", {}).get("message", detail)
+            except (ValueError, AttributeError):
+                pass
+            raise RuntimeError("Gemini API HTTP " + str(error.code) + ": " + str(detail)) from error
         parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
         return {"message": {"content": "".join(part.get("text", "") for part in parts)}}
     request = urllib.request.Request(OLLAMA_URL, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
