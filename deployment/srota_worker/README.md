@@ -1,3 +1,13 @@
+---
+title: SpeechMind Srota Worker
+emoji: 🎙️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # SpeechMind Srota HTTP worker
 
 Deploy this folder as a separate Hugging Face Space using the Docker SDK. It runs the same `moorlee/qwen3-asr-0.6b-hinglish` model used by the local isolated worker and keeps model weights loaded between requests. It also exposes the IndicTrans2 English-meaning endpoint used by SpeechMind's full pipeline.
@@ -15,7 +25,7 @@ SPEECHMIND_SROTA_ENDPOINT = "https://YOUR-SPACE-NAME.hf.space"
 SPEECHMIND_SROTA_API_TOKEN = "the-same-random-secret"
 ```
 
-The endpoint must be the Space's `hf.space` host, without a trailing `/transcribe`. Keep the Space private if the recordings or service should not be publicly discoverable. The API token is required even for private Spaces. Never commit the token.
+The endpoint must be the Space's `hf.space` host, without a trailing `/transcribe`. You may keep the Space private. If it is private, the Streamlit `HF_TOKEN` must belong to an account with access to that Space; the app sends it as the Hugging Face Space authorization header. The separate API token is always required by the worker. Never commit either token.
 
 ## Runtime notes
 
