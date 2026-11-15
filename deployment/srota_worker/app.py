@@ -22,9 +22,9 @@ _translation_lock = threading.Lock()
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 
-def _authorized(authorization: str | None) -> bool:
+def _authorized(api_key: str | None) -> bool:
     expected = os.environ.get("SPEECHMIND_SROTA_API_TOKEN", "")
-    supplied = (authorization or "").removeprefix("Bearer ").strip()
+    supplied = (api_key or "").strip()
     return bool(expected and supplied and hmac.compare_digest(expected, supplied))
 
 
@@ -72,9 +72,9 @@ async def transcribe(
     audio: UploadFile = File(...),
     context: str = Form(""),
     model_name: str = Form("moorlee/qwen3-asr-0.6b-hinglish"),
-    authorization: str | None = Header(default=None),
+    api_key: str | None = Header(default=None, alias="X-SpeechMind-API-Key"),
 ):
-    if not _authorized(authorization):
+    if not _authorized(api_key):
         raise HTTPException(401, "Unauthorized")
     if not audio.filename:
         raise HTTPException(400, "Audio filename is missing.")
