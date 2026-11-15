@@ -102,6 +102,14 @@ if audio_source is not None:
                 init_start = time.perf_counter()
                 pipeline = get_pipeline()
                 model_init_time = round(time.perf_counter() - init_start, 3)
+                # Fast support intake must use the single-pass Whisper route.
+                # This avoids gated IndicConformer and the unavailable Srota worker
+                # on Streamlit Cloud while preserving specialist routing in Full mode.
+                os.environ["SPEECHMIND_ASR_FAST_MODE"] = "1" if fast_case_mode else "0"
+                print(
+                    "[Deployment] ASR route: "
+                    + ("single-pass Whisper (fast intake)" if fast_case_mode else "full specialist routing")
+                )
                 result = pipeline.run(
                     tmp_path,
                     include_emotion=not fast_case_mode,
