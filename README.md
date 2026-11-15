@@ -3,32 +3,33 @@ title: SpeechMind
 emoji: 🎙️
 colorFrom: indigo
 colorTo: purple
-sdk: gradio
-app_file: gradio_app.py
-python_version: 3.11
+sdk: docker
+app_port: 7860
 pinned: false
 ---
 
 # SpeechMind
 
-SpeechMind is an experimental multilingual speech-understanding application for Hindi, Hindi-English (Hinglish), and English recordings.
+SpeechMind is an experimental multilingual speech-understanding application for natural English, Hindi, Hindi-English (Hinglish), Bengali, Tamil, Telugu and Marathi speech.
 
-The hosted Gradio profile uses Whisper for English-detected speech and IndicConformer for Hindi/other supported Indic-language detections. Hindi-detected mixed Hindi-English speech therefore uses IndicConformer rather than Srota; mixed-script accuracy may be lower than the locally benchmarked production route. It loads the fine-tuned MuRIL and WavLM checkpoints from the private Hugging Face model repository using the Space secrets `SPEECHMIND_MODEL_REPO` and `HF_TOKEN`.
+It identifies the spoken language, preserves the original transcript, produces an English meaning, analyses emotion from the original words and voice in parallel, and presents a confidence-aware interpretation. Feature availability is checkpoint-dependent: a text-emotion model is used only for languages it explicitly declares as supported. Unsupported analysis is reported as unavailable rather than guessed. SpeechMind is descriptive and does not diagnose medical or psychological conditions.
 
-## Hosted profile limitations
+See [docs/ASR_AND_EMOTION_ROUTING.md](docs/ASR_AND_EMOTION_ROUTING.md) for current model routing, uncertainty handling, evaluation policy and hosted-ASR considerations.
 
-The free Gradio Space does not run the repository's separate `.venv_srota` worker. Srota ASR and the isolated IndicTrans2 worker are therefore disabled in this hosted profile. Hinglish transcription falls back to Whisper; English meaning may be produced by Gemini when `GEMINI_API_KEY` is configured. Without Gemini, deterministic conversation analysis is used and does not claim to translate.
+For multi-recording production evaluation, see [docs/MULTI_RECORDING_EVALUATION.md](docs/MULTI_RECORDING_EVALUATION.md) and run `EVALUATE_SPEECHMIND_HIACC.bat` after preparing the HiACC manifest.
 
-The local Streamlit application and its existing routing are retained for local use.
+For a controlled same-audio comparison of the ASR candidates, see [docs/PAIRED_ASR_BENCHMARK.md](docs/PAIRED_ASR_BENCHMARK.md) and run `COMPARE_ASR_MODELS_HIACC.bat` after completing a full-pipeline evaluation.
 
-## Space configuration
 
-- Variable: `SPEECHMIND_MODEL_REPO=Hyundai-Creta/speechmind-models`
-- Secret: `HF_TOKEN` (read access to the private model repository)
-- Secret: `GEMINI_API_KEY` (optional)
+## Hosted deployment
 
-Do not commit credentials or model checkpoints to Git.
+See [docs/DEPLOY_HUGGINGFACE_SPACES.md](docs/DEPLOY_HUGGINGFACE_SPACES.md) for Docker Space setup, private checkpoint configuration and deployment instructions.
 
-## Limitations and safety
+The hosted CPU configuration may take around a minute or more to process short Hinglish recordings. Model predictions are experimental and should not be treated as verified emotional states. Do not upload private or sensitive recordings to a public demo.
 
-The public demo should only be used with non-sensitive recordings. Emotion predictions are experimental, uncalibrated and not medical or psychological diagnoses. Verify the transcript and evidence before relying on conversation insights.
+Audio-quality diagnostics and complete JSON result export are part of the app workflow. Automatic Whisper vocabulary scouting is opt-in, not enabled by default. Optional local Romanized-Hindi transliteration is documented in the routing guide.
+
+
+## Conversation intelligence
+
+SpeechMind can use the Gemini API free tier (`gemini-3.5-flash-lite`) without downloading model weights. Set `GEMINI_API_KEY` before launching the app. Free-tier content may be used to improve Google products; do not send sensitive customer recordings. Ollama remains an optional offline alternative. Without either provider, deterministic analysis is used. See [docs/LOCAL_LLM_SETUP.md](docs/LOCAL_LLM_SETUP.md).
