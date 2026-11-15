@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from pydantic import BaseModel
 from qwen_asr import Qwen3ASRModel
 
 app = FastAPI(title="SpeechMind Srota Worker", version="1.0.0")
@@ -16,6 +17,8 @@ _model = None
 _model_name = None
 _model_lock = threading.Lock()
 _inference_lock = threading.Lock()
+_translation_components = None
+_translation_lock = threading.Lock()
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 
@@ -119,3 +122,67 @@ async def transcribe(
             temp_path.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+class TranslationRequest(BaseModel):
+    text: str
+    src_lang: str
+
+
+def _get_translation_components():
+    global _translation_components
+    with _translation_lock:
+        if _translation_components is not None:
+            return _translation_components
+        import torch
+        try:
+            from IndicTransToolkit.processor import IndicProcessor
+        except ImportError:
+            from IndicTransToolkit import IndicProcessor
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+        model_name = "ai4bharat/indictrans2-indic-en-dist-200M"
+        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            model_name, trust_remote_code=True
+        ).to("cpu")
+        model.eval()
+        processor = IndicProcessor(inference=True)
+        _translation_components = (torch, tokenizer, model, processor)
+        return _translation_components
+
+
+@app.post("/translate")
+def translate(
+    request: TranslationRequest,
+    authorization: str | None = Header(default=None),
+):
+    if not _authorized(authorization):
+        raise HTTPException(401, "Unauthorized")
+    if not request.text.strip() or not request.src_lang.strip():
+        raise HTTPException(400, "Translation text and source language are required.")
+    try:
+        torch, tokenizer, model, processor = _get_translation_components()
+        started = time.perf_counter()
+        batch = processor.preprocess_batch(
+            [request.text], src_lang=request.src_lang, tgt_lang="eng_Latn"
+        )
+        inputs = tokenizer(
+            batch, return_tensors="pt", padding=True, truncation=True
+        ).to("cpu")
+        with torch.inference_mode():
+            generated = model.generate(**inputs, max_length=256, num_beams=4)
+        decoded = tokenizer.batch_decode(generated, skip_special_tokens=True)
+        translated = processor.postprocess_batch(decoded, lang="eng_Latn")
+        result = str(translated[0]).strip() if translated else ""
+        if not result:
+            raise RuntimeError("IndicTrans2 returned an empty English translation.")
+        return {
+            "ok": True,
+            "translated_text": result,
+            "model": "ai4bharat/indictrans2-indic-en-dist-200M",
+            "inference_seconds": round(time.perf_counter() - started, 3),
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(500, f"{type(error).__name__}: {error}") from error
