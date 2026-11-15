@@ -13,6 +13,7 @@ from models.srota_provider import SrotaASRProvider, has_mixed_devanagari_latin
 class SrotaRemoteWorkerTests(unittest.TestCase):
     def test_remote_endpoint_is_used_when_configured(self):
         import os
+        import types
         from unittest import mock
 
         class FakeResponse:
@@ -37,8 +38,12 @@ class SrotaRemoteWorkerTests(unittest.TestCase):
                 "SPEECHMIND_SROTA_API_TOKEN": "test-token",
             }):
                 provider = SrotaASRProvider(project_root=directory)
-                with mock.patch("requests.post", return_value=FakeResponse()) as post:
+                fake_requests = types.SimpleNamespace(
+                    post=mock.Mock(return_value=FakeResponse())
+                )
+                with mock.patch.dict(sys.modules, {"requests": fake_requests}):
                     result = provider.transcribe_file(audio, context="order")
+                post = fake_requests.post
                 self.assertTrue(provider.available)
                 self.assertEqual(result["transcript"], "मेरा order confirm नहीं हुआ")
                 self.assertEqual(post.call_args.args[0], "https://speechmind-srota.hf.space/transcribe")
