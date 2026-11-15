@@ -7,13 +7,11 @@ from __future__ import annotations
 import math
 import numpy as np
 import soundfile as sf
-from scipy.signal import resample_poly
 
 from utils.audio_quality import analyze_audio_quality
 
 # Configure FFmpeg before importing/using the compatibility decoder.
 from utils.ffmpeg_setup import FFMPEG_BIN  # noqa: F401
-import librosa
 
 TARGET_SAMPLE_RATE = 16000
 
@@ -32,6 +30,8 @@ def _load_with_soundfile(path: str, sr: int) -> np.ndarray | None:
     # Arithmetic averaging is deterministic and avoids a librosa resample path.
     mono = audio.mean(axis=1, dtype=np.float32)
     if int(source_rate) != int(sr):
+        from scipy.signal import resample_poly
+
         divisor = math.gcd(int(source_rate), int(sr))
         mono = resample_poly(
             mono, int(sr) // divisor, int(source_rate) // divisor
@@ -43,6 +43,8 @@ def load_audio(path: str, sr: int = TARGET_SAMPLE_RATE) -> np.ndarray:
     """Decode mono audio; use libsndfile first and librosa for fallback formats."""
     audio = _load_with_soundfile(path, sr)
     if audio is None:
+        import librosa
+
         audio, _ = librosa.load(path, sr=sr, mono=True)
         audio = np.asarray(audio, dtype=np.float32)
     if audio.size == 0:
