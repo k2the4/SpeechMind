@@ -1,17 +1,35 @@
-# Runtime dependencies for the Hugging Face Gradio Space.
-# Local and isolated worker dependency files remain separate.
+# SpeechMind Python dependencies.
+# SETUP_SECOND_PC.bat installs the matching PyTorch + TorchAudio build
+# before this file. The current development machine should use CPU inference.
+# Hugging Face Gradio Space additionally installs Gradio from this file.
+
+# Transformers and speech models
 gradio>=5.0,<6.0
 transformers==4.46.3
 accelerate
 openai-whisper
+# AI4Bharat IndicConformer custom inference code requires CPU ONNX Runtime.
+onnx==1.20.1
 onnxruntime==1.20.1
+
+# Audio processing
 librosa
 soundfile
 scipy
 numpy
-scikit-learn
-pandas
-huggingface_hub>=0.36.2,<1.0
+
+# IndicTrans2 translation (legacy local provider; optional)
 sentencepiece
 sacremoses
+mosestokenizer
+# Install IndicTransToolkit separately only if local IndicTrans2 translation is used:
+# pip install indictranstoolkit
+
+# Application and evaluation
+streamlit
+scikit-learn
+pandas
+matplotlib
+datasets
+huggingface_hub>=0.36.2,<1.0
 joblib
