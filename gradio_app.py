@@ -103,8 +103,9 @@ def analyze_audio(audio_path: str | None):
         "timings_sec": result.get("timings_sec", result.get("timings")),
         "audio_quality": result.get("audio_quality"),
         "hosted_routing_note": (
-            "Whisper handles English/Hinglish fallback. IndicConformer handles "
-            "Hindi and supported Indic languages. Srota and IndicTrans2 are "
+            "Whisper handles English-detected speech. IndicConformer handles "
+            "Hindi and supported Indic-language detections. Hindi-detected "
+            "mixed Hindi-English speech does not use Srota in this hosted profile. Srota and IndicTrans2 are "
             "disabled because their isolated worker environment is not included "
             "in this free Gradio Space. Gemini may provide English meaning when "
             "configured; deterministic fallback does not claim to translate."
