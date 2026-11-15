@@ -25,6 +25,18 @@ class LocalLLMTests(unittest.TestCase):
         result = local_llm._extract_grounded_details(transcript)
         self.assertEqual(result["amount"], "2500")
 
+    def test_extracts_spoken_hindi_amount_pachis_sau(self):
+        result = local_llm._extract_grounded_details(
+            "मैंने पच्चीस सौ रुपये का पेमेंट किया था।"
+        )
+        self.assertEqual(result["amount"], "2500")
+
+    def test_extracts_spoken_hindi_amount_two_thousand_five_hundred(self):
+        result = local_llm._extract_grounded_details(
+            "दो हजार पाँच सौ रुपये कट गए।"
+        )
+        self.assertEqual(result["amount"], "2500")
+
     def test_evidence_must_be_verbatim(self):
         transcript = "मेरे खाते से 2500 रुपये कट गए।"
         self.assertTrue(local_llm._evidence_is_verbatim("2500 रुपये कट गए", transcript))
