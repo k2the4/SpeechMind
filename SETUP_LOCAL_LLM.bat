@@ -1,30 +1,10 @@
 @echo off
-setlocal
-cd /d "%~dp0"
-echo ==========================================
-echo SpeechMind - Free Local AI Setup
-echo ==========================================
-where ollama >nul 2>nul
-if errorlevel 1 (
-  echo Ollama is not installed.
-  echo Install the free Windows application from:
-  echo https://ollama.com/download/windows
-  echo Then close and reopen PowerShell and run this file again.
-  pause
-  exit /b 1
-)
+echo SpeechMind recommended setup uses the Gemini API free tier; Ollama is optional.
 echo.
-echo Downloading Qwen 2.5 0.5B Instruct (small quantized local model)...
-ollama pull qwen2.5:0.5b
-if errorlevel 1 (
-  echo Model download failed. Check your internet connection and try again.
-  pause
-  exit /b 1
-)
+echo 1. Create a key at https://aistudio.google.com/app/apikey
+echo 2. In PowerShell run: $env:GEMINI_API_KEY="YOUR_KEY"
+echo 3. Start the app from that same PowerShell window:
+echo    .\.venv\Scripts\python.exe -m streamlit run app.py
 echo.
-echo Checking installed model...
-ollama list
-echo.
-echo Setup complete. Ollama should be running on http://127.0.0.1:11434
-echo SpeechMind will use this model locally. No API key or paid service is needed.
+echo No Ollama install or model download is needed for Gemini.
 pause
