@@ -347,6 +347,6 @@ def analyze_conversation(transcript, translated_text=None, language="unknown"):
             "available": False,
             "fallback_used": True,
             "error": f"{type(error).__name__}: {error}",
-            "setup_hint": "Install Ollama and run SETUP_LOCAL_LLM.bat to enable free local semantic analysis.",
+            "setup_hint": "Set GEMINI_API_KEY for the Gemini free tier, or install Ollama for optional offline analysis. See docs/LOCAL_LLM_SETUP.md.",
         }
         return fallback
