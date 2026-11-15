@@ -124,7 +124,7 @@ if audio_source is not None:
         if insights["signals"]:
             for signal in insights["signals"]:
                 st.info("**" + signal["label"] + "** — " + signal["description"] +
-                        "\\nEvidence: " + ", ".join(signal["evidence"]))
+                        "\nEvidence: " + ", ".join(signal["evidence"]))
         else:
             st.success("No configured follow-up phrases were detected. This is not proof that no action is needed.")
         st.caption("These are rule-based review cues, not verified complaint classifications. Always check the original audio.")
