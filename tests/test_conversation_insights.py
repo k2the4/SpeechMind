@@ -88,6 +88,34 @@ class ConversationInsightsTests(unittest.TestCase):
             "no_configured_cue_detected",
         )
 
+    def test_extracts_hindi_payment_issue_from_original_transcript(self):
+        result = analyze_conversation_text(
+            "मेरे खाते से पैसे कट गए लेकिन order confirm नहीं हुआ।"
+        )
+        self.assertIn("Payments & refunds", [x["topic"] for x in result["topics"]])
+        self.assertTrue(result["case_brief"]["missing_information"])
+        self.assertEqual(result["topics"][0]["evidence_source"], "original_transcript")
+
+    def test_hinglish_order_delivery_topic_is_detected(self):
+        result = analyze_conversation_text(
+            "Mera order abhi tak deliver nahi hua, tracking update bhi nahi aa raha."
+        )
+        self.assertIn("Orders & delivery", [x["topic"] for x in result["topics"]])
+
+    def test_case_brief_does_not_invent_transaction_details(self):
+        result = analyze_conversation_text(
+            "My payment was deducted but the order was not confirmed."
+        )
+        self.assertEqual(result["case_brief"]["reported_details"], {})
+        self.assertTrue(result["case_review"]["suggested_questions"])
+
+    def test_translation_does_not_replace_original_evidence(self):
+        original = "मेरे पैसे कट गए और refund नहीं आया।"
+        result = analyze_conversation_text(original, "A payment was made and a refund is pending.")
+        topic = next(x for x in result["topics"] if x["topic"] == "Payments & refunds")
+        self.assertEqual(topic["evidence_source"], "original_transcript")
+        self.assertEqual(topic["evidence"][0]["text"], original)
+
     def test_does_not_claim_emotion_or_verified_intent(self):
         result = analyze_conversation_text("The order arrived yesterday.")
         self.assertNotIn("emotion", result)
